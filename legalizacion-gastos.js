@@ -233,15 +233,19 @@ function renderExpenseList() {
     return;
   }
 
-  state.expenses.forEach((expense) => {
+  state.expenses.forEach((expense, index) => {
     const button = document.createElement('button');
     button.className = `expense-card${expense.id === state.activeId ? ' is-active' : ''}`;
     button.type = 'button';
     button.innerHTML = `
-      <span>${expense.date || 'Sin fecha'}</span>
-      <strong>${expense.name}</strong>
-      <small>${expense.owner || 'Sin responsable'} · ${expense.invoices.length} factura(s)</small>
+      <span class="expense-card__number">${String(index + 1).padStart(2, '0')}</span>
+      <span class="expense-card__content">
+        <small>${expense.date || 'Sin fecha'} · ${expense.owner || 'Sin responsable'}</small>
+        <strong>${expense.name}</strong>
+        <em>${expense.invoices.length} factura(s) cargada(s)</em>
+      </span>
       <b>${currency(totalExpense(expense))}</b>
+      <span class="expense-card__arrow" aria-hidden="true">→</span>
     `;
     button.addEventListener('click', () => selectExpense(expense.id));
     elements.expenseList.appendChild(button);
