@@ -17,144 +17,150 @@
       <li><a href="index.html#inicio">Inicio</a></li>
       <li><a href="index.html#tramites">Trámites</a></li>
       <li><a href="#salidas">Salidas</a></li>
-      <li><a href="#facturas">Facturas</a></li>
+      <li><a href="#documento">Documento</a></li>
     </ul>
 
     <a class="nav-button" href="S-CON-FO-02.6%20LEGALIZACION%20DE%20GASTOS.%20v%202.0.xlsx" download>Formato base</a>
   </nav>
 
-  <main class="expense-app">
-    <section class="app-hero">
+  <main class="expense-app expense-app--simple">
+    <section class="app-hero app-hero--compact">
       <div>
         <div class="eyebrow">Legalización de gastos</div>
-        <h1>Controla tus salidas y facturas.</h1>
+        <h1>Salidas, facturas y soporte.</h1>
         <p>
-          Crea una salida, escanea o pega el CUFE de tus facturas, revisa la información cargada y genera una versión imprimible en PDF cuando la necesites.
+          Crea una salida, selecciónala y carga facturas únicamente con el enlace del CUFE o con un QR. La información quedará organizada para visualizarla y descargarla cuando la necesites.
         </p>
       </div>
-      <button class="btn-primary" type="button" data-action="new-expense">Crear salida</button>
     </section>
 
-    <section class="app-layout" id="salidas">
-      <aside class="panel panel--list">
-        <div class="panel-header">
+    <section class="expense-workspace" id="salidas">
+      <div class="workspace-actions" aria-label="Acciones de salidas">
+        <button class="workspace-button workspace-button--primary" type="button" data-action="create-expense">Crear salida</button>
+        <button class="workspace-button" type="button" data-action="delete-expense">Eliminar salida</button>
+        <button class="workspace-button" type="button" data-action="edit-expense">Modificar salida</button>
+      </div>
+
+      <section class="expense-create-panel is-hidden" id="expenseFormPanel" aria-labelledby="expenseFormTitle">
+        <div class="section-title-row">
           <div>
-            <small>Salidas creadas</small>
-            <h2>Historial</h2>
+            <small>Salida</small>
+            <h2 id="expenseFormTitle">Datos de la salida</h2>
           </div>
-          <button class="icon-button" type="button" data-action="new-expense" aria-label="Crear nueva salida">+</button>
+          <span class="status-pill" id="saveStatus">Selecciona una salida</span>
         </div>
 
-        <div class="expense-list" id="expenseList" aria-live="polite"></div>
-      </aside>
-
-      <section class="panel panel--editor" aria-labelledby="editorTitle">
-        <div class="panel-header panel-header--editor">
-          <div>
-            <small>Salida seleccionada</small>
-            <h2 id="editorTitle">Crear o editar salida</h2>
-          </div>
-          <div class="panel-actions">
-            <button class="btn-secondary btn-compact" type="button" data-action="delete-expense">Eliminar</button>
-            <button class="btn-primary btn-compact" type="button" data-action="save-expense">Guardar</button>
-          </div>
-        </div>
-
-        <form class="expense-form" id="expenseForm">
+        <form class="expense-form expense-form--inline" id="expenseForm">
           <label>
             Nombre de la salida
             <input id="expenseName" type="text" placeholder="Ej: Salida técnica Bogotá" required />
           </label>
-
-          <div class="form-grid">
-            <label>
-              Responsable
-              <input id="expenseOwner" type="text" placeholder="Nombre del colaborador" />
-            </label>
-            <label>
-              Fecha
-              <input id="expenseDate" type="date" />
-            </label>
-          </div>
-
           <label>
+            Responsable
+            <input id="expenseOwner" type="text" placeholder="Nombre del colaborador" />
+          </label>
+          <label>
+            Fecha
+            <input id="expenseDate" type="date" />
+          </label>
+          <label class="expense-form__wide">
             Observaciones
             <textarea id="expenseNotes" rows="3" placeholder="Notas del desplazamiento, centro de costo o proyecto"></textarea>
           </label>
+          <div class="expense-form__actions">
+            <button class="btn-secondary btn-compact" type="button" data-action="cancel-edit">Cancelar</button>
+            <button class="btn-primary btn-compact" type="button" data-action="save-expense">Guardar salida</button>
+          </div>
         </form>
+      </section>
 
-        <section class="scanner" id="facturas" aria-labelledby="scannerTitle">
-          <div class="section-title-row">
+      <section class="expense-section" aria-labelledby="expenseListTitle">
+        <div class="section-title-row section-title-row--compact">
+          <div>
+            <small>Salidas actuales</small>
+            <h2 id="expenseListTitle">Selecciona una salida para verla</h2>
+          </div>
+        </div>
+        <div class="expense-cards" id="expenseList" aria-live="polite"></div>
+      </section>
+
+      <section class="selected-expense" id="documento" aria-labelledby="selectedTitle">
+        <div class="selected-empty" id="emptyState">
+          <strong>No hay salida seleccionada</strong>
+          <p>Crea una salida o selecciona una de la lista para visualizar su información y cargar facturas.</p>
+        </div>
+
+        <div class="selected-content is-hidden" id="selectedContent">
+          <div class="selected-header">
             <div>
-              <small>Escaneo de factura</small>
-              <h3 id="scannerTitle">Agregar factura por CUFE</h3>
+              <small>Salida seleccionada</small>
+              <h2 id="selectedTitle"></h2>
+              <p id="selectedMeta"></p>
             </div>
-            <span class="status-pill" id="saveStatus">Sin cambios</span>
-          </div>
-
-          <div class="scanner-grid">
-            <label>
-              CUFE o texto escaneado
-              <textarea id="scanInput" rows="4" placeholder="Pega aquí el CUFE o el texto leído del QR/factura"></textarea>
-            </label>
-            <div class="scanner-help">
-              <strong>Lectura rápida</strong>
-              <p>Si el texto incluye valor, NIT o número de factura, el sistema intenta separarlos. Si no, puedes completar los campos manualmente.</p>
+            <div class="selected-total">
+              <span>Total cargado</span>
+              <strong id="selectedTotal">$0</strong>
             </div>
           </div>
 
-          <div class="form-grid form-grid--four">
-            <label>
-              CUFE
-              <input id="invoiceCufe" type="text" placeholder="Código CUFE" />
-            </label>
-            <label>
-              Factura
-              <input id="invoiceNumber" type="text" placeholder="No. factura" />
-            </label>
-            <label>
-              Proveedor / NIT
-              <input id="invoiceSupplier" type="text" placeholder="Proveedor o NIT" />
-            </label>
-            <label>
-              Valor
-              <input id="invoiceAmount" type="number" min="0" step="0.01" placeholder="0" />
-            </label>
-          </div>
+          <div class="selected-notes" id="selectedNotes"></div>
 
-          <div class="panel-actions panel-actions--left">
-            <button class="btn-secondary btn-compact" type="button" data-action="parse-scan">Leer escaneo</button>
-            <button class="btn-primary btn-compact" type="button" data-action="add-invoice">Agregar factura</button>
-          </div>
-        </section>
-
-        <section class="invoice-section" aria-labelledby="invoiceTitle">
-          <div class="section-title-row">
-            <div>
-              <small>Formato de salida</small>
-              <h3 id="invoiceTitle">Facturas cargadas</h3>
+          <section class="scanner scanner--simple" aria-labelledby="scannerTitle">
+            <div class="section-title-row">
+              <div>
+                <small>Factura</small>
+                <h3 id="scannerTitle">Cargar por enlace CUFE o QR</h3>
+              </div>
             </div>
-            <div class="panel-actions">
-              <button class="btn-secondary btn-compact" type="button" data-action="download-csv">Descargar Excel</button>
-              <button class="btn-primary btn-compact" type="button" data-action="print-pdf">Descargar PDF</button>
-            </div>
-          </div>
 
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>CUFE</th>
-                  <th>Factura</th>
-                  <th>Proveedor / NIT</th>
-                  <th>Valor</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody id="invoiceTable"></tbody>
-            </table>
-          </div>
-        </section>
+            <div class="qr-loader">
+              <label>
+                Link del CUFE o texto del QR
+                <textarea id="cufeSource" rows="4" placeholder="Pega aquí el enlace del CUFE o el texto que trae el QR de la factura"></textarea>
+              </label>
+
+              <label class="qr-file">
+                Escanear QR desde imagen
+                <input id="qrImage" type="file" accept="image/*" />
+                <span>Selecciona una foto/captura del QR. Si tu navegador soporta lectura QR, se extraerá automáticamente.</span>
+              </label>
+            </div>
+
+            <div class="panel-actions panel-actions--left">
+              <button class="btn-secondary btn-compact" type="button" data-action="read-qr">Leer QR</button>
+              <button class="btn-primary btn-compact" type="button" data-action="add-from-cufe">Extraer y agregar factura</button>
+            </div>
+          </section>
+
+          <section class="invoice-section invoice-section--clean" aria-labelledby="invoiceTitle">
+            <div class="section-title-row">
+              <div>
+                <small>Documento generado</small>
+                <h3 id="invoiceTitle">Información cargada</h3>
+              </div>
+              <div class="panel-actions">
+                <button class="btn-secondary btn-compact" type="button" data-action="download-csv">Descargar Excel</button>
+                <button class="btn-primary btn-compact" type="button" data-action="print-pdf">Descargar PDF</button>
+              </div>
+            </div>
+
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>CUFE / Link</th>
+                    <th>Factura</th>
+                    <th>Proveedor / NIT</th>
+                    <th>Fecha</th>
+                    <th>Valor</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="invoiceTable"></tbody>
+              </table>
+            </div>
+          </section>
+        </div>
       </section>
     </section>
   </main>
