@@ -3,52 +3,51 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Drone Innovation COL | Portal</title>
+  <title>DICOL | Portal Administrativo</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <main class="landing">
+  <main class="portal">
     <section class="hero" aria-labelledby="hero-title">
-      <div class="hero__glow hero__glow--blue"></div>
-      <div class="hero__glow hero__glow--green"></div>
+      <div class="hero__halo" aria-hidden="true"></div>
+      <div class="hero__grid" aria-hidden="true"></div>
 
-      <nav class="topbar" aria-label="Navegación principal">
-        <a class="brand" href="./" aria-label="Inicio Drone Innovation COL">
-          <img src="Drone_Innovation_COL.webp" alt="Logo Drone Innovation COL" class="brand__logo" />
-          <span class="brand__name">Drone Innovation COL</span>
-        </a>
-        <span class="topbar__badge">Portal interno</span>
-      </nav>
+      <header class="brand-zone">
+        <img src="Drone_Innovation_COL.webp" alt="Logo DICOL Drone Innovation COL" class="brand-zone__logo" />
+        <span class="brand-zone__label">Portal administrativo DICOL</span>
+      </header>
 
       <div class="hero__content">
-        <p class="eyebrow">Gestión rápida, moderna y segura</p>
-        <h1 id="hero-title">Bienvenido al centro de solicitudes administrativas</h1>
+        <p class="eyebrow">Verde · Negro · Blanco</p>
+        <h1 id="hero-title">Gestiona tus solicitudes en un solo lugar</h1>
         <p class="hero__description">
-          Selecciona el proceso que necesitas iniciar y gestiona tus trámites de gastos o viáticos desde un solo lugar.
+          Ingresa al trámite que necesitas y descarga el formato oficial para continuar con tu proceso de manera rápida y organizada.
         </p>
+      </div>
 
-        <div class="actions" aria-label="Opciones disponibles">
-          <a class="option-card" href="S-CON-FO-02.6%20LEGALIZACION%20DE%20GASTOS.%20v%202.0.xlsx" download>
-            <span class="option-card__icon" aria-hidden="true">🧾</span>
-            <span class="option-card__content">
-              <strong>Legalización de gastos</strong>
-              <small>Registra y soporta tus gastos aprobados.</small>
-            </span>
-            <span class="option-card__arrow" aria-hidden="true">→</span>
-          </a>
+      <div class="options" aria-label="Opciones del portal">
+        <a class="option-card" href="S-CON-FO-02.6%20LEGALIZACION%20DE%20GASTOS.%20v%202.0.xlsx" download>
+          <span class="option-card__number">01</span>
+          <span class="option-card__icon" aria-hidden="true">▣</span>
+          <span class="option-card__text">
+            <strong>Legalización de gastos</strong>
+            <small>Entrega soportes, reporta gastos y deja tu proceso documentado.</small>
+          </span>
+          <span class="option-card__cta">Abrir formato</span>
+        </a>
 
-          <a class="option-card option-card--accent" href="SOLICITUD%20DE%20%20VIATICOS.XLSX" download>
-            <span class="option-card__icon" aria-hidden="true">✈️</span>
-            <span class="option-card__content">
-              <strong>Solicitud de viáticos</strong>
-              <small>Solicita recursos para desplazamientos y viajes.</small>
-            </span>
-            <span class="option-card__arrow" aria-hidden="true">→</span>
-          </a>
-        </div>
+        <a class="option-card option-card--solid" href="SOLICITUD%20DE%20%20VIATICOS.XLSX" download>
+          <span class="option-card__number">02</span>
+          <span class="option-card__icon" aria-hidden="true">✦</span>
+          <span class="option-card__text">
+            <strong>Solicitud de viáticos</strong>
+            <small>Solicita recursos para desplazamientos, rutas y actividades fuera de sede.</small>
+          </span>
+          <span class="option-card__cta">Abrir formato</span>
+        </a>
       </div>
     </section>
   </main>
