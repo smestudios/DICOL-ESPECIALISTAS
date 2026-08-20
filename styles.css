@@ -137,14 +137,14 @@ body {
 .hero-content {
   position: relative;
   z-index: 2;
-  max-width: 710px;
+  max-width: 760px;
 }
 
 .hero-logo {
   display: block;
-  width: clamp(150px, 18vw, 235px);
-  max-height: 190px;
-  margin-bottom: 28px;
+  width: clamp(230px, 30vw, 390px);
+  max-height: 320px;
+  margin-bottom: 34px;
   object-fit: contain;
   filter: drop-shadow(0 24px 42px rgba(40, 230, 109, 0.22));
 }
@@ -159,9 +159,10 @@ body {
 
 .hero h1 {
   margin-bottom: 30px;
-  font-size: clamp(48px, 7vw, 92px);
-  line-height: 0.95;
-  letter-spacing: -5px;
+  max-width: 680px;
+  font-size: clamp(34px, 4.8vw, 62px);
+  line-height: 1;
+  letter-spacing: -3px;
 }
 
 .hero h1 span {
@@ -488,7 +489,11 @@ footer a:focus-visible {
   }
 
   .hero h1 {
-    letter-spacing: -3px;
+    letter-spacing: -2px;
+  }
+
+  .hero-logo {
+    width: clamp(210px, 64vw, 300px);
   }
 
   .section {
