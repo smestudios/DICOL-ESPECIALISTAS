@@ -3,27 +3,41 @@ const STORAGE_KEY = 'dicol.legalizacion.salidas';
 const state = {
   expenses: [],
   activeId: null,
-  editingMode: 'create',
+  editingId: null,
+  scannerStream: null,
+  scannerFrame: null,
+  scanning: false,
 };
 
 const elements = {
-  formPanel: document.querySelector('#expenseFormPanel'),
+  expenseModal: document.querySelector('#expenseModal'),
+  detailModal: document.querySelector('#detailModal'),
+  expenseModalTitle: document.querySelector('#expenseModalTitle'),
   expenseForm: document.querySelector('#expenseForm'),
   expenseName: document.querySelector('#expenseName'),
   expenseOwner: document.querySelector('#expenseOwner'),
   expenseDate: document.querySelector('#expenseDate'),
+  expenseDestination: document.querySelector('#expenseDestination'),
+  expenseStatus: document.querySelector('#expenseStatus'),
   expenseNotes: document.querySelector('#expenseNotes'),
   expenseList: document.querySelector('#expenseList'),
+  search: document.querySelector('#search'),
   saveStatus: document.querySelector('#saveStatus'),
-  emptyState: document.querySelector('#emptyState'),
-  selectedContent: document.querySelector('#selectedContent'),
-  selectedTitle: document.querySelector('#selectedTitle'),
-  selectedMeta: document.querySelector('#selectedMeta'),
-  selectedNotes: document.querySelector('#selectedNotes'),
-  selectedTotal: document.querySelector('#selectedTotal'),
-  cufeSource: document.querySelector('#cufeSource'),
-  qrImage: document.querySelector('#qrImage'),
-  invoiceTable: document.querySelector('#invoiceTable'),
+  detailTitle: document.querySelector('#detailTitle'),
+  detailMeta: document.querySelector('#detailMeta'),
+  invoiceCufe: document.querySelector('#invoiceCufe'),
+  invoiceDate: document.querySelector('#invoiceDate'),
+  invoiceNumber: document.querySelector('#invoiceNumber'),
+  invoiceNit: document.querySelector('#invoiceNit'),
+  invoiceSupplier: document.querySelector('#invoiceSupplier'),
+  invoicePayment: document.querySelector('#invoicePayment'),
+  invoiceConcept: document.querySelector('#invoiceConcept'),
+  invoiceAmount: document.querySelector('#invoiceAmount'),
+  qrVideo: document.querySelector('#qrVideo'),
+  qrCanvas: document.querySelector('#qrCanvas'),
+  qrStatus: document.querySelector('#qrStatus'),
+  qrContent: document.querySelector('#qrContent'),
+  invoiceTableWrap: document.querySelector('#invoiceTableWrap'),
   printSheet: document.querySelector('#printSheet'),
 };
 
@@ -43,6 +57,16 @@ function currency(value) {
   }).format(Number(value || 0));
 }
 
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, (character) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#039;',
+  }[character]));
+}
+
 function activeExpense() {
   return state.expenses.find((expense) => expense.id === state.activeId);
 }
@@ -51,272 +75,320 @@ function totalExpense(expense) {
   return expense.invoices.reduce((sum, invoice) => sum + Number(invoice.amount || 0), 0);
 }
 
+function normalizeExpense(expense) {
+  return {
+    destination: '',
+    status: 'Pendiente',
+    ...expense,
+    invoices: (expense.invoices || []).map((invoice) => ({
+      nit: '',
+      payment: 'Tarjeta',
+      concept: 'Otros',
+      ...invoice,
+    })),
+  };
+}
+
 function loadExpenses() {
   const saved = localStorage.getItem(STORAGE_KEY);
-  state.expenses = saved ? JSON.parse(saved) : [];
+  state.expenses = saved ? JSON.parse(saved).map(normalizeExpense) : [];
   state.activeId = state.expenses[0]?.id || null;
 }
 
 function persist(message = 'Guardado') {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state.expenses));
-  elements.saveStatus.textContent = message;
+  if (elements.saveStatus) elements.saveStatus.textContent = message;
 }
 
-function showForm(mode) {
-  state.editingMode = mode;
-  elements.formPanel.classList.remove('is-hidden');
+function openModal(modal) {
+  modal.classList.add('is-open');
+  modal.setAttribute('aria-hidden', 'false');
+}
 
-  if (mode === 'edit') {
-    const expense = activeExpense();
-    if (!expense) {
-      elements.saveStatus.textContent = 'Selecciona una salida para modificar';
-      elements.formPanel.classList.add('is-hidden');
-      return;
-    }
+function closeModal(modal) {
+  modal.classList.remove('is-open');
+  modal.setAttribute('aria-hidden', 'true');
+}
 
-    elements.expenseName.value = expense.name;
-    elements.expenseOwner.value = expense.owner;
-    elements.expenseDate.value = expense.date;
-    elements.expenseNotes.value = expense.notes;
-    elements.saveStatus.textContent = 'Modificando salida';
-    elements.expenseName.focus();
-    return;
-  }
-
-  elements.expenseForm.reset();
-  elements.expenseDate.value = today();
-  elements.saveStatus.textContent = 'Creando salida';
+function showExpenseModal(id = null) {
+  state.editingId = id;
+  const expense = id ? state.expenses.find((item) => item.id === id) : null;
+  elements.expenseModalTitle.textContent = expense ? 'Editar salida' : 'Nueva salida';
+  elements.expenseName.value = expense?.name || '';
+  elements.expenseOwner.value = expense?.owner || '';
+  elements.expenseDate.value = expense?.date || today();
+  elements.expenseDestination.value = expense?.destination || '';
+  elements.expenseStatus.value = expense?.status || 'Pendiente';
+  elements.expenseNotes.value = expense?.notes || '';
+  openModal(elements.expenseModal);
   elements.expenseName.focus();
-}
-
-function hideForm() {
-  elements.formPanel.classList.add('is-hidden');
-  elements.expenseForm.reset();
 }
 
 function saveExpense() {
   const name = elements.expenseName.value.trim();
   if (!name) {
     elements.expenseName.focus();
-    elements.saveStatus.textContent = 'El nombre es obligatorio';
     return;
   }
 
-  if (state.editingMode === 'edit') {
-    const expense = activeExpense();
-    if (!expense) return;
-
-    expense.name = name;
-    expense.owner = elements.expenseOwner.value.trim();
-    expense.date = elements.expenseDate.value || today();
-    expense.notes = elements.expenseNotes.value.trim();
-    persist('Salida modificada');
-    hideForm();
-    render();
-    return;
-  }
-
-  const expense = {
-    id: createId(),
+  const data = {
     name,
     owner: elements.expenseOwner.value.trim(),
     date: elements.expenseDate.value || today(),
+    destination: elements.expenseDestination.value.trim(),
+    status: elements.expenseStatus.value,
     notes: elements.expenseNotes.value.trim(),
-    invoices: [],
-    createdAt: new Date().toISOString(),
   };
 
-  state.expenses.unshift(expense);
-  state.activeId = expense.id;
-  persist('Salida creada');
-  hideForm();
+  if (state.editingId) {
+    Object.assign(state.expenses.find((expense) => expense.id === state.editingId), data);
+    persist('Salida modificada');
+  } else {
+    const expense = { id: createId(), ...data, invoices: [], createdAt: new Date().toISOString() };
+    state.expenses.unshift(expense);
+    state.activeId = expense.id;
+    persist('Salida creada');
+  }
+
+  closeModal(elements.expenseModal);
   render();
 }
 
-function deleteExpense() {
-  const expense = activeExpense();
-  if (!expense) {
-    elements.saveStatus.textContent = 'Selecciona una salida para eliminar';
-    return;
-  }
-
-  const confirmed = window.confirm(`¿Eliminar la salida "${expense.name}"?`);
-  if (!confirmed) return;
-
-  state.expenses = state.expenses.filter((item) => item.id !== expense.id);
+function deleteExpense(id) {
+  const expense = state.expenses.find((item) => item.id === id);
+  if (!expense || !window.confirm(`¿Eliminar la salida "${expense.name}" y todas sus facturas?`)) return;
+  state.expenses = state.expenses.filter((item) => item.id !== id);
   state.activeId = state.expenses[0]?.id || null;
   persist('Salida eliminada');
-  hideForm();
   render();
 }
 
-function parseCufeSource(source) {
-  const text = source.trim();
-  const url = text.match(/https?:\/\/[^\s]+/i)?.[0] || '';
-  const cufe = text.match(/[a-fA-F0-9]{40,}/)?.[0] || url || text;
-  const invoiceNumber = text.match(/(?:factura|invoice|fac|no\.?|nro\.?)\s*[:#-]?\s*([A-Z0-9-]{4,})/i)?.[1] || '';
-  const supplier = text.match(/(?:nit|proveedor|emisor)\s*[:#-]?\s*([0-9A-Z .-]{5,})/i)?.[1]?.trim() || '';
-  const amountText = text.match(/(?:valor|total|amount)\s*[:$-]?\s*([0-9.,]+)/i)?.[1] || '0';
-  const date = text.match(/\b(20\d{2}[-/]\d{2}[-/]\d{2})\b/)?.[1]?.replaceAll('/', '-') || today();
-
-  return {
-    id: createId('FAC'),
-    cufe,
-    source: text,
-    number: invoiceNumber || `FAC-${Date.now().toString().slice(-5)}`,
-    supplier: supplier || 'Pendiente por validar',
-    date,
-    amount: Number(amountText.replace(/\./g, '').replace(',', '.')) || 0,
-  };
-}
-
-function addInvoiceFromCufe() {
-  const expense = activeExpense();
-  if (!expense) {
-    elements.saveStatus.textContent = 'Selecciona una salida primero';
-    return;
-  }
-
-  const source = elements.cufeSource.value.trim();
-  if (!source) {
-    elements.cufeSource.focus();
-    elements.saveStatus.textContent = 'Pega el link del CUFE o texto QR';
-    return;
-  }
-
-  expense.invoices.push(parseCufeSource(source));
-  elements.cufeSource.value = '';
-  elements.qrImage.value = '';
-  persist('Factura agregada');
-  render();
-}
-
-async function readQrFromImage() {
-  const file = elements.qrImage.files?.[0];
-  if (!file) {
-    elements.saveStatus.textContent = 'Selecciona una imagen QR';
-    return;
-  }
-
-  if (!('BarcodeDetector' in window)) {
-    elements.saveStatus.textContent = 'Tu navegador no soporta lectura QR automática';
-    return;
-  }
-
-  const detector = new BarcodeDetector({ formats: ['qr_code'] });
-  const image = await createImageBitmap(file);
-  const codes = await detector.detect(image);
-  elements.cufeSource.value = codes[0]?.rawValue || '';
-  elements.saveStatus.textContent = codes.length ? 'QR leído correctamente' : 'No se detectó QR';
-}
-
-function removeInvoice(invoiceId) {
-  const expense = activeExpense();
-  if (!expense) return;
-
-  expense.invoices = expense.invoices.filter((invoice) => invoice.id !== invoiceId);
-  persist('Factura eliminada');
-  render();
-}
-
-function selectExpense(expenseId) {
-  state.activeId = expenseId;
-  hideForm();
-  render();
+function openDetail(id) {
+  state.activeId = id;
+  renderDetail();
+  openModal(elements.detailModal);
 }
 
 function renderExpenseList() {
-  elements.expenseList.innerHTML = '';
+  const query = elements.search.value.toLowerCase();
+  const list = state.expenses.filter((expense) => `${expense.name} ${expense.owner} ${expense.destination}`.toLowerCase().includes(query));
 
-  if (state.expenses.length === 0) {
-    elements.expenseList.innerHTML = '<div class="empty-card">No hay salidas creadas. Usa el botón “Crear salida”.</div>';
+  if (list.length === 0) {
+    elements.expenseList.innerHTML = '<div class="cufe-empty"><h2>No hay salidas creadas</h2><p>Crea la primera salida para comenzar a registrar CUFE y facturas.</p><button class="cufe-button cufe-button--primary" type="button" data-action="empty-create">+ Crear salida</button></div>';
+    elements.expenseList.querySelector('button')?.addEventListener('click', () => showExpenseModal());
     return;
   }
 
-  state.expenses.forEach((expense, index) => {
-    const button = document.createElement('button');
-    button.className = `expense-card${expense.id === state.activeId ? ' is-active' : ''}`;
-    button.type = 'button';
-    button.innerHTML = `
-      <span class="expense-card__number">${String(index + 1).padStart(2, '0')}</span>
-      <span class="expense-card__content">
-        <small>${expense.date || 'Sin fecha'} · ${expense.owner || 'Sin responsable'}</small>
-        <strong>${expense.name}</strong>
-        <em>${expense.invoices.length} factura(s) cargada(s)</em>
-      </span>
-      <b>${currency(totalExpense(expense))}</b>
-      <span class="expense-card__arrow" aria-hidden="true">→</span>
-    `;
-    button.addEventListener('click', () => selectExpense(expense.id));
-    elements.expenseList.appendChild(button);
-  });
+  elements.expenseList.innerHTML = list.map((expense) => `
+    <article class="cufe-card">
+      <div class="cufe-card__top">
+        <h2>${escapeHtml(expense.name)}</h2>
+        <span class="cufe-badge">${escapeHtml(expense.status)}</span>
+      </div>
+      <p class="cufe-meta">📅 ${escapeHtml(expense.date || '-')}<br>👤 ${escapeHtml(expense.owner || '-')}<br>📍 ${escapeHtml(expense.destination || '-')}</p>
+      <strong class="cufe-money">${currency(totalExpense(expense))}</strong>
+      <p class="cufe-meta">🧾 ${expense.invoices.length} factura(s)</p>
+      <div class="cufe-card__actions">
+        <button class="cufe-button cufe-button--primary" type="button" data-open="${expense.id}">Abrir salida</button>
+        <button class="cufe-button cufe-button--secondary" type="button" data-edit="${expense.id}">Editar</button>
+        <button class="cufe-button cufe-button--danger" type="button" data-delete="${expense.id}">Eliminar</button>
+      </div>
+    </article>
+  `).join('');
 }
 
-function renderSelectedExpense() {
+function renderDetail() {
   const expense = activeExpense();
-
-  elements.emptyState.classList.toggle('is-hidden', Boolean(expense));
-  elements.selectedContent.classList.toggle('is-hidden', !expense);
-
   if (!expense) return;
-
-  elements.selectedTitle.textContent = expense.name;
-  elements.selectedMeta.textContent = `${expense.date || 'Sin fecha'} · ${expense.owner || 'Sin responsable'} · ${expense.invoices.length} factura(s)`;
-  elements.selectedNotes.textContent = expense.notes || 'Sin observaciones registradas.';
-  elements.selectedTotal.textContent = currency(totalExpense(expense));
+  elements.detailTitle.textContent = expense.name;
+  elements.detailMeta.innerHTML = `${escapeHtml(expense.date || '-')} · ${escapeHtml(expense.owner || '-')} · ${escapeHtml(expense.destination || '-')} · <b>${expense.invoices.length} facturas</b>`;
   renderInvoices(expense);
 }
 
 function renderInvoices(expense) {
-  elements.invoiceTable.innerHTML = '';
-
+  const total = totalExpense(expense);
   if (expense.invoices.length === 0) {
-    elements.invoiceTable.innerHTML = '<tr><td colspan="6" class="empty-row">Esta salida aún no tiene facturas cargadas.</td></tr>';
+    elements.invoiceTableWrap.innerHTML = '<div class="cufe-empty cufe-empty--small">Aún no hay facturas en esta salida.</div>';
     return;
   }
 
-  expense.invoices.forEach((invoice) => {
-    const row = document.createElement('tr');
-    row.innerHTML = `
-      <td>${invoice.cufe}</td>
-      <td>${invoice.number || '-'}</td>
-      <td>${invoice.supplier || '-'}</td>
-      <td>${invoice.date || '-'}</td>
-      <td>${currency(invoice.amount)}</td>
-      <td><button class="table-action" type="button">Eliminar</button></td>
-    `;
-    row.querySelector('button').addEventListener('click', () => removeInvoice(invoice.id));
-    elements.invoiceTable.appendChild(row);
-  });
+  elements.invoiceTableWrap.innerHTML = `<div class="cufe-table-wrap"><table><thead><tr><th>#</th><th>CUFE / QR</th><th>Fecha</th><th>Factura</th><th>NIT</th><th>Proveedor</th><th>Concepto</th><th>Medio</th><th>Valor</th><th></th></tr></thead><tbody>${expense.invoices.map((invoice, index) => `<tr><td>${index + 1}</td><td title="${escapeHtml(invoice.cufe)}">${escapeHtml(invoice.cufe).slice(0, 35)}${invoice.cufe.length > 35 ? '…' : ''}</td><td>${escapeHtml(invoice.date)}</td><td>${escapeHtml(invoice.number)}</td><td>${escapeHtml(invoice.nit)}</td><td>${escapeHtml(invoice.supplier)}</td><td>${escapeHtml(invoice.concept)}</td><td>${escapeHtml(invoice.payment)}</td><td>${currency(invoice.amount)}</td><td><button class="cufe-button cufe-button--danger cufe-button--mini" type="button" data-remove-invoice="${invoice.id}">Eliminar</button></td></tr>`).join('')}<tr class="cufe-total-row"><td colspan="8">TOTAL</td><td>${currency(total)}</td><td></td></tr></tbody></table></div>`;
 }
 
-function render() {
-  renderExpenseList();
-  renderSelectedExpense();
-}
-
-function downloadCsv() {
+function addInvoice() {
   const expense = activeExpense();
-  if (!expense) {
-    elements.saveStatus.textContent = 'Selecciona una salida para descargar';
+  const cufe = elements.invoiceCufe.value.trim();
+  if (!expense || !cufe) {
+    elements.invoiceCufe.focus();
+    return;
+  }
+  if (expense.invoices.some((invoice) => invoice.cufe === cufe)) {
+    elements.saveStatus.textContent = 'Este CUFE ya está registrado en esta salida';
+    return;
+  }
+  expense.invoices.push({
+    id: createId('FAC'),
+    cufe,
+    date: elements.invoiceDate.value || today(),
+    number: elements.invoiceNumber.value.trim(),
+    nit: elements.invoiceNit.value.trim(),
+    supplier: elements.invoiceSupplier.value.trim(),
+    payment: elements.invoicePayment.value,
+    concept: elements.invoiceConcept.value,
+    amount: Number(elements.invoiceAmount.value) || 0,
+  });
+  clearInvoiceForm();
+  persist('Factura agregada');
+  render();
+  renderDetail();
+}
+
+function clearInvoiceForm() {
+  [elements.invoiceCufe, elements.invoiceDate, elements.invoiceNumber, elements.invoiceNit, elements.invoiceSupplier, elements.invoiceAmount].forEach((field) => { field.value = ''; });
+}
+
+function removeInvoice(invoiceId) {
+  const expense = activeExpense();
+  if (!expense || !window.confirm('¿Eliminar esta factura?')) return;
+  expense.invoices = expense.invoices.filter((invoice) => invoice.id !== invoiceId);
+  persist('Factura eliminada');
+  render();
+  renderDetail();
+}
+
+function extractCufe(text) {
+  const value = text.trim();
+
+  try {
+    const url = new URL(value);
+    const params = ['documentkey', 'DocumentKey', 'cufe', 'CUFE', 'key'];
+    for (const param of params) {
+      const found = url.searchParams.get(param);
+      if (found) return found.trim();
+    }
+  } catch (error) {
+    // QR content is not always a URL.
+  }
+
+  const labeled = value.match(/(?:CUFE|cufe|documentkey|DocumentKey|key)[=:/\s]+([A-Fa-f0-9]{40,})/);
+  if (labeled) return labeled[1];
+
+  const hex = value.match(/\b[A-Fa-f0-9]{40,}\b/);
+  return hex ? hex[0] : '';
+}
+
+function processQrText(text) {
+  const cufe = extractCufe(text) || text;
+  elements.invoiceCufe.value = cufe;
+  elements.qrContent.value = text;
+  elements.qrStatus.textContent = extractCufe(text) ? '✓ CUFE encontrado correctamente' : 'QR leído; revisa el contenido antes de agregar';
+  elements.qrStatus.classList.toggle('is-success', Boolean(extractCufe(text)));
+  elements.qrStatus.classList.toggle('is-warning', !extractCufe(text));
+  stopScanner();
+}
+
+function scanQrFrame() {
+  if (!state.scanning) return;
+
+  const video = elements.qrVideo;
+  if (video.readyState === video.HAVE_ENOUGH_DATA && video.videoWidth > 0 && video.videoHeight > 0) {
+    const canvas = elements.qrCanvas;
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const image = context.getImageData(0, 0, canvas.width, canvas.height);
+    const code = window.jsQR?.(image.data, image.width, image.height, { inversionAttempts: 'attemptBoth' });
+    if (code?.data) {
+      processQrText(code.data);
+      return;
+    }
+  }
+
+  state.scannerFrame = requestAnimationFrame(scanQrFrame);
+}
+
+async function startScanner() {
+  if (state.scanning) return;
+
+  if (!navigator.mediaDevices?.getUserMedia) {
+    elements.qrStatus.textContent = 'Este navegador no permite acceso a cámara';
+    elements.qrStatus.classList.add('is-warning');
     return;
   }
 
-  const rows = [
-    ['Salida', expense.name],
-    ['Responsable', expense.owner],
-    ['Fecha', expense.date],
-    ['Observaciones', expense.notes],
-    [],
-    ['CUFE / Link', 'Factura', 'Proveedor / NIT', 'Fecha', 'Valor'],
-    ...expense.invoices.map((invoice) => [invoice.cufe, invoice.number, invoice.supplier, invoice.date, invoice.amount]),
-  ];
+  if (typeof window.jsQR !== 'function') {
+    elements.qrStatus.textContent = 'No se cargó la librería jsQR. Revisa la conexión a internet';
+    elements.qrStatus.classList.add('is-warning');
+    return;
+  }
 
-  const csv = rows.map((row) => row.map((cell = '') => `"${String(cell).replaceAll('"', '""')}"`).join(',')).join('\n');
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  try {
+    state.scannerStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' } },
+      audio: false,
+    });
+    elements.qrVideo.srcObject = state.scannerStream;
+    elements.qrVideo.setAttribute('playsinline', 'true');
+    await elements.qrVideo.play();
+    state.scanning = true;
+    elements.qrStatus.textContent = 'Apunta la cámara al QR de la factura';
+    elements.qrStatus.classList.remove('is-warning', 'is-success');
+    state.scannerFrame = requestAnimationFrame(scanQrFrame);
+  } catch (error) {
+    elements.qrStatus.textContent = 'No se pudo acceder a la cámara. Permite el acceso e intenta de nuevo';
+    elements.qrStatus.classList.add('is-warning');
+  }
+}
+
+function stopScanner() {
+  state.scanning = false;
+  if (state.scannerFrame) cancelAnimationFrame(state.scannerFrame);
+  state.scannerFrame = null;
+
+  if (state.scannerStream) {
+    state.scannerStream.getTracks().forEach((track) => track.stop());
+    state.scannerStream = null;
+  }
+
+  if (elements.qrVideo) {
+    elements.qrVideo.pause();
+    elements.qrVideo.srcObject = null;
+  }
+
+  if (elements.qrStatus && !elements.invoiceCufe.value) {
+    elements.qrStatus.textContent = 'Cámara detenida';
+  }
+}
+
+function exportExcel() {
+  const expense = activeExpense();
+  if (!expense) return;
+  const rows = expense.invoices.map((invoice) => ({
+    'Descripción C.O.': invoice.concept,
+    Fecha: invoice.date,
+    'Medio de pago': invoice.payment,
+    'No. Factura': invoice.number,
+    NIT: invoice.nit,
+    'Nombre del proveedor': invoice.supplier,
+    Concepto: invoice.concept,
+    Valor: Number(invoice.amount) || 0,
+    CUFE: invoice.cufe,
+  }));
+  rows.push({ 'Descripción C.O.': 'TOTAL', Valor: totalExpense(expense) });
+
+  if (window.XLSX) {
+    const worksheet = XLSX.utils.json_to_sheet(rows);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Legalización');
+    XLSX.writeFile(workbook, `Legalizacion_${expense.name.replace(/[^a-z0-9]/gi, '_')}.xlsx`);
+    return;
+  }
+
+  const csv = rows.map((row) => Object.values(row).map((cell = '') => `"${String(cell).replaceAll('"', '""')}"`).join(',')).join('\n');
   const link = document.createElement('a');
-  link.href = URL.createObjectURL(blob);
-  link.download = `${expense.name.replace(/\s+/g, '-').toLowerCase()}-legalizacion.csv`;
+  link.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
+  link.download = `Legalizacion_${expense.name.replace(/[^a-z0-9]/gi, '_')}.csv`;
   link.click();
   URL.revokeObjectURL(link.href);
 }
@@ -324,62 +396,49 @@ function downloadCsv() {
 function buildPrintSheet() {
   const expense = activeExpense();
   if (!expense) return;
-
-  const rows = expense.invoices.map((invoice) => `
-    <tr>
-      <td>${invoice.cufe}</td>
-      <td>${invoice.number || '-'}</td>
-      <td>${invoice.supplier || '-'}</td>
-      <td>${invoice.date || '-'}</td>
-      <td>${currency(invoice.amount)}</td>
-    </tr>
-  `).join('');
-
-  elements.printSheet.innerHTML = `
-    <div class="print-document">
-      <header>
-        <img src="Drone_Innovation_COL.webp" alt="Logo DICOL" />
-        <div>
-          <h1>Legalización de gastos</h1>
-          <p>${expense.name}</p>
-        </div>
-      </header>
-      <section class="print-meta">
-        <p><strong>Responsable:</strong> ${expense.owner || '-'}</p>
-        <p><strong>Fecha:</strong> ${expense.date || '-'}</p>
-        <p><strong>Observaciones:</strong> ${expense.notes || '-'}</p>
-      </section>
-      <table>
-        <thead>
-          <tr><th>CUFE / Link</th><th>Factura</th><th>Proveedor / NIT</th><th>Fecha</th><th>Valor</th></tr>
-        </thead>
-        <tbody>${rows || '<tr><td colspan="5">Sin facturas cargadas.</td></tr>'}</tbody>
-        <tfoot><tr><th colspan="4">Total</th><th>${currency(totalExpense(expense))}</th></tr></tfoot>
-      </table>
-    </div>
-  `;
+  const rows = expense.invoices.map((invoice) => `<tr><td>${escapeHtml(invoice.cufe)}</td><td>${escapeHtml(invoice.number || '-')}</td><td>${escapeHtml(invoice.supplier || '-')} / ${escapeHtml(invoice.nit || '-')}</td><td>${escapeHtml(invoice.date || '-')}</td><td>${currency(invoice.amount)}</td></tr>`).join('');
+  elements.printSheet.innerHTML = `<div class="print-document"><header><img src="Drone_Innovation_COL.webp" alt="Logo DICOL" /><div><h1>Legalización de gastos</h1><p>${escapeHtml(expense.name)}</p></div></header><section class="print-meta"><p><strong>Responsable:</strong> ${escapeHtml(expense.owner || '-')}</p><p><strong>Destino:</strong> ${escapeHtml(expense.destination || '-')}</p><p><strong>Fecha:</strong> ${escapeHtml(expense.date || '-')}</p><p><strong>Observaciones:</strong> ${escapeHtml(expense.notes || '-')}</p></section><table><thead><tr><th>CUFE / Link</th><th>Factura</th><th>Proveedor / NIT</th><th>Fecha</th><th>Valor</th></tr></thead><tbody>${rows || '<tr><td colspan="5">Sin facturas cargadas.</td></tr>'}</tbody><tfoot><tr><th colspan="4">Total</th><th>${currency(totalExpense(expense))}</th></tr></tfoot></table></div>`;
 }
 
 function printPdf() {
-  if (!activeExpense()) {
-    elements.saveStatus.textContent = 'Selecciona una salida para imprimir';
-    return;
-  }
-
+  if (!activeExpense()) return;
   buildPrintSheet();
   window.print();
 }
 
+function render() {
+  renderExpenseList();
+}
+
 function bindActions() {
-  document.querySelector('[data-action="create-expense"]').addEventListener('click', () => showForm('create'));
-  document.querySelector('[data-action="delete-expense"]').addEventListener('click', deleteExpense);
-  document.querySelector('[data-action="edit-expense"]').addEventListener('click', () => showForm('edit'));
-  document.querySelector('[data-action="cancel-edit"]').addEventListener('click', hideForm);
+  document.querySelector('[data-action="create-expense"]').addEventListener('click', () => showExpenseModal());
+  document.querySelectorAll('[data-action="close-expense-modal"]').forEach((button) => button.addEventListener('click', () => closeModal(elements.expenseModal)));
+  document.querySelector('[data-action="close-detail-modal"]').addEventListener('click', async () => { await stopScanner(); closeModal(elements.detailModal); });
   document.querySelector('[data-action="save-expense"]').addEventListener('click', saveExpense);
-  document.querySelector('[data-action="read-qr"]').addEventListener('click', readQrFromImage);
-  document.querySelector('[data-action="add-from-cufe"]').addEventListener('click', addInvoiceFromCufe);
-  document.querySelector('[data-action="download-csv"]').addEventListener('click', downloadCsv);
+  document.querySelector('[data-action="add-invoice"]').addEventListener('click', addInvoice);
+  document.querySelector('[data-action="clear-invoice"]').addEventListener('click', clearInvoiceForm);
+  document.querySelector('[data-action="start-scanner"]').addEventListener('click', startScanner);
+  document.querySelector('[data-action="stop-scanner"]').addEventListener('click', stopScanner);
+  document.querySelector('[data-action="download-excel"]').addEventListener('click', exportExcel);
   document.querySelector('[data-action="print-pdf"]').addEventListener('click', printPdf);
+  elements.search.addEventListener('input', render);
+  elements.expenseList.addEventListener('click', (event) => {
+    const openId = event.target.closest('[data-open]')?.dataset.open;
+    const editId = event.target.closest('[data-edit]')?.dataset.edit;
+    const deleteId = event.target.closest('[data-delete]')?.dataset.delete;
+    if (openId) openDetail(openId);
+    if (editId) showExpenseModal(editId);
+    if (deleteId) deleteExpense(deleteId);
+  });
+  elements.invoiceTableWrap.addEventListener('click', (event) => {
+    const invoiceId = event.target.closest('[data-remove-invoice]')?.dataset.removeInvoice;
+    if (invoiceId) removeInvoice(invoiceId);
+  });
+  document.querySelectorAll('.cufe-modal').forEach((modal) => modal.addEventListener('click', async (event) => {
+    if (event.target !== modal) return;
+    if (modal === elements.detailModal) await stopScanner();
+    closeModal(modal);
+  }));
 }
 
 loadExpenses();

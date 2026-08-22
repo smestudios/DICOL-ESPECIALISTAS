@@ -524,3 +524,437 @@ footer a:focus-visible {
 
 /* =========================
    EXPENSE LEGALIZATION APP
+========================= */
+
+.expense-window-body {
+  --cufe-bg: #f5f7fa;
+  --cufe-card: #fff;
+  --cufe-text: #17202a;
+  --cufe-muted: #6b7280;
+  --cufe-line: #e5e7eb;
+  --cufe-dark: #111827;
+  --cufe-accent: #00a86b;
+  --cufe-danger: #dc3545;
+  --cufe-blue: #2563eb;
+  background: var(--cufe-bg);
+  color: var(--cufe-text);
+}
+
+.cufe-app {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 116px 28px 40px;
+}
+
+.cufe-hero {
+  display: flex;
+  align-items: center;
+  min-height: 250px;
+  margin-bottom: 24px;
+  padding: 36px;
+  overflow: hidden;
+  border-radius: 22px;
+  color: var(--white);
+  background:
+    radial-gradient(circle at 82% 18%, rgba(40, 230, 109, 0.46), transparent 0 18%, transparent 38%),
+    linear-gradient(135deg, #111827, #092713 55%, #050805);
+  box-shadow: 0 24px 60px rgba(17, 24, 39, 0.18);
+}
+
+.cufe-hero h1 {
+  margin: 0 0 12px;
+  font-size: clamp(32px, 5vw, 58px);
+  line-height: 1;
+  letter-spacing: -2px;
+}
+
+.cufe-hero p {
+  max-width: 720px;
+  color: #d8dee8;
+  font-size: 18px;
+  line-height: 1.55;
+}
+
+.cufe-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.cufe-toolbar h2,
+.cufe-toolbar h3 {
+  margin: 0;
+}
+
+.cufe-toolbar p,
+.cufe-meta {
+  color: var(--cufe-muted);
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+.cufe-toolbar__actions,
+.cufe-inline-actions,
+.cufe-card__actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.cufe-search,
+.cufe-form input,
+.cufe-form select,
+.cufe-form textarea {
+  width: 100%;
+  padding: 11px 14px;
+  border: 1px solid #d1d5db;
+  border-radius: 9px;
+  color: var(--cufe-text);
+  font: inherit;
+  background: #fff;
+}
+
+.cufe-search {
+  width: 300px;
+}
+
+.cufe-button {
+  border: 0;
+  border-radius: 9px;
+  padding: 11px 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.cufe-button--primary {
+  color: #fff;
+  background: var(--cufe-accent);
+}
+
+.cufe-button--secondary {
+  color: var(--cufe-text);
+  background: #eef2f7;
+}
+
+.cufe-button--danger {
+  color: #b91c1c;
+  background: #fee2e2;
+}
+
+.cufe-button--blue {
+  color: #fff;
+  background: var(--cufe-blue);
+}
+
+.cufe-button--mini {
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
+.cufe-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  gap: 18px;
+}
+
+.cufe-card,
+.cufe-empty,
+.cufe-scan-box,
+.cufe-scan-info {
+  border: 1px solid var(--cufe-line);
+  border-radius: 16px;
+  background: var(--cufe-card);
+  box-shadow: 0 5px 18px rgba(0, 0, 0, 0.03);
+}
+
+.cufe-card {
+  padding: 20px;
+}
+
+.cufe-card__top {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.cufe-card__top h2 {
+  margin: 0;
+  font-size: 22px;
+}
+
+.cufe-badge {
+  align-self: flex-start;
+  border-radius: 20px;
+  padding: 5px 10px;
+  color: #166534;
+  font-size: 12px;
+  font-weight: 700;
+  background: #dcfce7;
+}
+
+.cufe-money {
+  display: block;
+  margin: 12px 0;
+  font-size: 22px;
+}
+
+.cufe-card__actions {
+  margin-top: 15px;
+}
+
+.cufe-empty {
+  grid-column: 1 / -1;
+  padding: 60px 20px;
+  color: var(--cufe-muted);
+  text-align: center;
+  border-style: dashed;
+  box-shadow: none;
+}
+
+.cufe-empty--small {
+  padding: 30px;
+}
+
+.cufe-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  overflow: auto;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.cufe-modal.is-open {
+  display: flex;
+}
+
+.cufe-modal__box {
+  width: min(1100px, 100%);
+  max-height: 92vh;
+  overflow: auto;
+  padding: 24px;
+  border-radius: 18px;
+  background: #fff;
+}
+
+.cufe-modal__box--small {
+  width: min(760px, 100%);
+}
+
+.cufe-modal__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.cufe-modal__head h2 {
+  margin: 0;
+}
+
+.cufe-close {
+  border: 0;
+  padding: 4px;
+  color: var(--cufe-text);
+  font-size: 30px;
+  line-height: 1;
+  cursor: pointer;
+  background: transparent;
+}
+
+.cufe-form {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+}
+
+.cufe-form label {
+  display: block;
+  color: var(--cufe-text);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.cufe-form input,
+.cufe-form select,
+.cufe-form textarea {
+  margin-top: 6px;
+  font-size: 14px;
+  font-weight: 400;
+}
+
+.cufe-form__full {
+  grid-column: 1 / -1;
+}
+
+.cufe-modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.cufe-scanner {
+  display: grid;
+  grid-template-columns: 360px 1fr;
+  gap: 20px;
+  margin-top: 20px;
+}
+
+.cufe-scan-box,
+.cufe-scan-info {
+  padding: 18px;
+}
+
+.cufe-scan-box {
+  background: #fafafa;
+}
+
+.cufe-scan-info {
+  background: #f8fafc;
+}
+
+.cufe-scan-box h3,
+.cufe-scan-info h3 {
+  margin: 0 0 14px;
+}
+
+.cufe-camera {
+  position: relative;
+  width: 100%;
+  min-height: 250px;
+  overflow: hidden;
+  border-radius: 12px;
+  background: #000;
+}
+
+.cufe-camera video {
+  display: block;
+  width: 100%;
+  min-height: 250px;
+  object-fit: cover;
+}
+
+.cufe-camera canvas {
+  display: none;
+}
+
+.cufe-camera__frame {
+  position: absolute;
+  top: 17.5%;
+  left: 17.5%;
+  width: 65%;
+  height: 65%;
+  border: 3px solid #00ff88;
+  border-radius: 15px;
+  pointer-events: none;
+}
+
+.cufe-scan-status {
+  margin: 12px 0;
+  color: var(--cufe-muted);
+  font-weight: 800;
+  text-align: center;
+}
+
+.cufe-scan-status.is-success {
+  color: #16a34a;
+}
+
+.cufe-scan-status.is-warning {
+  color: #dc2626;
+}
+
+.cufe-qr-content {
+  display: block;
+  margin-bottom: 12px;
+  color: var(--cufe-text);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.cufe-qr-content textarea {
+  width: 100%;
+  margin-top: 6px;
+  padding: 11px 14px;
+  border: 1px solid #d1d5db;
+  border-radius: 9px;
+  color: var(--cufe-text);
+  font: inherit;
+  resize: vertical;
+  background: #fff;
+}
+
+.cufe-notice {
+  margin-top: 14px;
+  padding: 12px;
+  border-radius: 10px;
+  color: #9a3412;
+  font-size: 13px;
+  line-height: 1.45;
+  background: #fff7ed;
+}
+
+.cufe-toolbar--inside {
+  margin-top: 24px;
+}
+
+.cufe-table-wrap {
+  margin-top: 18px;
+  overflow: auto;
+  border: 1px solid var(--cufe-line);
+  border-radius: 12px;
+}
+
+.cufe-table-wrap table {
+  width: 100%;
+  min-width: 900px;
+  border-collapse: collapse;
+  background: #fff;
+}
+
+.cufe-table-wrap th,
+.cufe-table-wrap td {
+  padding: 10px;
+  border-bottom: 1px solid var(--cufe-line);
+  color: var(--cufe-text);
+  font-size: 13px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.cufe-table-wrap th,
+.cufe-total-row td {
+  font-weight: 800;
+  background: #f8fafc;
+}
+
+@media (max-width: 800px) {
+  .cufe-app {
+    padding: 100px 16px 28px;
+  }
+
+  .cufe-hero {
+    padding: 26px;
+  }
+
+  .cufe-scanner,
+  .cufe-form {
+    grid-template-columns: 1fr;
+  }
+
+  .cufe-search {
+    width: 100%;
+  }
+
+  .cufe-toolbar__actions {
+    width: 100%;
+  }
+}
