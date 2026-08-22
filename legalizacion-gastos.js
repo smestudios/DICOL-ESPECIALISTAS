@@ -257,42 +257,57 @@ function removeInvoice(invoiceId) {
 }
 
 function extractCufe(text) {
-  const value = text.trim();
+  const value = String(text || '').trim();
+  if (!value) return '';
+
+  console.log('Contenido original del QR:', value);
 
   try {
     const url = new URL(value);
-    const params = ['documentkey', 'DocumentKey', 'cufe', 'CUFE', 'key'];
+    const params = ['documentkey', 'documentKey', 'DocumentKey', 'cufe', 'CUFE', 'key', 'uuid'];
     for (const param of params) {
       const found = url.searchParams.get(param);
-      if (found) return found.trim();
+      if (found) {
+        console.log('CUFE encontrado mediante parámetro:', param, found);
+        return found.trim();
+      }
     }
   } catch (error) {
     // QR content is not always a URL.
   }
 
-  const labeled = value.match(/(?:CUFE|cufe|documentkey|DocumentKey|key)[=:/\s]+([A-Fa-f0-9]{40,})/);
-  if (labeled) return labeled[1];
+  const labeled = value.match(/(?:CUFE|documentkey|key|uuid)[=:/\s]+([A-Za-z0-9._-]{40,200})/i);
+  if (labeled?.[1]) {
+    console.log('CUFE encontrado mediante etiqueta:', labeled[1]);
+    return labeled[1];
+  }
 
-  const hex = value.match(/\b[A-Fa-f0-9]{40,}\b/);
-  return hex ? hex[0] : '';
+  const hex = value.match(/\b[A-Fa-f0-9]{64,128}\b/);
+  if (hex?.[0]) {
+    console.log('CUFE hexadecimal encontrado:', hex[0]);
+    return hex[0];
+  }
+
+  console.warn('No se pudo identificar automáticamente el CUFE.');
+  return '';
 }
 
 function processQrText(text) {
-  const cufe = extractCufe(text) || text;
+  const cufe = extractCufe(text);
   elements.invoiceCufe.value = cufe;
   elements.qrContent.value = text;
-  elements.qrStatus.textContent = extractCufe(text) ? '✓ CUFE encontrado correctamente' : 'QR leído; revisa el contenido antes de agregar';
-  elements.qrStatus.classList.toggle('is-success', Boolean(extractCufe(text)));
-  elements.qrStatus.classList.toggle('is-warning', !extractCufe(text));
-  stopScanner();
+  elements.qrStatus.textContent = cufe ? '✓ CUFE encontrado correctamente' : 'QR leído; revisa el contenido antes de agregar';
+  elements.qrStatus.classList.toggle('is-success', Boolean(cufe));
+  elements.qrStatus.classList.toggle('is-warning', !cufe);
+  stopScanner({ preserveStatus: true });
 }
 
 function scanQrFrame() {
   if (!state.scanning) return;
 
   const video = elements.qrVideo;
-  if (video.readyState === video.HAVE_ENOUGH_DATA && video.videoWidth > 0 && video.videoHeight > 0) {
-    const canvas = elements.qrCanvas;
+  const canvas = elements.qrCanvas;
+  if (video.readyState >= HTMLMediaElement.HAVE_ENOUGH_DATA && video.videoWidth > 0 && video.videoHeight > 0) {
     const context = canvas.getContext('2d', { willReadFrequently: true });
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
@@ -300,7 +315,25 @@ function scanQrFrame() {
     const image = context.getImageData(0, 0, canvas.width, canvas.height);
     const code = window.jsQR?.(image.data, image.width, image.height, { inversionAttempts: 'attemptBoth' });
     if (code?.data) {
+      console.log('QR DETECTADO:', code.data);
       processQrText(code.data);
+      return;
+    }
+
+    // Aumenta la zona que normalmente coincide con la guía visual para QR pequeños.
+    const cropSize = Math.min(video.videoWidth, video.videoHeight) * 0.65;
+    const cropX = (video.videoWidth - cropSize) / 2;
+    const cropY = (video.videoHeight - cropSize) / 2;
+    const scale = 2;
+    canvas.width = Math.round(cropSize * scale);
+    canvas.height = Math.round(cropSize * scale);
+    context.imageSmoothingEnabled = false;
+    context.drawImage(video, cropX, cropY, cropSize, cropSize, 0, 0, canvas.width, canvas.height);
+    const croppedImage = context.getImageData(0, 0, canvas.width, canvas.height);
+    const croppedCode = window.jsQR?.(croppedImage.data, croppedImage.width, croppedImage.height, { inversionAttempts: 'attemptBoth' });
+    if (croppedCode?.data) {
+      console.log('QR DETECTADO EN ZONA CENTRAL:', croppedCode.data);
+      processQrText(croppedCode.data);
       return;
     }
   }
@@ -325,23 +358,33 @@ async function startScanner() {
 
   try {
     state.scannerStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: 'environment' } },
       audio: false,
+      video: {
+        facingMode: { ideal: 'environment' },
+        width: { ideal: 1920 },
+        height: { ideal: 1080 },
+        frameRate: { ideal: 30 },
+      },
     });
     elements.qrVideo.srcObject = state.scannerStream;
     elements.qrVideo.setAttribute('playsinline', 'true');
+    elements.qrVideo.setAttribute('autoplay', 'true');
+    elements.qrVideo.muted = true;
     await elements.qrVideo.play();
     state.scanning = true;
-    elements.qrStatus.textContent = 'Apunta la cámara al QR de la factura';
+    elements.qrStatus.textContent = '📷 Apunta al código QR de la factura';
     elements.qrStatus.classList.remove('is-warning', 'is-success');
     state.scannerFrame = requestAnimationFrame(scanQrFrame);
   } catch (error) {
+    console.error('ERROR DE CÁMARA:', error);
+    state.scannerStream?.getTracks().forEach((track) => track.stop());
+    state.scannerStream = null;
     elements.qrStatus.textContent = 'No se pudo acceder a la cámara. Permite el acceso e intenta de nuevo';
     elements.qrStatus.classList.add('is-warning');
   }
 }
 
-function stopScanner() {
+function stopScanner({ preserveStatus = false } = {}) {
   state.scanning = false;
   if (state.scannerFrame) cancelAnimationFrame(state.scannerFrame);
   state.scannerFrame = null;
@@ -356,7 +399,7 @@ function stopScanner() {
     elements.qrVideo.srcObject = null;
   }
 
-  if (elements.qrStatus && !elements.invoiceCufe.value) {
+  if (elements.qrStatus && !elements.invoiceCufe.value && !preserveStatus) {
     elements.qrStatus.textContent = 'Cámara detenida';
   }
 }
