@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DICOL | Lector de facturas</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+  <script defer src="lector-facturas.js"></script>
+</head>
+<body class="app-body invoice-reader-body">
+  <nav class="navbar" aria-label="Navegación principal">
+    <a class="logo" href="index.html#inicio" aria-label="Volver al inicio"><img src="Drone_Innovation_COL.webp" alt="Logo DICOL" /><span>DICOL</span></a>
+    <ul class="nav-links"><li><a href="index.html#inicio">Inicio</a></li><li><a href="index.html#tramites">Trámites</a></li><li><a href="#carga">Cargar</a></li><li><a href="#resultados">Resultados</a></li></ul>
+    <a class="nav-button" href="legalizacion-gastos.html">Legalizar gastos</a>
+  </nav>
+  <main class="invoice-reader">
+    <header class="invoice-reader__hero">
+      <div><div class="eyebrow">Gestión documental</div><h1>Lector de facturas electrónicas</h1><p>Extrae datos de facturas PDF y XML, detecta códigos QR y prepara un archivo Excel listo para revisar.</p></div>
+      <div class="invoice-reader__badge" aria-hidden="true"><span>CUFE</span><strong>QR</strong><small>PDF · XML</small></div>
+    </header>
+    <section class="invoice-reader__workspace" id="carga">
+      <label class="invoice-dropzone" for="fileInput"><input id="fileInput" type="file" multiple accept=".pdf,.xml" /><span class="invoice-dropzone__icon">↑</span><strong>Cargar facturas</strong><span>Selecciona uno o varios archivos PDF o XML.</span><small>También intentaremos leer el QR incluido en cada PDF.</small></label>
+      <aside class="invoice-qr"><div><h2>Escanear un QR</h2><p>Usa la cámara o carga una imagen del código para añadir su contenido.</p></div><div class="invoice-actions"><button class="cufe-button cufe-button--blue" type="button" id="openCamera">Abrir cámara</button><label class="cufe-button cufe-button--secondary" for="qrImageInput">Cargar imagen<input id="qrImageInput" type="file" accept="image/*" /></label></div><div class="invoice-camera" id="qrScanner" hidden><video id="qrVideo" autoplay playsinline muted></video><canvas id="qrCanvas"></canvas><button class="cufe-button cufe-button--secondary" type="button" id="closeCamera">Detener cámara</button></div><div class="invoice-qr-result" id="qrResult" hidden></div></aside>
+    </section>
+    <p class="invoice-status" id="status" role="status" aria-live="polite" hidden></p>
+    <section class="invoice-stats" aria-label="Estadísticas de procesamiento"><article><span>Archivos procesados</span><strong id="total">0</strong></article><article><span>CUFE encontrados</span><strong id="cufes">0</strong></article><article><span>QR encontrados</span><strong id="qrs">0</strong></article><article><span>XML procesados</span><strong id="xmls">0</strong></article><article><span>Duplicados</span><strong id="duplicates">0</strong></article></section>
+    <section class="invoice-results" id="resultados"><div class="invoice-results__head"><div><div class="eyebrow">Resultados</div><h2>Facturas procesadas</h2></div><div class="invoice-actions"><button class="cufe-button cufe-button--primary" type="button" id="exportExcel">Exportar Excel</button><button class="cufe-button cufe-button--secondary" type="button" id="clearAll">Limpiar todo</button></div></div><div class="invoice-table-wrap"><table><thead><tr><th>CUFE</th><th>Factura</th><th>Fecha</th><th>NIT</th><th>Proveedor</th><th>Subtotal</th><th>IVA</th><th>Total</th><th>QR</th><th>Archivo</th></tr></thead><tbody id="invoiceTable"><tr class="invoice-empty"><td colspan="10">Aún no hay facturas cargadas.</td></tr></tbody></table></div></section>
+  </main>
+</body>
+</html>
