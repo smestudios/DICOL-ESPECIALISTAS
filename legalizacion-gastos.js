@@ -4,7 +4,9 @@ const state = {
   expenses: [],
   activeId: null,
   editingId: null,
-  scanner: null,
+  scannerStream: null,
+  scannerFrame: null,
+  scanning: false,
 };
 
 const elements = {
@@ -31,6 +33,10 @@ const elements = {
   invoicePayment: document.querySelector('#invoicePayment'),
   invoiceConcept: document.querySelector('#invoiceConcept'),
   invoiceAmount: document.querySelector('#invoiceAmount'),
+  qrVideo: document.querySelector('#qrVideo'),
+  qrCanvas: document.querySelector('#qrCanvas'),
+  qrStatus: document.querySelector('#qrStatus'),
+  qrContent: document.querySelector('#qrContent'),
   invoiceTableWrap: document.querySelector('#invoiceTableWrap'),
   printSheet: document.querySelector('#printSheet'),
 };
@@ -250,26 +256,109 @@ function removeInvoice(invoiceId) {
   renderDetail();
 }
 
-async function startScanner() {
-  if (state.scanner || typeof Html5Qrcode === 'undefined') return;
-  state.scanner = new Html5Qrcode('reader');
+function extractCufe(text) {
+  const value = text.trim();
+
   try {
-    await state.scanner.start({ facingMode: 'environment' }, { fps: 10, qrbox: { width: 250, height: 250 } }, (text) => {
-      elements.invoiceCufe.value = text;
-      stopScanner();
-      elements.saveStatus.textContent = 'QR leído correctamente';
-    });
+    const url = new URL(value);
+    const params = ['documentkey', 'DocumentKey', 'cufe', 'CUFE', 'key'];
+    for (const param of params) {
+      const found = url.searchParams.get(param);
+      if (found) return found.trim();
+    }
   } catch (error) {
-    state.scanner = null;
-    elements.saveStatus.textContent = 'No fue posible iniciar la cámara';
+    // QR content is not always a URL.
+  }
+
+  const labeled = value.match(/(?:CUFE|cufe|documentkey|DocumentKey|key)[=:/\s]+([A-Fa-f0-9]{40,})/);
+  if (labeled) return labeled[1];
+
+  const hex = value.match(/\b[A-Fa-f0-9]{40,}\b/);
+  return hex ? hex[0] : '';
+}
+
+function processQrText(text) {
+  const cufe = extractCufe(text) || text;
+  elements.invoiceCufe.value = cufe;
+  elements.qrContent.value = text;
+  elements.qrStatus.textContent = extractCufe(text) ? '✓ CUFE encontrado correctamente' : 'QR leído; revisa el contenido antes de agregar';
+  elements.qrStatus.classList.toggle('is-success', Boolean(extractCufe(text)));
+  elements.qrStatus.classList.toggle('is-warning', !extractCufe(text));
+  stopScanner();
+}
+
+function scanQrFrame() {
+  if (!state.scanning) return;
+
+  const video = elements.qrVideo;
+  if (video.readyState === video.HAVE_ENOUGH_DATA && video.videoWidth > 0 && video.videoHeight > 0) {
+    const canvas = elements.qrCanvas;
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const image = context.getImageData(0, 0, canvas.width, canvas.height);
+    const code = window.jsQR?.(image.data, image.width, image.height, { inversionAttempts: 'attemptBoth' });
+    if (code?.data) {
+      processQrText(code.data);
+      return;
+    }
+  }
+
+  state.scannerFrame = requestAnimationFrame(scanQrFrame);
+}
+
+async function startScanner() {
+  if (state.scanning) return;
+
+  if (!navigator.mediaDevices?.getUserMedia) {
+    elements.qrStatus.textContent = 'Este navegador no permite acceso a cámara';
+    elements.qrStatus.classList.add('is-warning');
+    return;
+  }
+
+  if (typeof window.jsQR !== 'function') {
+    elements.qrStatus.textContent = 'No se cargó la librería jsQR. Revisa la conexión a internet';
+    elements.qrStatus.classList.add('is-warning');
+    return;
+  }
+
+  try {
+    state.scannerStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' } },
+      audio: false,
+    });
+    elements.qrVideo.srcObject = state.scannerStream;
+    elements.qrVideo.setAttribute('playsinline', 'true');
+    await elements.qrVideo.play();
+    state.scanning = true;
+    elements.qrStatus.textContent = 'Apunta la cámara al QR de la factura';
+    elements.qrStatus.classList.remove('is-warning', 'is-success');
+    state.scannerFrame = requestAnimationFrame(scanQrFrame);
+  } catch (error) {
+    elements.qrStatus.textContent = 'No se pudo acceder a la cámara. Permite el acceso e intenta de nuevo';
+    elements.qrStatus.classList.add('is-warning');
   }
 }
 
-async function stopScanner() {
-  if (!state.scanner) return;
-  try { await state.scanner.stop(); } catch (error) { /* ignore scanner stop errors */ }
-  try { state.scanner.clear(); } catch (error) { /* ignore scanner clear errors */ }
-  state.scanner = null;
+function stopScanner() {
+  state.scanning = false;
+  if (state.scannerFrame) cancelAnimationFrame(state.scannerFrame);
+  state.scannerFrame = null;
+
+  if (state.scannerStream) {
+    state.scannerStream.getTracks().forEach((track) => track.stop());
+    state.scannerStream = null;
+  }
+
+  if (elements.qrVideo) {
+    elements.qrVideo.pause();
+    elements.qrVideo.srcObject = null;
+  }
+
+  if (elements.qrStatus && !elements.invoiceCufe.value) {
+    elements.qrStatus.textContent = 'Cámara detenida';
+  }
 }
 
 function exportExcel() {
