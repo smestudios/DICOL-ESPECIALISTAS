@@ -84,6 +84,7 @@ function normalizeExpense(expense) {
       nit: '',
       payment: 'Tarjeta',
       concept: 'Otros',
+      qrContent: '',
       ...invoice,
     })),
   };
@@ -236,6 +237,7 @@ function addInvoice() {
     payment: elements.invoicePayment.value,
     concept: elements.invoiceConcept.value,
     amount: Number(elements.invoiceAmount.value) || 0,
+    qrContent: elements.qrContent.value.trim(),
   });
   clearInvoiceForm();
   persist('Factura agregada');
@@ -245,6 +247,9 @@ function addInvoice() {
 
 function clearInvoiceForm() {
   [elements.invoiceCufe, elements.invoiceDate, elements.invoiceNumber, elements.invoiceNit, elements.invoiceSupplier, elements.invoiceAmount].forEach((field) => { field.value = ''; });
+  elements.qrContent.value = '';
+  elements.qrStatus.textContent = 'Cámara detenida';
+  elements.qrStatus.classList.remove('is-success', 'is-warning');
 }
 
 function removeInvoice(invoiceId) {
@@ -292,13 +297,114 @@ function extractCufe(text) {
   return '';
 }
 
+function cleanQrValue(value) {
+  return String(value ?? '').trim().replace(/^['"]|['"]$/g, '');
+}
+
+function normalizeQrKey(key) {
+  return String(key || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function qrFields(text) {
+  const fields = new Map();
+  const value = String(text || '').trim();
+  if (!value) return fields;
+
+  try {
+    const url = new URL(value);
+    url.searchParams.forEach((fieldValue, key) => fields.set(normalizeQrKey(key), cleanQrValue(fieldValue)));
+  } catch (error) {
+    // Some valid electronic-invoice QR codes contain query parameters without a URL.
+  }
+
+  const query = value.includes('?') ? value.slice(value.indexOf('?') + 1) : value;
+  query.split(/[&\n;]/).forEach((part) => {
+    const separator = part.indexOf('=') >= 0 ? '=' : part.indexOf(':') >= 0 ? ':' : null;
+    if (!separator) return;
+    const rawKey = part.slice(0, separator);
+    const rawValue = part.slice(separator + 1);
+    if (!rawKey || !rawValue) return;
+    try {
+      fields.set(normalizeQrKey(decodeURIComponent(rawKey)), cleanQrValue(decodeURIComponent(rawValue.replace(/\+/g, ' '))));
+    } catch (error) {
+      fields.set(normalizeQrKey(rawKey), cleanQrValue(rawValue));
+    }
+  });
+  return fields;
+}
+
+function firstQrField(fields, aliases) {
+  for (const alias of aliases) {
+    const found = fields.get(normalizeQrKey(alias));
+    if (found) return found;
+  }
+  return '';
+}
+
+function normalizeDate(value) {
+  const text = cleanQrValue(value);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+  const match = text.match(/^(\d{2})[/-](\d{2})[/-](\d{4})$/);
+  return match ? `${match[3]}-${match[2]}-${match[1]}` : '';
+}
+
+function normalizeAmount(value) {
+  const text = cleanQrValue(value).replace(/[^0-9,.-]/g, '');
+  if (!text) return '';
+  const normalized = text.includes(',') && text.includes('.')
+    ? text.replace(/\./g, '').replace(',', '.')
+    : text.replace(',', '.');
+  const amount = Number(normalized);
+  return Number.isFinite(amount) && amount >= 0 ? String(amount) : '';
+}
+
+function classifyInvoice({ supplier = '', description = '' }) {
+  const content = `${supplier} ${description}`.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  if (/(restaurante|burger|comida|cafe|cafeteria|almuerzo|desayuno|cena)/.test(content)) return 'Alimentación';
+  if (/(hotel|hostal|hospedaje|alojamiento)/.test(content)) return 'Alojamiento';
+  if (/(peaje|parqueadero|estacionamiento)/.test(content)) return 'Peajes';
+  if (/(taxi|uber|cabify|transporte)/.test(content)) return 'Transporte';
+  if (/(gasolina|combustible|estacion de servicio)/.test(content)) return 'Combustible';
+  return 'Otros';
+}
+
+function extractQrInvoice(text) {
+  const fields = qrFields(text);
+  const cufe = extractCufe(text) || firstQrField(fields, ['cufe', 'documentKey', 'uuid', 'trackId']);
+  const supplier = firstQrField(fields, ['supplier', 'proveedor', 'razonSocialEmisor', 'nombreEmisor', 'issuerName']);
+  const description = firstQrField(fields, ['descripcion', 'description', 'detalle']);
+  return {
+    cufe,
+    number: firstQrField(fields, ['numFac', 'numeroFactura', 'invoiceNumber', 'number']),
+    date: normalizeDate(firstQrField(fields, ['fecFac', 'fechaFac', 'fechaFactura', 'issueDate', 'date'])),
+    nit: firstQrField(fields, ['nitFac', 'nitProveedor', 'nitEmisor', 'supplierNit', 'issuerNit']),
+    supplier,
+    amount: normalizeAmount(firstQrField(fields, ['valorFac', 'total', 'totalAmount', 'importeTotal', 'amount'])),
+    description,
+  };
+}
+
+function fillInvoiceFromQr(text) {
+  const invoice = extractQrInvoice(text);
+  elements.invoiceCufe.value = invoice.cufe;
+  if (invoice.number) elements.invoiceNumber.value = invoice.number;
+  if (invoice.date) elements.invoiceDate.value = invoice.date;
+  if (invoice.nit) elements.invoiceNit.value = invoice.nit;
+  if (invoice.supplier) elements.invoiceSupplier.value = invoice.supplier;
+  if (invoice.amount) elements.invoiceAmount.value = invoice.amount;
+  if (invoice.supplier || invoice.description) elements.invoiceConcept.value = classifyInvoice(invoice);
+  return invoice;
+}
+
 function processQrText(text) {
-  const cufe = extractCufe(text);
-  elements.invoiceCufe.value = cufe;
+  const invoice = fillInvoiceFromQr(text);
   elements.qrContent.value = text;
-  elements.qrStatus.textContent = cufe ? '✓ CUFE encontrado correctamente' : 'QR leído; revisa el contenido antes de agregar';
-  elements.qrStatus.classList.toggle('is-success', Boolean(cufe));
-  elements.qrStatus.classList.toggle('is-warning', !cufe);
+  const detailsFound = [invoice.number, invoice.date, invoice.nit, invoice.supplier, invoice.amount].filter(Boolean).length;
+  elements.qrStatus.textContent = invoice.cufe
+    ? `✓ CUFE identificado${detailsFound ? ` y ${detailsFound} dato(s) completado(s)` : ''}. Revisa antes de agregar.`
+    : 'QR leído; no contiene un CUFE identificable. Revisa el contenido antes de agregar.';
+  elements.qrStatus.classList.toggle('is-success', Boolean(invoice.cufe));
+  elements.qrStatus.classList.toggle('is-warning', !invoice.cufe);
   stopScanner({ preserveStatus: true });
 }
 
@@ -462,6 +568,15 @@ function bindActions() {
   document.querySelector('[data-action="clear-invoice"]').addEventListener('click', clearInvoiceForm);
   document.querySelector('[data-action="start-scanner"]').addEventListener('click', startScanner);
   document.querySelector('[data-action="stop-scanner"]').addEventListener('click', stopScanner);
+  document.querySelector('[data-action="analyze-qr"]').addEventListener('click', () => {
+    const text = elements.qrContent.value.trim();
+    if (!text) {
+      elements.qrStatus.textContent = 'Pega o escanea primero el contenido del QR';
+      elements.qrStatus.classList.add('is-warning');
+      return;
+    }
+    processQrText(text);
+  });
   document.querySelector('[data-action="download-excel"]').addEventListener('click', exportExcel);
   document.querySelector('[data-action="print-pdf"]').addEventListener('click', printPdf);
   elements.search.addEventListener('input', render);
