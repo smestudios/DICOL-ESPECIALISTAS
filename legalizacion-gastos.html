@@ -30,7 +30,7 @@
       <div>
         <div class="eyebrow">Legalización de gastos</div>
         <h1>Gestión de salidas y CUFE</h1>
-        <p>Administra tus salidas y registra sus facturas electrónicas desde un enlace CUFE, el texto del QR o escaneando con la cámara.</p>
+        <p>Administra tus salidas y registra sus facturas electrónicas leyendo el QR: el sistema conserva su contenido, identifica el CUFE y completa los datos que vengan codificados.</p>
       </div>
     </section>
 
@@ -89,13 +89,14 @@
           </div>
           <p class="cufe-scan-status" id="qrStatus">Cámara detenida</p>
           <label class="cufe-qr-content">Contenido leído del QR
-            <textarea id="qrContent" rows="3" readonly placeholder="Aquí aparecerá el texto completo detectado en el QR"></textarea>
+            <textarea id="qrContent" rows="3" placeholder="Aquí aparecerá el texto completo detectado en el QR; también puedes pegarlo aquí"></textarea>
           </label>
           <div class="cufe-inline-actions">
             <button class="cufe-button cufe-button--blue" type="button" data-action="start-scanner">Iniciar cámara</button>
             <button class="cufe-button cufe-button--secondary" type="button" data-action="stop-scanner">Detener</button>
+            <button class="cufe-button cufe-button--primary" type="button" data-action="analyze-qr">Usar contenido QR</button>
           </div>
-          <p class="cufe-notice">El navegador debe tener permiso para usar la cámara. El sistema extrae el CUFE desde documentkey, CUFE o una cadena hexadecimal larga.</p>
+          <p class="cufe-notice">El navegador debe tener permiso para usar la cámara. Se guarda el texto original y se extraen CUFE, número, fecha, NIT, proveedor y valor cuando el QR los incluya. La consulta oficial de DIAN debe realizarse desde un servicio backend autorizado.</p>
         </div>
 
         <div class="cufe-scan-info">
