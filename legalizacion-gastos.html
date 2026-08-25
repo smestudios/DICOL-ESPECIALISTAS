@@ -30,7 +30,7 @@
       <div>
         <div class="eyebrow">Legalización de gastos</div>
         <h1>Gestión de salidas y CUFE</h1>
-        <p>Administra tus salidas y registra sus facturas electrónicas desde un enlace CUFE, el texto del QR o escaneando con la cámara.</p>
+        <p>Administra tus salidas y registra sus facturas electrónicas escaneando el QR para identificar el CUFE y abrir la consulta oficial cuando el código incluya su enlace.</p>
       </div>
     </section>
 
@@ -88,14 +88,12 @@
             <div class="cufe-camera__frame" aria-hidden="true"></div>
           </div>
           <p class="cufe-scan-status" id="qrStatus">Cámara detenida</p>
-          <label class="cufe-qr-content">Contenido leído del QR
-            <textarea id="qrContent" rows="3" readonly placeholder="Aquí aparecerá el texto completo detectado en el QR"></textarea>
-          </label>
           <div class="cufe-inline-actions">
             <button class="cufe-button cufe-button--blue" type="button" data-action="start-scanner">Iniciar cámara</button>
             <button class="cufe-button cufe-button--secondary" type="button" data-action="stop-scanner">Detener</button>
+            <button class="cufe-button cufe-button--primary" type="button" data-action="open-dian" disabled>Consultar en DIAN</button>
           </div>
-          <p class="cufe-notice">El navegador debe tener permiso para usar la cámara. El sistema extrae el CUFE desde documentkey, CUFE o una cadena hexadecimal larga.</p>
+          <p class="cufe-notice">El lector solo identifica el CUFE. Si el QR contiene un enlace oficial de DIAN, se habilita la consulta en una pestaña nueva. Los datos fiscales se deben obtener mediante un mecanismo autorizado, no desde el navegador.</p>
         </div>
 
         <div class="cufe-scan-info">

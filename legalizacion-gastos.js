@@ -7,6 +7,7 @@ const state = {
   scannerStream: null,
   scannerFrame: null,
   scanning: false,
+  dianLookupUrl: '',
 };
 
 const elements = {
@@ -36,7 +37,7 @@ const elements = {
   qrVideo: document.querySelector('#qrVideo'),
   qrCanvas: document.querySelector('#qrCanvas'),
   qrStatus: document.querySelector('#qrStatus'),
-  qrContent: document.querySelector('#qrContent'),
+  dianLookup: document.querySelector('[data-action="open-dian"]'),
   invoiceTableWrap: document.querySelector('#invoiceTableWrap'),
   printSheet: document.querySelector('#printSheet'),
 };
@@ -245,6 +246,10 @@ function addInvoice() {
 
 function clearInvoiceForm() {
   [elements.invoiceCufe, elements.invoiceDate, elements.invoiceNumber, elements.invoiceNit, elements.invoiceSupplier, elements.invoiceAmount].forEach((field) => { field.value = ''; });
+  elements.qrStatus.textContent = 'Cámara detenida';
+  elements.qrStatus.classList.remove('is-success', 'is-warning');
+  state.dianLookupUrl = '';
+  elements.dianLookup.disabled = true;
 }
 
 function removeInvoice(invoiceId) {
@@ -292,11 +297,28 @@ function extractCufe(text) {
   return '';
 }
 
+function dianUrlFromQr(text) {
+  try {
+    const url = new URL(String(text || '').trim());
+    const host = url.hostname.toLowerCase();
+    return (url.protocol === 'https:' && (host === 'dian.gov.co' || host.endsWith('.dian.gov.co')))
+      ? url.href
+      : '';
+  } catch (error) {
+    return '';
+  }
+}
+
 function processQrText(text) {
   const cufe = extractCufe(text);
   elements.invoiceCufe.value = cufe;
-  elements.qrContent.value = text;
-  elements.qrStatus.textContent = cufe ? '✓ CUFE encontrado correctamente' : 'QR leído; revisa el contenido antes de agregar';
+  state.dianLookupUrl = dianUrlFromQr(text);
+  elements.dianLookup.disabled = !state.dianLookupUrl;
+  elements.qrStatus.textContent = cufe
+    ? state.dianLookupUrl
+      ? '✓ CUFE identificado. Puedes continuar en la consulta oficial de DIAN.'
+      : '✓ CUFE identificado. El QR no incluye un enlace oficial de DIAN.'
+    : 'QR leído; no contiene un CUFE identificable. Revisa la factura antes de agregarla.';
   elements.qrStatus.classList.toggle('is-success', Boolean(cufe));
   elements.qrStatus.classList.toggle('is-warning', !cufe);
   stopScanner({ preserveStatus: true });
@@ -462,6 +484,9 @@ function bindActions() {
   document.querySelector('[data-action="clear-invoice"]').addEventListener('click', clearInvoiceForm);
   document.querySelector('[data-action="start-scanner"]').addEventListener('click', startScanner);
   document.querySelector('[data-action="stop-scanner"]').addEventListener('click', stopScanner);
+  elements.dianLookup.addEventListener('click', () => {
+    if (state.dianLookupUrl) window.open(state.dianLookupUrl, '_blank', 'noopener,noreferrer');
+  });
   document.querySelector('[data-action="download-excel"]').addEventListener('click', exportExcel);
   document.querySelector('[data-action="print-pdf"]').addEventListener('click', printPdf);
   elements.search.addEventListener('input', render);
