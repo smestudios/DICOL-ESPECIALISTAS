@@ -85,6 +85,7 @@ function normalizeExpense(expense) {
       nit: '',
       payment: 'Tarjeta',
       concept: 'Otros',
+      qrContent: '',
       ...invoice,
     })),
   };
@@ -237,6 +238,7 @@ function addInvoice() {
     payment: elements.invoicePayment.value,
     concept: elements.invoiceConcept.value,
     amount: Number(elements.invoiceAmount.value) || 0,
+    qrContent: elements.qrContent.value.trim(),
   });
   clearInvoiceForm();
   persist('Factura agregada');
