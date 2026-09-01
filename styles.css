@@ -794,6 +794,20 @@ footer a:focus-visible {
   grid-column: 1 / -1;
 }
 
+.cufe-field-help,
+.cufe-order-note {
+  display: block;
+  margin-top: 7px;
+  color: var(--cufe-muted);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.45;
+}
+
+.cufe-order-note {
+  margin: 16px 0 8px;
+}
+
 .cufe-modal__actions {
   display: flex;
   justify-content: flex-end;
