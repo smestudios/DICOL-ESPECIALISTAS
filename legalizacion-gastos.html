@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="styles.css" />
   <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://unpkg.com/docx@9.5.1/dist/index.iife.js"></script>
 </head>
 <body class="app-body expense-window-body">
   <nav class="navbar" aria-label="Navegación principal">
@@ -107,6 +108,7 @@
             <label>Medio de pago<select id="invoicePayment"><option>Tarjeta</option><option>Transferencia</option><option>Efectivo</option><option>Otro</option></select></label>
             <label>Concepto<select id="invoiceConcept"><option>Alimentación</option><option>Alojamiento</option><option>Transporte</option><option>Combustible</option><option>Peajes</option><option>Otros</option></select></label>
             <label>Valor<input id="invoiceAmount" type="number" min="0" step="0.01" /></label>
+            <label class="cufe-form__full">Soporte de la factura (PDF)<input id="invoiceSupport" type="file" accept="application/pdf,.pdf" required /><span class="cufe-field-help">Adjunta el PDF antes de guardar la factura. Se usará para crear el Word de soportes en el mismo orden del Excel durante esta sesión.</span></label>
           </div>
           <div class="cufe-inline-actions">
             <button class="cufe-button cufe-button--primary" type="button" data-action="add-invoice">+ Agregar factura</button>
@@ -122,6 +124,7 @@
         </div>
         <div class="cufe-inline-actions">
           <button class="cufe-button cufe-button--blue" type="button" data-action="download-excel">Exportar Excel</button>
+          <button class="cufe-button cufe-button--primary" type="button" data-action="download-supports">Descargar soportes Word</button>
           <button class="cufe-button cufe-button--secondary" type="button" data-action="print-pdf">Descargar PDF</button>
         </div>
       </div>
