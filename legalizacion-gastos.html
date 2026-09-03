@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>DICOL | Legalización de Gastos</title>
   <link rel="stylesheet" href="styles.css" />
-  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://unpkg.com/docx@9.5.1/dist/index.iife.js"></script>
 </head>
 <body class="app-body expense-window-body">
   <nav class="navbar" aria-label="Navegación principal">
@@ -29,8 +29,8 @@
     <section class="cufe-hero">
       <div>
         <div class="eyebrow">Legalización de gastos</div>
-        <h1>Gestión de salidas y CUFE</h1>
-        <p>Administra tus salidas y registra sus facturas electrónicas escaneando el QR para identificar el CUFE y abrir la consulta oficial cuando el código incluya su enlace.</p>
+        <h1>Gestión de salidas y facturas</h1>
+        <p>Administra tus salidas, toma fotos de las facturas con acabado de documento o adjunta los PDF descargados desde DIAN.</p>
       </div>
     </section>
 
@@ -79,27 +79,27 @@
         <button class="cufe-close" type="button" data-action="close-detail-modal" aria-label="Cerrar">×</button>
       </div>
 
-      <div class="cufe-scanner" id="documento">
+      <div class="cufe-support-upload" id="documento">
         <div class="cufe-scan-box">
-          <h3>📷 Escanear CUFE / QR</h3>
-          <div class="cufe-camera" id="reader">
-            <video id="qrVideo" autoplay playsinline muted></video>
-            <canvas id="qrCanvas" aria-hidden="true"></canvas>
-            <div class="cufe-camera__frame" aria-hidden="true"></div>
-          </div>
-          <p class="cufe-scan-status" id="qrStatus">Cámara detenida</p>
+          <h3>📎 Adjuntar soporte</h3>
+          <p class="cufe-notice">Elige cómo cargar el soporte: toma una foto y la página aplicará un filtro de documento, o adjunta el PDF que descargaste desde DIAN.</p>
           <div class="cufe-inline-actions">
-            <button class="cufe-button cufe-button--blue" type="button" data-action="start-scanner">Iniciar cámara</button>
-            <button class="cufe-button cufe-button--secondary" type="button" data-action="stop-scanner">Detener</button>
-            <button class="cufe-button cufe-button--primary" type="button" data-action="open-dian" disabled>Consultar en DIAN</button>
+            <button class="cufe-button cufe-button--blue" type="button" data-action="take-photo">Tomar foto</button>
+            <button class="cufe-button cufe-button--secondary" type="button" data-action="choose-pdf">Adjuntar PDF DIAN</button>
           </div>
-          <p class="cufe-notice">El lector solo identifica el CUFE. Si el QR contiene un enlace oficial de DIAN, se habilita la consulta en una pestaña nueva. Los datos fiscales se deben obtener mediante un mecanismo autorizado, no desde el navegador.</p>
+          <input id="invoicePhoto" type="file" accept="image/*" capture="environment" hidden />
+          <input id="invoiceSupport" type="file" accept="application/pdf,.pdf" hidden />
+          <div class="cufe-support-preview" id="supportPreview" hidden>
+            <img id="supportPreviewImage" alt="Vista previa del soporte escaneado" hidden />
+            <p id="supportStatus"></p>
+            <button class="cufe-button cufe-button--danger cufe-button--mini" type="button" data-action="remove-support">Quitar soporte</button>
+          </div>
         </div>
 
         <div class="cufe-scan-info">
           <h3>Agregar factura manualmente</h3>
           <div class="cufe-form">
-            <label>CUFE / Link<input id="invoiceCufe" type="text" placeholder="CUFE o contenido del QR" /></label>
+            <label>CUFE / Link<input id="invoiceCufe" type="text" placeholder="CUFE o referencia de la factura" /></label>
             <label>Fecha<input id="invoiceDate" type="date" /></label>
             <label>No. Factura<input id="invoiceNumber" type="text" /></label>
             <label>NIT<input id="invoiceNit" type="text" /></label>
@@ -107,6 +107,7 @@
             <label>Medio de pago<select id="invoicePayment"><option>Tarjeta</option><option>Transferencia</option><option>Efectivo</option><option>Otro</option></select></label>
             <label>Concepto<select id="invoiceConcept"><option>Alimentación</option><option>Alojamiento</option><option>Transporte</option><option>Combustible</option><option>Peajes</option><option>Otros</option></select></label>
             <label>Valor<input id="invoiceAmount" type="number" min="0" step="0.01" /></label>
+            <p class="cufe-field-help cufe-form__full">El soporte seleccionado se guardará con la factura y se usará para crear el Word en el mismo orden cronológico del Excel durante esta sesión.</p>
           </div>
           <div class="cufe-inline-actions">
             <button class="cufe-button cufe-button--primary" type="button" data-action="add-invoice">+ Agregar factura</button>
@@ -122,6 +123,7 @@
         </div>
         <div class="cufe-inline-actions">
           <button class="cufe-button cufe-button--blue" type="button" data-action="download-excel">Exportar Excel</button>
+          <button class="cufe-button cufe-button--primary" type="button" data-action="download-supports">Descargar soportes Word</button>
           <button class="cufe-button cufe-button--secondary" type="button" data-action="print-pdf">Descargar PDF</button>
         </div>
       </div>
