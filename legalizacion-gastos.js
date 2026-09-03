@@ -6,11 +6,9 @@ const state = {
   expenses: [],
   activeId: null,
   editingId: null,
-  scannerStream: null,
-  scannerFrame: null,
-  scanning: false,
-  dianLookupUrl: '',
   supportFiles: new Map(),
+  pendingSupport: null,
+  previewUrl: '',
 };
 
 const elements = {
@@ -38,10 +36,10 @@ const elements = {
   invoiceConcept: document.querySelector('#invoiceConcept'),
   invoiceAmount: document.querySelector('#invoiceAmount'),
   invoiceSupport: document.querySelector('#invoiceSupport'),
-  qrVideo: document.querySelector('#qrVideo'),
-  qrCanvas: document.querySelector('#qrCanvas'),
-  qrStatus: document.querySelector('#qrStatus'),
-  dianLookup: document.querySelector('[data-action="open-dian"]'),
+  invoicePhoto: document.querySelector('#invoicePhoto'),
+  supportPreview: document.querySelector('#supportPreview'),
+  supportPreviewImage: document.querySelector('#supportPreviewImage'),
+  supportStatus: document.querySelector('#supportStatus'),
   invoiceTableWrap: document.querySelector('#invoiceTableWrap'),
   printSheet: document.querySelector('#printSheet'),
 };
@@ -99,7 +97,6 @@ function normalizeExpense(expense) {
       nit: '',
       payment: 'Tarjeta',
       concept: 'Otros',
-      qrContent: '',
       ...invoice,
     })),
   };
@@ -229,7 +226,7 @@ function renderInvoices(expense) {
   }
 
   const invoices = orderedInvoices(expense);
-  elements.invoiceTableWrap.innerHTML = `<p class="cufe-order-note">Las facturas se ordenan cronológicamente. Este es el mismo orden usado en el Excel y en el Word de soportes.</p><div class="cufe-table-wrap"><table><thead><tr><th>#</th><th>CUFE / QR</th><th>Fecha</th><th>Factura</th><th>NIT</th><th>Proveedor</th><th>Concepto</th><th>Medio</th><th>Valor</th><th>PDF</th><th></th></tr></thead><tbody>${invoices.map((invoice, index) => `<tr><td>${index + 1}</td><td title="${escapeHtml(invoice.cufe)}">${escapeHtml(invoice.cufe).slice(0, 35)}${invoice.cufe.length > 35 ? '…' : ''}</td><td>${escapeHtml(invoice.date)}</td><td>${escapeHtml(invoice.number)}</td><td>${escapeHtml(invoice.nit)}</td><td>${escapeHtml(invoice.supplier)}</td><td>${escapeHtml(invoice.concept)}</td><td>${escapeHtml(invoice.payment)}</td><td>${currency(invoice.amount)}</td><td>${state.supportFiles.has(invoice.id) ? '✓ Adjuntado' : 'Sin soporte'}</td><td><button class="cufe-button cufe-button--danger cufe-button--mini" type="button" data-remove-invoice="${invoice.id}">Eliminar</button></td></tr>`).join('')}<tr class="cufe-total-row"><td colspan="8">TOTAL</td><td>${currency(total)}</td><td></td><td></td></tr></tbody></table></div>`;
+  elements.invoiceTableWrap.innerHTML = `<p class="cufe-order-note">Las facturas se ordenan cronológicamente. Este es el mismo orden usado en el Excel y en el Word de soportes.</p><div class="cufe-table-wrap"><table><thead><tr><th>#</th><th>CUFE / Ref.</th><th>Fecha</th><th>Factura</th><th>NIT</th><th>Proveedor</th><th>Concepto</th><th>Medio</th><th>Valor</th><th>Soporte</th><th></th></tr></thead><tbody>${invoices.map((invoice, index) => `<tr><td>${index + 1}</td><td title="${escapeHtml(invoice.cufe)}">${escapeHtml(invoice.cufe).slice(0, 35)}${invoice.cufe.length > 35 ? '…' : ''}</td><td>${escapeHtml(invoice.date)}</td><td>${escapeHtml(invoice.number)}</td><td>${escapeHtml(invoice.nit)}</td><td>${escapeHtml(invoice.supplier)}</td><td>${escapeHtml(invoice.concept)}</td><td>${escapeHtml(invoice.payment)}</td><td>${currency(invoice.amount)}</td><td>${state.supportFiles.has(invoice.id) ? '✓ Adjuntado' : 'Sin soporte'}</td><td><button class="cufe-button cufe-button--danger cufe-button--mini" type="button" data-remove-invoice="${invoice.id}">Eliminar</button></td></tr>`).join('')}<tr class="cufe-total-row"><td colspan="8">TOTAL</td><td>${currency(total)}</td><td></td><td></td></tr></tbody></table></div>`;
 }
 
 function addInvoice() {
@@ -243,10 +240,9 @@ function addInvoice() {
     elements.saveStatus.textContent = 'Este CUFE ya está registrado en esta salida';
     return;
   }
-  const support = elements.invoiceSupport.files[0];
-  if (!support || (!support.type.includes('pdf') && !support.name.toLowerCase().endsWith('.pdf'))) {
-    elements.saveStatus.textContent = 'Adjunta el soporte PDF de la factura antes de agregarla.';
-    elements.invoiceSupport.focus();
+  const support = state.pendingSupport;
+  if (!support) {
+    elements.saveStatus.textContent = 'Toma una foto o adjunta el PDF de la factura antes de agregarla.';
     return;
   }
   const invoice = {
@@ -259,7 +255,6 @@ function addInvoice() {
     payment: elements.invoicePayment.value,
     concept: elements.invoiceConcept.value,
     amount: Number(elements.invoiceAmount.value) || 0,
-    qrContent: '',
   };
   expense.invoices.push(invoice);
   state.supportFiles.set(invoice.id, support);
@@ -270,11 +265,89 @@ function addInvoice() {
 }
 
 function clearInvoiceForm() {
-  [elements.invoiceCufe, elements.invoiceDate, elements.invoiceNumber, elements.invoiceNit, elements.invoiceSupplier, elements.invoiceAmount, elements.invoiceSupport].forEach((field) => { field.value = ''; });
-  elements.qrStatus.textContent = 'Cámara detenida';
-  elements.qrStatus.classList.remove('is-success', 'is-warning');
-  state.dianLookupUrl = '';
-  elements.dianLookup.disabled = true;
+  [elements.invoiceCufe, elements.invoiceDate, elements.invoiceNumber, elements.invoiceNit, elements.invoiceSupplier, elements.invoiceAmount].forEach((field) => { field.value = ''; });
+  clearPendingSupport();
+}
+
+function clearPendingSupport() {
+  if (state.previewUrl) URL.revokeObjectURL(state.previewUrl);
+  state.previewUrl = '';
+  state.pendingSupport = null;
+  elements.invoicePhoto.value = '';
+  elements.invoiceSupport.value = '';
+  elements.supportPreview.hidden = true;
+  elements.supportPreviewImage.hidden = true;
+  elements.supportPreviewImage.removeAttribute('src');
+  elements.supportStatus.textContent = '';
+}
+
+function showPendingSupport(file, message, previewUrl = '') {
+  if (state.previewUrl) URL.revokeObjectURL(state.previewUrl);
+  state.pendingSupport = file;
+  state.previewUrl = previewUrl;
+  elements.supportPreview.hidden = false;
+  elements.supportStatus.textContent = message;
+  elements.supportPreviewImage.hidden = !previewUrl;
+  if (previewUrl) elements.supportPreviewImage.src = previewUrl;
+}
+
+function imageFromFile(file) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    const url = URL.createObjectURL(file);
+    image.onload = () => { URL.revokeObjectURL(url); resolve(image); };
+    image.onerror = () => { URL.revokeObjectURL(url); reject(new Error('No se pudo abrir la foto.')); };
+    image.src = url;
+  });
+}
+
+async function scanPhoto(file) {
+  const image = await imageFromFile(file);
+  const maxSide = 2200;
+  const ratio = Math.min(1, maxSide / Math.max(image.naturalWidth, image.naturalHeight));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(image.naturalWidth * ratio);
+  canvas.height = Math.round(image.naturalHeight * ratio);
+  const context = canvas.getContext('2d', { willReadFrequently: true });
+  context.drawImage(image, 0, 0, canvas.width, canvas.height);
+  const pixels = context.getImageData(0, 0, canvas.width, canvas.height);
+  let total = 0;
+  for (let index = 0; index < pixels.data.length; index += 4) total += (pixels.data[index] * 0.299) + (pixels.data[index + 1] * 0.587) + (pixels.data[index + 2] * 0.114);
+  const threshold = Math.max(125, Math.min(205, (total / (pixels.data.length / 4)) + 18));
+  for (let index = 0; index < pixels.data.length; index += 4) {
+    const gray = (pixels.data[index] * 0.299) + (pixels.data[index + 1] * 0.587) + (pixels.data[index + 2] * 0.114);
+    const value = gray > threshold ? 255 : Math.max(0, Math.min(255, ((gray - 35) * 1.8)));
+    pixels.data[index] = value;
+    pixels.data[index + 1] = value;
+    pixels.data[index + 2] = value;
+  }
+  context.putImageData(pixels, 0, 0);
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+  if (!blob) throw new Error('No se pudo procesar la foto.');
+  return new File([blob], `factura_escaneada_${Date.now()}.png`, { type: 'image/png' });
+}
+
+async function handlePhoto(file) {
+  if (!file) return;
+  clearPendingSupport();
+  elements.supportStatus.textContent = 'Aplicando filtro de documento a la foto…';
+  elements.supportPreview.hidden = false;
+  try {
+    const scanned = await scanPhoto(file);
+    showPendingSupport(scanned, 'Foto escaneada lista para adjuntar.', URL.createObjectURL(scanned));
+  } catch (error) {
+    clearPendingSupport();
+    elements.saveStatus.textContent = error.message || 'No se pudo procesar la foto.';
+  }
+}
+
+function handlePdf(file) {
+  if (!file) return;
+  if (!file.type.includes('pdf') && !file.name.toLowerCase().endsWith('.pdf')) {
+    elements.saveStatus.textContent = 'Selecciona un archivo PDF válido.';
+    return;
+  }
+  showPendingSupport(file, `PDF adjunto: ${file.name}`);
 }
 
 function removeInvoice(invoiceId) {
@@ -285,171 +358,6 @@ function removeInvoice(invoiceId) {
   persist('Factura eliminada');
   render();
   renderDetail();
-}
-
-function extractCufe(text) {
-  const value = String(text || '').trim();
-  if (!value) return '';
-
-  console.log('Contenido original del QR:', value);
-
-  try {
-    const url = new URL(value);
-    const params = ['documentkey', 'documentKey', 'DocumentKey', 'cufe', 'CUFE', 'key', 'uuid'];
-    for (const param of params) {
-      const found = url.searchParams.get(param);
-      if (found) {
-        console.log('CUFE encontrado mediante parámetro:', param, found);
-        return found.trim();
-      }
-    }
-  } catch (error) {
-    // QR content is not always a URL.
-  }
-
-  const labeled = value.match(/(?:CUFE|documentkey|key|uuid)[=:/\s]+([A-Za-z0-9._-]{40,200})/i);
-  if (labeled?.[1]) {
-    console.log('CUFE encontrado mediante etiqueta:', labeled[1]);
-    return labeled[1];
-  }
-
-  const hex = value.match(/\b[A-Fa-f0-9]{64,128}\b/);
-  if (hex?.[0]) {
-    console.log('CUFE hexadecimal encontrado:', hex[0]);
-    return hex[0];
-  }
-
-  console.warn('No se pudo identificar automáticamente el CUFE.');
-  return '';
-}
-
-function dianUrlFromQr(text) {
-  try {
-    const url = new URL(String(text || '').trim());
-    const host = url.hostname.toLowerCase();
-    return (url.protocol === 'https:' && (host === 'dian.gov.co' || host.endsWith('.dian.gov.co')))
-      ? url.href
-      : '';
-  } catch (error) {
-    return '';
-  }
-}
-
-function processQrText(text) {
-  const cufe = extractCufe(text);
-  elements.invoiceCufe.value = cufe;
-  state.dianLookupUrl = dianUrlFromQr(text);
-  elements.dianLookup.disabled = !state.dianLookupUrl;
-  elements.qrStatus.textContent = cufe
-    ? state.dianLookupUrl
-      ? '✓ CUFE identificado. Puedes continuar en la consulta oficial de DIAN.'
-      : '✓ CUFE identificado. El QR no incluye un enlace oficial de DIAN.'
-    : 'QR leído; no contiene un CUFE identificable. Revisa la factura antes de agregarla.';
-  elements.qrStatus.classList.toggle('is-success', Boolean(cufe));
-  elements.qrStatus.classList.toggle('is-warning', !cufe);
-  stopScanner({ preserveStatus: true });
-}
-
-function scanQrFrame() {
-  if (!state.scanning) return;
-
-  const video = elements.qrVideo;
-  const canvas = elements.qrCanvas;
-  if (video.readyState >= HTMLMediaElement.HAVE_ENOUGH_DATA && video.videoWidth > 0 && video.videoHeight > 0) {
-    const context = canvas.getContext('2d', { willReadFrequently: true });
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    context.drawImage(video, 0, 0, canvas.width, canvas.height);
-    const image = context.getImageData(0, 0, canvas.width, canvas.height);
-    const code = window.jsQR?.(image.data, image.width, image.height, { inversionAttempts: 'attemptBoth' });
-    if (code?.data) {
-      console.log('QR DETECTADO:', code.data);
-      processQrText(code.data);
-      return;
-    }
-
-    // Aumenta la zona que normalmente coincide con la guía visual para QR pequeños.
-    const cropSize = Math.min(video.videoWidth, video.videoHeight) * 0.65;
-    const cropX = (video.videoWidth - cropSize) / 2;
-    const cropY = (video.videoHeight - cropSize) / 2;
-    const scale = 2;
-    canvas.width = Math.round(cropSize * scale);
-    canvas.height = Math.round(cropSize * scale);
-    context.imageSmoothingEnabled = false;
-    context.drawImage(video, cropX, cropY, cropSize, cropSize, 0, 0, canvas.width, canvas.height);
-    const croppedImage = context.getImageData(0, 0, canvas.width, canvas.height);
-    const croppedCode = window.jsQR?.(croppedImage.data, croppedImage.width, croppedImage.height, { inversionAttempts: 'attemptBoth' });
-    if (croppedCode?.data) {
-      console.log('QR DETECTADO EN ZONA CENTRAL:', croppedCode.data);
-      processQrText(croppedCode.data);
-      return;
-    }
-  }
-
-  state.scannerFrame = requestAnimationFrame(scanQrFrame);
-}
-
-async function startScanner() {
-  if (state.scanning) return;
-
-  if (!navigator.mediaDevices?.getUserMedia) {
-    elements.qrStatus.textContent = 'Este navegador no permite acceso a cámara';
-    elements.qrStatus.classList.add('is-warning');
-    return;
-  }
-
-  if (typeof window.jsQR !== 'function') {
-    elements.qrStatus.textContent = 'No se cargó la librería jsQR. Revisa la conexión a internet';
-    elements.qrStatus.classList.add('is-warning');
-    return;
-  }
-
-  try {
-    state.scannerStream = await navigator.mediaDevices.getUserMedia({
-      audio: false,
-      video: {
-        facingMode: { ideal: 'environment' },
-        width: { ideal: 1920 },
-        height: { ideal: 1080 },
-        frameRate: { ideal: 30 },
-      },
-    });
-    elements.qrVideo.srcObject = state.scannerStream;
-    elements.qrVideo.setAttribute('playsinline', 'true');
-    elements.qrVideo.setAttribute('autoplay', 'true');
-    elements.qrVideo.muted = true;
-    await elements.qrVideo.play();
-    state.scanning = true;
-    elements.qrStatus.textContent = '📷 Apunta al código QR de la factura';
-    elements.qrStatus.classList.remove('is-warning', 'is-success');
-    state.scannerFrame = requestAnimationFrame(scanQrFrame);
-  } catch (error) {
-    console.error('ERROR DE CÁMARA:', error);
-    state.scannerStream?.getTracks().forEach((track) => track.stop());
-    state.scannerStream = null;
-    elements.qrStatus.textContent = 'No se pudo acceder a la cámara. Permite el acceso e intenta de nuevo';
-    elements.qrStatus.classList.add('is-warning');
-  }
-}
-
-function stopScanner({ preserveStatus = false } = {}) {
-  state.scanning = false;
-  if (state.scannerFrame) cancelAnimationFrame(state.scannerFrame);
-  state.scannerFrame = null;
-
-  if (state.scannerStream) {
-    state.scannerStream.getTracks().forEach((track) => track.stop());
-    state.scannerStream = null;
-  }
-
-  if (elements.qrVideo) {
-    elements.qrVideo.pause();
-    elements.qrVideo.srcObject = null;
-  }
-
-  if (elements.qrStatus && !elements.invoiceCufe.value && !preserveStatus) {
-    elements.qrStatus.textContent = 'Cámara detenida';
-  }
 }
 
 function exportExcel() {
@@ -513,6 +421,17 @@ async function pdfPages(file, pdfjs) {
   return pages;
 }
 
+async function imagePages(file) {
+  const image = await imageFromFile(file);
+  return [{ data: new Uint8Array(await file.arrayBuffer()), width: image.naturalWidth, height: image.naturalHeight }];
+}
+
+async function supportPages(file, pdfjs) {
+  return file.type.includes('pdf') || file.name.toLowerCase().endsWith('.pdf')
+    ? pdfPages(file, pdfjs)
+    : imagePages(file);
+}
+
 async function exportSupportsWord() {
   const expense = activeExpense();
   if (!expense) return;
@@ -521,7 +440,7 @@ async function exportSupportsWord() {
   const invoices = orderedInvoices(expense);
   const missing = invoices.filter((invoice) => !state.supportFiles.has(invoice.id));
   if (missing.length) {
-    elements.saveStatus.textContent = `Adjunta el PDF de las ${missing.length} factura(s) pendiente(s) antes de generar los soportes.`;
+    elements.saveStatus.textContent = `Adjunta la foto o el PDF de las ${missing.length} factura(s) pendiente(s) antes de generar los soportes.`;
     return;
   }
 
@@ -535,11 +454,14 @@ async function exportSupportsWord() {
   ];
   const failures = [];
   try {
-    const pdfjs = await pdfLibrary();
+    const pdfjs = invoices.some((invoice) => {
+      const file = state.supportFiles.get(invoice.id);
+      return file.type.includes('pdf') || file.name.toLowerCase().endsWith('.pdf');
+    }) ? await pdfLibrary() : null;
     for (const [index, invoice] of invoices.entries()) {
       elements.saveStatus.textContent = `Procesando soporte ${index + 1} de ${invoices.length}: ${state.supportFiles.get(invoice.id).name}`;
       try {
-        const pages = await pdfPages(state.supportFiles.get(invoice.id), pdfjs);
+        const pages = await supportPages(state.supportFiles.get(invoice.id), pdfjs);
         children.push(
           new Paragraph({ children: [new PageBreak()] }),
           new Paragraph({ text: `FACTURA ${index + 1}`, heading: HeadingLevel.HEADING_2, alignment: AlignmentType.CENTER }),
@@ -550,7 +472,7 @@ async function exportSupportsWord() {
           children.push(new Paragraph({ alignment: AlignmentType.CENTER, children: [new ImageRun({ data: image.data, transformation: { width: Math.round(image.width * scale), height: Math.round(image.height * scale) }, type: 'png' })] }));
         }
       } catch (error) {
-        failures.push(`${state.supportFiles.get(invoice.id).name}: ${error.message || 'No se pudo abrir el PDF.'}`);
+        failures.push(`${state.supportFiles.get(invoice.id).name}: ${error.message || 'No se pudo abrir el soporte.'}`);
       }
     }
     if (children.length <= 3) throw new Error('No se pudo incluir ninguna factura en el Word.');
@@ -588,15 +510,15 @@ function render() {
 function bindActions() {
   document.querySelector('[data-action="create-expense"]').addEventListener('click', () => showExpenseModal());
   document.querySelectorAll('[data-action="close-expense-modal"]').forEach((button) => button.addEventListener('click', () => closeModal(elements.expenseModal)));
-  document.querySelector('[data-action="close-detail-modal"]').addEventListener('click', async () => { await stopScanner(); closeModal(elements.detailModal); });
+  document.querySelector('[data-action="close-detail-modal"]').addEventListener('click', () => closeModal(elements.detailModal));
   document.querySelector('[data-action="save-expense"]').addEventListener('click', saveExpense);
   document.querySelector('[data-action="add-invoice"]').addEventListener('click', addInvoice);
   document.querySelector('[data-action="clear-invoice"]').addEventListener('click', clearInvoiceForm);
-  document.querySelector('[data-action="start-scanner"]').addEventListener('click', startScanner);
-  document.querySelector('[data-action="stop-scanner"]').addEventListener('click', stopScanner);
-  elements.dianLookup.addEventListener('click', () => {
-    if (state.dianLookupUrl) window.open(state.dianLookupUrl, '_blank', 'noopener,noreferrer');
-  });
+  document.querySelector('[data-action="take-photo"]').addEventListener('click', () => elements.invoicePhoto.click());
+  document.querySelector('[data-action="choose-pdf"]').addEventListener('click', () => elements.invoiceSupport.click());
+  document.querySelector('[data-action="remove-support"]').addEventListener('click', clearPendingSupport);
+  elements.invoicePhoto.addEventListener('change', () => handlePhoto(elements.invoicePhoto.files[0]));
+  elements.invoiceSupport.addEventListener('change', () => handlePdf(elements.invoiceSupport.files[0]));
   document.querySelector('[data-action="download-excel"]').addEventListener('click', exportExcel);
   document.querySelector('[data-action="download-supports"]').addEventListener('click', () => {
     exportSupportsWord().catch((error) => {
@@ -618,9 +540,8 @@ function bindActions() {
     const invoiceId = event.target.closest('[data-remove-invoice]')?.dataset.removeInvoice;
     if (invoiceId) removeInvoice(invoiceId);
   });
-  document.querySelectorAll('.cufe-modal').forEach((modal) => modal.addEventListener('click', async (event) => {
+  document.querySelectorAll('.cufe-modal').forEach((modal) => modal.addEventListener('click', (event) => {
     if (event.target !== modal) return;
-    if (modal === elements.detailModal) await stopScanner();
     closeModal(modal);
   }));
 }

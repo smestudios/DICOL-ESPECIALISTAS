@@ -804,6 +804,30 @@ footer a:focus-visible {
   line-height: 1.45;
 }
 
+.cufe-support-preview {
+  margin-top: 18px;
+  padding: 12px;
+  border: 1px dashed var(--cufe-line);
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.cufe-support-preview img {
+  display: block;
+  width: 100%;
+  max-height: 260px;
+  margin-bottom: 10px;
+  border-radius: 6px;
+  object-fit: contain;
+  background: #fff;
+}
+
+.cufe-support-preview p {
+  margin: 0 0 10px;
+  color: var(--cufe-text);
+  font-size: 13px;
+}
+
 .cufe-order-note {
   margin: 16px 0 8px;
 }
@@ -815,7 +839,7 @@ footer a:focus-visible {
   margin-top: 20px;
 }
 
-.cufe-scanner {
+.cufe-support-upload {
   display: grid;
   grid-template-columns: 360px 1fr;
   gap: 20px;
@@ -838,72 +862,6 @@ footer a:focus-visible {
 .cufe-scan-box h3,
 .cufe-scan-info h3 {
   margin: 0 0 14px;
-}
-
-.cufe-camera {
-  position: relative;
-  width: 100%;
-  min-height: 250px;
-  overflow: hidden;
-  border-radius: 12px;
-  background: #000;
-}
-
-.cufe-camera video {
-  display: block;
-  width: 100%;
-  min-height: 250px;
-  object-fit: cover;
-}
-
-.cufe-camera canvas {
-  display: none;
-}
-
-.cufe-camera__frame {
-  position: absolute;
-  top: 17.5%;
-  left: 17.5%;
-  width: 65%;
-  height: 65%;
-  border: 3px solid #00ff88;
-  border-radius: 15px;
-  pointer-events: none;
-}
-
-.cufe-scan-status {
-  margin: 12px 0;
-  color: var(--cufe-muted);
-  font-weight: 800;
-  text-align: center;
-}
-
-.cufe-scan-status.is-success {
-  color: #16a34a;
-}
-
-.cufe-scan-status.is-warning {
-  color: #dc2626;
-}
-
-.cufe-qr-content {
-  display: block;
-  margin-bottom: 12px;
-  color: var(--cufe-text);
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.cufe-qr-content textarea {
-  width: 100%;
-  margin-top: 6px;
-  padding: 11px 14px;
-  border: 1px solid #d1d5db;
-  border-radius: 9px;
-  color: var(--cufe-text);
-  font: inherit;
-  resize: vertical;
-  background: #fff;
 }
 
 .cufe-notice {
@@ -959,7 +917,7 @@ footer a:focus-visible {
     padding: 26px;
   }
 
-  .cufe-scanner,
+  .cufe-support-upload,
   .cufe-form {
     grid-template-columns: 1fr;
   }
