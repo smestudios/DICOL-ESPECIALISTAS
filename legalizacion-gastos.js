@@ -232,11 +232,8 @@ function renderInvoices(expense) {
 function addInvoice() {
   const expense = activeExpense();
   const cufe = elements.invoiceCufe.value.trim();
-  if (!expense || !cufe) {
-    elements.invoiceCufe.focus();
-    return;
-  }
-  if (expense.invoices.some((invoice) => invoice.cufe === cufe)) {
+  if (!expense) return;
+  if (cufe && expense.invoices.some((invoice) => invoice.cufe === cufe)) {
     elements.saveStatus.textContent = 'Este CUFE ya está registrado en esta salida';
     return;
   }
@@ -341,13 +338,121 @@ async function handlePhoto(file) {
   }
 }
 
-function handlePdf(file) {
+function invoiceDateToIso(value) {
+  const match = String(value || '').match(/\b(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})\b|\b(\d{4})[\/.\-](\d{1,2})[\/.\-](\d{1,2})\b/);
+  if (!match) return '';
+  const [year, month, day] = match[4] ? [match[4], match[5], match[6]] : [match[3].length === 2 ? `20${match[3]}` : match[3], match[2], match[1]];
+  const date = new Date(Number(year), Number(month) - 1, Number(day));
+  return date.getFullYear() === Number(year) && date.getMonth() === Number(month) - 1 && date.getDate() === Number(day)
+    ? `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`
+    : '';
+}
+
+function invoiceAmount(value) {
+  const cleaned = String(value || '').replace(/[^0-9,.-]/g, '');
+  if (!cleaned) return '';
+  const comma = cleaned.lastIndexOf(',');
+  const dot = cleaned.lastIndexOf('.');
+  const separator = Math.max(comma, dot);
+  const decimals = separator >= 0 && cleaned.length - separator - 1 === 2;
+  const normalized = decimals
+    ? `${cleaned.slice(0, separator).replace(/[.,]/g, '')}.${cleaned.slice(separator + 1)}`
+    : cleaned.replace(/[.,]/g, '');
+  const number = Number(normalized);
+  return Number.isFinite(number) ? number : '';
+}
+
+function firstMatch(text, patterns) {
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match?.[1]) return match[1].replace(/\s+/g, ' ').trim();
+  }
+  return '';
+}
+
+function parseDianInvoice(text) {
+  const source = text.replace(/\s+/g, ' ').trim();
+  const date = invoiceDateToIso(firstMatch(source, [
+    /(?:fecha\s*(?:de\s*)?(?:emisi[oó]n|expedici[oó]n|factura)?|fecha)\s*[:#-]?\s*(\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4})/i,
+    /(\d{4}[\/.\-]\d{1,2}[\/.\-]\d{1,2})/,
+  ]));
+  const number = firstMatch(source, [
+    /(?:factura(?:\s+electr[oó]nica(?:\s+de\s+venta)?)?|n[uú]mero\s+de\s+factura|no\.?\s*factura)\s*(?:no\.?|n[uú]mero)?\s*[:#-]?\s*([A-Z]{0,5}[0-9][A-Z0-9\-]{2,})/i,
+  ]);
+  const nit = firstMatch(source, [/(?:N\.?I\.?T\.?|nit)\s*[:#-]?\s*([0-9][0-9.\-]{5,})/i]);
+  const cufe = firstMatch(source, [/(?:CUFE|UUID|c[oó]digo\s+[uú]nico\s+de\s+factura)\s*[:#-]?\s*([A-F0-9]{40,130})/i]);
+  const supplier = firstMatch(source, [
+    /(?:raz[oó]n\s+social|nombre\s+o\s+raz[oó]n\s+social|emisor|proveedor)\s*[:#-]?\s*([A-ZÁÉÍÓÚÑ0-9&. ]{3,80}?)(?=\s+(?:N\.?I\.?T\.?|direcci[oó]n|tel[eé]fono|fecha)\b|$)/i,
+  ]);
+  const amount = invoiceAmount(firstMatch(source, [
+    /(?:total\s*(?:a\s*pagar|factura|venta)?|valor\s+total)\s*[:$-]?\s*(?:COP\s*)?\$?\s*([0-9][0-9., ]{2,})/i,
+  ]));
+  let payment = firstMatch(source, [/(?:forma|medio)\s+de\s+pago\s*[:#-]?\s*([A-ZÁÉÍÓÚÑ ]{3,35})/i]);
+  if (/tarjeta/i.test(payment) || /tarjeta/i.test(source)) payment = 'Tarjeta';
+  else if (/transferencia/i.test(payment) || /transferencia/i.test(source)) payment = 'Transferencia';
+  else if (/efectivo|contado/i.test(payment) || /efectivo|contado/i.test(source)) payment = 'Efectivo';
+  else payment = 'Otro';
+  let concept = 'Otros';
+  if (/hotel|alojamiento|habitaci[oó]n/i.test(source)) concept = 'Alojamiento';
+  else if (/restaurante|alimentaci[oó]n|desayuno|almuerzo|cena|comida/i.test(source)) concept = 'Alimentación';
+  else if (/peaje/i.test(source)) concept = 'Peajes';
+  else if (/combustible|gasolina|di[eé]sel|estaci[oó]n de servicio/i.test(source)) concept = 'Combustible';
+  else if (/taxi|transporte|pasaje|vuelo|aerol[ií]nea/i.test(source)) concept = 'Transporte';
+  return { date, number, nit, cufe, supplier, amount, payment, concept };
+}
+
+function applyInvoiceData(data) {
+  const fields = {
+    date: elements.invoiceDate,
+    number: elements.invoiceNumber,
+    nit: elements.invoiceNit,
+    cufe: elements.invoiceCufe,
+    supplier: elements.invoiceSupplier,
+    amount: elements.invoiceAmount,
+  };
+  const updated = [];
+  Object.entries(fields).forEach(([key, field]) => {
+    if (data[key] !== '' && data[key] !== undefined) {
+      field.value = data[key];
+      updated.push(key);
+    }
+  });
+  elements.invoicePayment.value = data.payment;
+  elements.invoiceConcept.value = data.concept;
+  return updated.length;
+}
+
+async function pdfText(file) {
+  const pdfjs = await pdfLibrary();
+  const pdf = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
+  try {
+    const pages = [];
+    for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+      const content = await (await pdf.getPage(pageNumber)).getTextContent();
+      pages.push(content.items.map((item) => item.str).join(' '));
+    }
+    return pages.join(' ');
+  } finally {
+    await pdf.destroy();
+  }
+}
+
+async function handlePdf(file) {
   if (!file) return;
   if (!file.type.includes('pdf') && !file.name.toLowerCase().endsWith('.pdf')) {
     elements.saveStatus.textContent = 'Selecciona un archivo PDF válido.';
     return;
   }
-  showPendingSupport(file, `PDF adjunto: ${file.name}`);
+  showPendingSupport(file, `PDF adjunto: ${file.name}. Leyendo los datos de la factura…`);
+  try {
+    const populated = applyInvoiceData(parseDianInvoice(await pdfText(file)));
+    elements.supportStatus.textContent = populated
+      ? `PDF adjunto: ${file.name}. Se completaron ${populated} campo(s); revisa los datos antes de guardar.`
+      : `PDF adjunto: ${file.name}. No se detectó texto suficiente; completa los datos manualmente.`;
+  } catch (error) {
+    elements.supportStatus.textContent = `PDF adjunto: ${file.name}. No se pudieron leer los datos automáticamente; completa los campos manualmente.`;
+    console.warn('No se pudo extraer texto del PDF:', error);
+  }
 }
 
 function removeInvoice(invoiceId) {
