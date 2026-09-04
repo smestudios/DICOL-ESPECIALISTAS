@@ -1,13 +1,14 @@
 const STORAGE_KEY = 'dicol.legalizacion.salidas';
+const PDF_JS_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.min.mjs';
+const PDF_WORKER_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.worker.min.mjs';
 
 const state = {
   expenses: [],
   activeId: null,
   editingId: null,
-  scannerStream: null,
-  scannerFrame: null,
-  scanning: false,
-  dianLookupUrl: '',
+  supportFiles: new Map(),
+  pendingSupport: null,
+  previewUrl: '',
 };
 
 const elements = {
@@ -34,10 +35,11 @@ const elements = {
   invoicePayment: document.querySelector('#invoicePayment'),
   invoiceConcept: document.querySelector('#invoiceConcept'),
   invoiceAmount: document.querySelector('#invoiceAmount'),
-  qrVideo: document.querySelector('#qrVideo'),
-  qrCanvas: document.querySelector('#qrCanvas'),
-  qrStatus: document.querySelector('#qrStatus'),
-  dianLookup: document.querySelector('[data-action="open-dian"]'),
+  invoiceSupport: document.querySelector('#invoiceSupport'),
+  invoicePhoto: document.querySelector('#invoicePhoto'),
+  supportPreview: document.querySelector('#supportPreview'),
+  supportPreviewImage: document.querySelector('#supportPreviewImage'),
+  supportStatus: document.querySelector('#supportStatus'),
   invoiceTableWrap: document.querySelector('#invoiceTableWrap'),
   printSheet: document.querySelector('#printSheet'),
 };
@@ -76,6 +78,16 @@ function totalExpense(expense) {
   return expense.invoices.reduce((sum, invoice) => sum + Number(invoice.amount || 0), 0);
 }
 
+function orderedInvoices(expense) {
+  return [...expense.invoices].sort((first, second) => {
+    const firstDate = first.date || '9999-12-31';
+    const secondDate = second.date || '9999-12-31';
+    return firstDate.localeCompare(secondDate)
+      || String(first.number || '').localeCompare(String(second.number || ''))
+      || first.id.localeCompare(second.id);
+  });
+}
+
 function normalizeExpense(expense) {
   return {
     destination: '',
@@ -85,7 +97,6 @@ function normalizeExpense(expense) {
       nit: '',
       payment: 'Tarjeta',
       concept: 'Otros',
-      qrContent: '',
       ...invoice,
     })),
   };
@@ -214,21 +225,24 @@ function renderInvoices(expense) {
     return;
   }
 
-  elements.invoiceTableWrap.innerHTML = `<div class="cufe-table-wrap"><table><thead><tr><th>#</th><th>CUFE / QR</th><th>Fecha</th><th>Factura</th><th>NIT</th><th>Proveedor</th><th>Concepto</th><th>Medio</th><th>Valor</th><th></th></tr></thead><tbody>${expense.invoices.map((invoice, index) => `<tr><td>${index + 1}</td><td title="${escapeHtml(invoice.cufe)}">${escapeHtml(invoice.cufe).slice(0, 35)}${invoice.cufe.length > 35 ? '…' : ''}</td><td>${escapeHtml(invoice.date)}</td><td>${escapeHtml(invoice.number)}</td><td>${escapeHtml(invoice.nit)}</td><td>${escapeHtml(invoice.supplier)}</td><td>${escapeHtml(invoice.concept)}</td><td>${escapeHtml(invoice.payment)}</td><td>${currency(invoice.amount)}</td><td><button class="cufe-button cufe-button--danger cufe-button--mini" type="button" data-remove-invoice="${invoice.id}">Eliminar</button></td></tr>`).join('')}<tr class="cufe-total-row"><td colspan="8">TOTAL</td><td>${currency(total)}</td><td></td></tr></tbody></table></div>`;
+  const invoices = orderedInvoices(expense);
+  elements.invoiceTableWrap.innerHTML = `<p class="cufe-order-note">Las facturas se ordenan cronológicamente. Este es el mismo orden usado en el Excel y en el Word de soportes.</p><div class="cufe-table-wrap"><table><thead><tr><th>#</th><th>CUFE / Ref.</th><th>Fecha</th><th>Factura</th><th>NIT</th><th>Proveedor</th><th>Concepto</th><th>Medio</th><th>Valor</th><th>Soporte</th><th></th></tr></thead><tbody>${invoices.map((invoice, index) => `<tr><td>${index + 1}</td><td title="${escapeHtml(invoice.cufe)}">${escapeHtml(invoice.cufe).slice(0, 35)}${invoice.cufe.length > 35 ? '…' : ''}</td><td>${escapeHtml(invoice.date)}</td><td>${escapeHtml(invoice.number)}</td><td>${escapeHtml(invoice.nit)}</td><td>${escapeHtml(invoice.supplier)}</td><td>${escapeHtml(invoice.concept)}</td><td>${escapeHtml(invoice.payment)}</td><td>${currency(invoice.amount)}</td><td>${state.supportFiles.has(invoice.id) ? '✓ Adjuntado' : 'Sin soporte'}</td><td><button class="cufe-button cufe-button--danger cufe-button--mini" type="button" data-remove-invoice="${invoice.id}">Eliminar</button></td></tr>`).join('')}<tr class="cufe-total-row"><td colspan="8">TOTAL</td><td>${currency(total)}</td><td></td><td></td></tr></tbody></table></div>`;
 }
 
 function addInvoice() {
   const expense = activeExpense();
   const cufe = elements.invoiceCufe.value.trim();
-  if (!expense || !cufe) {
-    elements.invoiceCufe.focus();
-    return;
-  }
-  if (expense.invoices.some((invoice) => invoice.cufe === cufe)) {
+  if (!expense) return;
+  if (cufe && expense.invoices.some((invoice) => invoice.cufe === cufe)) {
     elements.saveStatus.textContent = 'Este CUFE ya está registrado en esta salida';
     return;
   }
-  expense.invoices.push({
+  const support = state.pendingSupport;
+  if (!support) {
+    elements.saveStatus.textContent = 'Toma una foto o adjunta el PDF de la factura antes de agregarla.';
+    return;
+  }
+  const invoice = {
     id: createId('FAC'),
     cufe,
     date: elements.invoiceDate.value || today(),
@@ -238,8 +252,9 @@ function addInvoice() {
     payment: elements.invoicePayment.value,
     concept: elements.invoiceConcept.value,
     amount: Number(elements.invoiceAmount.value) || 0,
-    qrContent: elements.qrContent.value.trim(),
-  });
+  };
+  expense.invoices.push(invoice);
+  state.supportFiles.set(invoice.id, support);
   clearInvoiceForm();
   persist('Factura agregada');
   render();
@@ -248,190 +263,212 @@ function addInvoice() {
 
 function clearInvoiceForm() {
   [elements.invoiceCufe, elements.invoiceDate, elements.invoiceNumber, elements.invoiceNit, elements.invoiceSupplier, elements.invoiceAmount].forEach((field) => { field.value = ''; });
-  elements.qrStatus.textContent = 'Cámara detenida';
-  elements.qrStatus.classList.remove('is-success', 'is-warning');
-  state.dianLookupUrl = '';
-  elements.dianLookup.disabled = true;
+  clearPendingSupport();
+}
+
+function clearPendingSupport() {
+  if (state.previewUrl) URL.revokeObjectURL(state.previewUrl);
+  state.previewUrl = '';
+  state.pendingSupport = null;
+  elements.invoicePhoto.value = '';
+  elements.invoiceSupport.value = '';
+  elements.supportPreview.hidden = true;
+  elements.supportPreviewImage.hidden = true;
+  elements.supportPreviewImage.removeAttribute('src');
+  elements.supportStatus.textContent = '';
+}
+
+function showPendingSupport(file, message, previewUrl = '') {
+  if (state.previewUrl) URL.revokeObjectURL(state.previewUrl);
+  state.pendingSupport = file;
+  state.previewUrl = previewUrl;
+  elements.supportPreview.hidden = false;
+  elements.supportStatus.textContent = message;
+  elements.supportPreviewImage.hidden = !previewUrl;
+  if (previewUrl) elements.supportPreviewImage.src = previewUrl;
+}
+
+function imageFromFile(file) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    const url = URL.createObjectURL(file);
+    image.onload = () => { URL.revokeObjectURL(url); resolve(image); };
+    image.onerror = () => { URL.revokeObjectURL(url); reject(new Error('No se pudo abrir la foto.')); };
+    image.src = url;
+  });
+}
+
+async function scanPhoto(file) {
+  const image = await imageFromFile(file);
+  const maxSide = 2200;
+  const ratio = Math.min(1, maxSide / Math.max(image.naturalWidth, image.naturalHeight));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(image.naturalWidth * ratio);
+  canvas.height = Math.round(image.naturalHeight * ratio);
+  const context = canvas.getContext('2d', { willReadFrequently: true });
+  context.drawImage(image, 0, 0, canvas.width, canvas.height);
+  const pixels = context.getImageData(0, 0, canvas.width, canvas.height);
+  let total = 0;
+  for (let index = 0; index < pixels.data.length; index += 4) total += (pixels.data[index] * 0.299) + (pixels.data[index + 1] * 0.587) + (pixels.data[index + 2] * 0.114);
+  const threshold = Math.max(125, Math.min(205, (total / (pixels.data.length / 4)) + 18));
+  for (let index = 0; index < pixels.data.length; index += 4) {
+    const gray = (pixels.data[index] * 0.299) + (pixels.data[index + 1] * 0.587) + (pixels.data[index + 2] * 0.114);
+    const value = gray > threshold ? 255 : Math.max(0, Math.min(255, ((gray - 35) * 1.8)));
+    pixels.data[index] = value;
+    pixels.data[index + 1] = value;
+    pixels.data[index + 2] = value;
+  }
+  context.putImageData(pixels, 0, 0);
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+  if (!blob) throw new Error('No se pudo procesar la foto.');
+  return new File([blob], `factura_escaneada_${Date.now()}.png`, { type: 'image/png' });
+}
+
+async function handlePhoto(file) {
+  if (!file) return;
+  clearPendingSupport();
+  elements.supportStatus.textContent = 'Aplicando filtro de documento a la foto…';
+  elements.supportPreview.hidden = false;
+  try {
+    const scanned = await scanPhoto(file);
+    showPendingSupport(scanned, 'Foto escaneada lista para adjuntar.', URL.createObjectURL(scanned));
+  } catch (error) {
+    clearPendingSupport();
+    elements.saveStatus.textContent = error.message || 'No se pudo procesar la foto.';
+  }
+}
+
+function invoiceDateToIso(value) {
+  const match = String(value || '').match(/\b(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})\b|\b(\d{4})[\/.\-](\d{1,2})[\/.\-](\d{1,2})\b/);
+  if (!match) return '';
+  const [year, month, day] = match[4] ? [match[4], match[5], match[6]] : [match[3].length === 2 ? `20${match[3]}` : match[3], match[2], match[1]];
+  const date = new Date(Number(year), Number(month) - 1, Number(day));
+  return date.getFullYear() === Number(year) && date.getMonth() === Number(month) - 1 && date.getDate() === Number(day)
+    ? `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`
+    : '';
+}
+
+function invoiceAmount(value) {
+  const cleaned = String(value || '').replace(/[^0-9,.-]/g, '');
+  if (!cleaned) return '';
+  const comma = cleaned.lastIndexOf(',');
+  const dot = cleaned.lastIndexOf('.');
+  const separator = Math.max(comma, dot);
+  const decimals = separator >= 0 && cleaned.length - separator - 1 === 2;
+  const normalized = decimals
+    ? `${cleaned.slice(0, separator).replace(/[.,]/g, '')}.${cleaned.slice(separator + 1)}`
+    : cleaned.replace(/[.,]/g, '');
+  const number = Number(normalized);
+  return Number.isFinite(number) ? number : '';
+}
+
+function firstMatch(text, patterns) {
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match?.[1]) return match[1].replace(/\s+/g, ' ').trim();
+  }
+  return '';
+}
+
+function parseDianInvoice(text) {
+  const source = text.replace(/\s+/g, ' ').trim();
+  const date = invoiceDateToIso(firstMatch(source, [
+    /(?:fecha\s*(?:de\s*)?(?:emisi[oó]n|expedici[oó]n|factura)?|fecha)\s*[:#-]?\s*(\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4})/i,
+    /(\d{4}[\/.\-]\d{1,2}[\/.\-]\d{1,2})/,
+  ]));
+  const number = firstMatch(source, [
+    /(?:factura(?:\s+electr[oó]nica(?:\s+de\s+venta)?)?|n[uú]mero\s+de\s+factura|no\.?\s*factura)\s*(?:no\.?|n[uú]mero)?\s*[:#-]?\s*([A-Z]{0,5}[0-9][A-Z0-9\-]{2,})/i,
+  ]);
+  const nit = firstMatch(source, [/(?:N\.?I\.?T\.?|nit)\s*[:#-]?\s*([0-9][0-9.\-]{5,})/i]);
+  const cufe = firstMatch(source, [/(?:CUFE|UUID|c[oó]digo\s+[uú]nico\s+de\s+factura)\s*[:#-]?\s*([A-F0-9]{40,130})/i]);
+  const supplier = firstMatch(source, [
+    /(?:raz[oó]n\s+social|nombre\s+o\s+raz[oó]n\s+social|emisor|proveedor)\s*[:#-]?\s*([A-ZÁÉÍÓÚÑ0-9&. ]{3,80}?)(?=\s+(?:N\.?I\.?T\.?|direcci[oó]n|tel[eé]fono|fecha)\b|$)/i,
+  ]);
+  const amount = invoiceAmount(firstMatch(source, [
+    /(?:total\s*(?:a\s*pagar|factura|venta)?|valor\s+total)\s*[:$-]?\s*(?:COP\s*)?\$?\s*([0-9][0-9., ]{2,})/i,
+  ]));
+  let payment = firstMatch(source, [/(?:forma|medio)\s+de\s+pago\s*[:#-]?\s*([A-ZÁÉÍÓÚÑ ]{3,35})/i]);
+  if (/tarjeta/i.test(payment) || /tarjeta/i.test(source)) payment = 'Tarjeta';
+  else if (/transferencia/i.test(payment) || /transferencia/i.test(source)) payment = 'Transferencia';
+  else if (/efectivo|contado/i.test(payment) || /efectivo|contado/i.test(source)) payment = 'Efectivo';
+  else payment = 'Otro';
+  let concept = 'Otros';
+  if (/hotel|alojamiento|habitaci[oó]n/i.test(source)) concept = 'Alojamiento';
+  else if (/restaurante|alimentaci[oó]n|desayuno|almuerzo|cena|comida/i.test(source)) concept = 'Alimentación';
+  else if (/peaje/i.test(source)) concept = 'Peajes';
+  else if (/combustible|gasolina|di[eé]sel|estaci[oó]n de servicio/i.test(source)) concept = 'Combustible';
+  else if (/taxi|transporte|pasaje|vuelo|aerol[ií]nea/i.test(source)) concept = 'Transporte';
+  return { date, number, nit, cufe, supplier, amount, payment, concept };
+}
+
+function applyInvoiceData(data) {
+  const fields = {
+    date: elements.invoiceDate,
+    number: elements.invoiceNumber,
+    nit: elements.invoiceNit,
+    cufe: elements.invoiceCufe,
+    supplier: elements.invoiceSupplier,
+    amount: elements.invoiceAmount,
+  };
+  const updated = [];
+  Object.entries(fields).forEach(([key, field]) => {
+    if (data[key] !== '' && data[key] !== undefined) {
+      field.value = data[key];
+      updated.push(key);
+    }
+  });
+  elements.invoicePayment.value = data.payment;
+  elements.invoiceConcept.value = data.concept;
+  return updated.length;
+}
+
+async function pdfText(file) {
+  const pdfjs = await pdfLibrary();
+  const pdf = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
+  try {
+    const pages = [];
+    for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+      const content = await (await pdf.getPage(pageNumber)).getTextContent();
+      pages.push(content.items.map((item) => item.str).join(' '));
+    }
+    return pages.join(' ');
+  } finally {
+    await pdf.destroy();
+  }
+}
+
+async function handlePdf(file) {
+  if (!file) return;
+  if (!file.type.includes('pdf') && !file.name.toLowerCase().endsWith('.pdf')) {
+    elements.saveStatus.textContent = 'Selecciona un archivo PDF válido.';
+    return;
+  }
+  showPendingSupport(file, `PDF adjunto: ${file.name}. Leyendo los datos de la factura…`);
+  try {
+    const populated = applyInvoiceData(parseDianInvoice(await pdfText(file)));
+    elements.supportStatus.textContent = populated
+      ? `PDF adjunto: ${file.name}. Se completaron ${populated} campo(s); revisa los datos antes de guardar.`
+      : `PDF adjunto: ${file.name}. No se detectó texto suficiente; completa los datos manualmente.`;
+  } catch (error) {
+    elements.supportStatus.textContent = `PDF adjunto: ${file.name}. No se pudieron leer los datos automáticamente; completa los campos manualmente.`;
+    console.warn('No se pudo extraer texto del PDF:', error);
+  }
 }
 
 function removeInvoice(invoiceId) {
   const expense = activeExpense();
   if (!expense || !window.confirm('¿Eliminar esta factura?')) return;
   expense.invoices = expense.invoices.filter((invoice) => invoice.id !== invoiceId);
+  state.supportFiles.delete(invoiceId);
   persist('Factura eliminada');
   render();
   renderDetail();
 }
 
-function extractCufe(text) {
-  const value = String(text || '').trim();
-  if (!value) return '';
-
-  console.log('Contenido original del QR:', value);
-
-  try {
-    const url = new URL(value);
-    const params = ['documentkey', 'documentKey', 'DocumentKey', 'cufe', 'CUFE', 'key', 'uuid'];
-    for (const param of params) {
-      const found = url.searchParams.get(param);
-      if (found) {
-        console.log('CUFE encontrado mediante parámetro:', param, found);
-        return found.trim();
-      }
-    }
-  } catch (error) {
-    // QR content is not always a URL.
-  }
-
-  const labeled = value.match(/(?:CUFE|documentkey|key|uuid)[=:/\s]+([A-Za-z0-9._-]{40,200})/i);
-  if (labeled?.[1]) {
-    console.log('CUFE encontrado mediante etiqueta:', labeled[1]);
-    return labeled[1];
-  }
-
-  const hex = value.match(/\b[A-Fa-f0-9]{64,128}\b/);
-  if (hex?.[0]) {
-    console.log('CUFE hexadecimal encontrado:', hex[0]);
-    return hex[0];
-  }
-
-  console.warn('No se pudo identificar automáticamente el CUFE.');
-  return '';
-}
-
-function dianUrlFromQr(text) {
-  try {
-    const url = new URL(String(text || '').trim());
-    const host = url.hostname.toLowerCase();
-    return (url.protocol === 'https:' && (host === 'dian.gov.co' || host.endsWith('.dian.gov.co')))
-      ? url.href
-      : '';
-  } catch (error) {
-    return '';
-  }
-}
-
-function processQrText(text) {
-  const cufe = extractCufe(text);
-  elements.invoiceCufe.value = cufe;
-  state.dianLookupUrl = dianUrlFromQr(text);
-  elements.dianLookup.disabled = !state.dianLookupUrl;
-  elements.qrStatus.textContent = cufe
-    ? state.dianLookupUrl
-      ? '✓ CUFE identificado. Puedes continuar en la consulta oficial de DIAN.'
-      : '✓ CUFE identificado. El QR no incluye un enlace oficial de DIAN.'
-    : 'QR leído; no contiene un CUFE identificable. Revisa la factura antes de agregarla.';
-  elements.qrStatus.classList.toggle('is-success', Boolean(cufe));
-  elements.qrStatus.classList.toggle('is-warning', !cufe);
-  stopScanner({ preserveStatus: true });
-}
-
-function scanQrFrame() {
-  if (!state.scanning) return;
-
-  const video = elements.qrVideo;
-  const canvas = elements.qrCanvas;
-  if (video.readyState >= HTMLMediaElement.HAVE_ENOUGH_DATA && video.videoWidth > 0 && video.videoHeight > 0) {
-    const context = canvas.getContext('2d', { willReadFrequently: true });
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    context.drawImage(video, 0, 0, canvas.width, canvas.height);
-    const image = context.getImageData(0, 0, canvas.width, canvas.height);
-    const code = window.jsQR?.(image.data, image.width, image.height, { inversionAttempts: 'attemptBoth' });
-    if (code?.data) {
-      console.log('QR DETECTADO:', code.data);
-      processQrText(code.data);
-      return;
-    }
-
-    // Aumenta la zona que normalmente coincide con la guía visual para QR pequeños.
-    const cropSize = Math.min(video.videoWidth, video.videoHeight) * 0.65;
-    const cropX = (video.videoWidth - cropSize) / 2;
-    const cropY = (video.videoHeight - cropSize) / 2;
-    const scale = 2;
-    canvas.width = Math.round(cropSize * scale);
-    canvas.height = Math.round(cropSize * scale);
-    context.imageSmoothingEnabled = false;
-    context.drawImage(video, cropX, cropY, cropSize, cropSize, 0, 0, canvas.width, canvas.height);
-    const croppedImage = context.getImageData(0, 0, canvas.width, canvas.height);
-    const croppedCode = window.jsQR?.(croppedImage.data, croppedImage.width, croppedImage.height, { inversionAttempts: 'attemptBoth' });
-    if (croppedCode?.data) {
-      console.log('QR DETECTADO EN ZONA CENTRAL:', croppedCode.data);
-      processQrText(croppedCode.data);
-      return;
-    }
-  }
-
-  state.scannerFrame = requestAnimationFrame(scanQrFrame);
-}
-
-async function startScanner() {
-  if (state.scanning) return;
-
-  if (!navigator.mediaDevices?.getUserMedia) {
-    elements.qrStatus.textContent = 'Este navegador no permite acceso a cámara';
-    elements.qrStatus.classList.add('is-warning');
-    return;
-  }
-
-  if (typeof window.jsQR !== 'function') {
-    elements.qrStatus.textContent = 'No se cargó la librería jsQR. Revisa la conexión a internet';
-    elements.qrStatus.classList.add('is-warning');
-    return;
-  }
-
-  try {
-    state.scannerStream = await navigator.mediaDevices.getUserMedia({
-      audio: false,
-      video: {
-        facingMode: { ideal: 'environment' },
-        width: { ideal: 1920 },
-        height: { ideal: 1080 },
-        frameRate: { ideal: 30 },
-      },
-    });
-    elements.qrVideo.srcObject = state.scannerStream;
-    elements.qrVideo.setAttribute('playsinline', 'true');
-    elements.qrVideo.setAttribute('autoplay', 'true');
-    elements.qrVideo.muted = true;
-    await elements.qrVideo.play();
-    state.scanning = true;
-    elements.qrStatus.textContent = '📷 Apunta al código QR de la factura';
-    elements.qrStatus.classList.remove('is-warning', 'is-success');
-    state.scannerFrame = requestAnimationFrame(scanQrFrame);
-  } catch (error) {
-    console.error('ERROR DE CÁMARA:', error);
-    state.scannerStream?.getTracks().forEach((track) => track.stop());
-    state.scannerStream = null;
-    elements.qrStatus.textContent = 'No se pudo acceder a la cámara. Permite el acceso e intenta de nuevo';
-    elements.qrStatus.classList.add('is-warning');
-  }
-}
-
-function stopScanner({ preserveStatus = false } = {}) {
-  state.scanning = false;
-  if (state.scannerFrame) cancelAnimationFrame(state.scannerFrame);
-  state.scannerFrame = null;
-
-  if (state.scannerStream) {
-    state.scannerStream.getTracks().forEach((track) => track.stop());
-    state.scannerStream = null;
-  }
-
-  if (elements.qrVideo) {
-    elements.qrVideo.pause();
-    elements.qrVideo.srcObject = null;
-  }
-
-  if (elements.qrStatus && !elements.invoiceCufe.value && !preserveStatus) {
-    elements.qrStatus.textContent = 'Cámara detenida';
-  }
-}
-
 function exportExcel() {
   const expense = activeExpense();
   if (!expense) return;
-  const rows = expense.invoices.map((invoice) => ({
+  const rows = orderedInvoices(expense).map((invoice) => ({
     'Descripción C.O.': invoice.concept,
     Fecha: invoice.date,
     'Medio de pago': invoice.payment,
@@ -460,10 +497,108 @@ function exportExcel() {
   URL.revokeObjectURL(link.href);
 }
 
+async function pdfLibrary() {
+  const pdfjs = await import(PDF_JS_URL);
+  pdfjs.GlobalWorkerOptions.workerSrc = PDF_WORKER_URL;
+  return pdfjs;
+}
+
+function canvasBytes(canvas) {
+  return Uint8Array.from(atob(canvas.toDataURL('image/png').split(',')[1]), (character) => character.charCodeAt(0));
+}
+
+async function pdfPages(file, pdfjs) {
+  const pdf = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
+  const pages = [];
+  for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+    const page = await pdf.getPage(pageNumber);
+    const viewport = page.getViewport({ scale: 2 });
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.ceil(viewport.width);
+    canvas.height = Math.ceil(viewport.height);
+    const context = canvas.getContext('2d', { alpha: false });
+    context.fillStyle = '#fff';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    await page.render({ canvasContext: context, viewport }).promise;
+    pages.push({ data: canvasBytes(canvas), width: viewport.width, height: viewport.height });
+  }
+  await pdf.destroy();
+  return pages;
+}
+
+async function imagePages(file) {
+  const image = await imageFromFile(file);
+  return [{ data: new Uint8Array(await file.arrayBuffer()), width: image.naturalWidth, height: image.naturalHeight }];
+}
+
+async function supportPages(file, pdfjs) {
+  return file.type.includes('pdf') || file.name.toLowerCase().endsWith('.pdf')
+    ? pdfPages(file, pdfjs)
+    : imagePages(file);
+}
+
+async function exportSupportsWord() {
+  const expense = activeExpense();
+  if (!expense) return;
+  if (!window.docx) throw new Error('No se pudo cargar la biblioteca para crear el Word. Comprueba tu conexión e inténtalo de nuevo.');
+
+  const invoices = orderedInvoices(expense);
+  const missing = invoices.filter((invoice) => !state.supportFiles.has(invoice.id));
+  if (missing.length) {
+    elements.saveStatus.textContent = `Adjunta la foto o el PDF de las ${missing.length} factura(s) pendiente(s) antes de generar los soportes.`;
+    return;
+  }
+
+  const button = document.querySelector('[data-action="download-supports"]');
+  button.disabled = true;
+  const { Document, Packer, Paragraph, TextRun, ImageRun, HeadingLevel, AlignmentType, PageBreak } = window.docx;
+  const children = [
+    new Paragraph({ text: 'SOPORTES DE LEGALIZACIÓN DE GASTOS', heading: HeadingLevel.HEADING_1, alignment: AlignmentType.CENTER }),
+    new Paragraph({ text: expense.name, alignment: AlignmentType.CENTER }),
+    new Paragraph({ text: 'Facturas ordenadas de la fecha más antigua a la más reciente, en el mismo orden del Excel.' }),
+  ];
+  const failures = [];
+  try {
+    const pdfjs = invoices.some((invoice) => {
+      const file = state.supportFiles.get(invoice.id);
+      return file.type.includes('pdf') || file.name.toLowerCase().endsWith('.pdf');
+    }) ? await pdfLibrary() : null;
+    for (const [index, invoice] of invoices.entries()) {
+      elements.saveStatus.textContent = `Procesando soporte ${index + 1} de ${invoices.length}: ${state.supportFiles.get(invoice.id).name}`;
+      try {
+        const pages = await supportPages(state.supportFiles.get(invoice.id), pdfjs);
+        children.push(
+          new Paragraph({ children: [new PageBreak()] }),
+          new Paragraph({ text: `FACTURA ${index + 1}`, heading: HeadingLevel.HEADING_2, alignment: AlignmentType.CENTER }),
+          new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: `Fecha: ${invoice.date || 'Sin fecha'}\n`, bold: true }), new TextRun(`Archivo: ${state.supportFiles.get(invoice.id).name}`)] }),
+        );
+        for (const image of pages) {
+          const scale = Math.min(700 / image.width, 1);
+          children.push(new Paragraph({ alignment: AlignmentType.CENTER, children: [new ImageRun({ data: image.data, transformation: { width: Math.round(image.width * scale), height: Math.round(image.height * scale) }, type: 'png' })] }));
+        }
+      } catch (error) {
+        failures.push(`${state.supportFiles.get(invoice.id).name}: ${error.message || 'No se pudo abrir el soporte.'}`);
+      }
+    }
+    if (children.length <= 3) throw new Error('No se pudo incluir ninguna factura en el Word.');
+    elements.saveStatus.textContent = 'Creando el Word de soportes…';
+    const document = new Document({ sections: [{ properties: { page: { margin: { top: 710, right: 710, bottom: 710, left: 710 } } }, children }] });
+    const blob = await Packer.toBlob(document);
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `Soportes_${expense.name.replace(/[^a-z0-9]/gi, '_')}.docx`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(link.href), 5000);
+    elements.saveStatus.textContent = failures.length ? `Word descargado con ${failures.length} soporte(s) no incluidos.` : 'Word de soportes descargado correctamente.';
+  } finally {
+    button.disabled = false;
+  }
+}
+
 function buildPrintSheet() {
   const expense = activeExpense();
   if (!expense) return;
-  const rows = expense.invoices.map((invoice) => `<tr><td>${escapeHtml(invoice.cufe)}</td><td>${escapeHtml(invoice.number || '-')}</td><td>${escapeHtml(invoice.supplier || '-')} / ${escapeHtml(invoice.nit || '-')}</td><td>${escapeHtml(invoice.date || '-')}</td><td>${currency(invoice.amount)}</td></tr>`).join('');
+  const rows = orderedInvoices(expense).map((invoice) => `<tr><td>${escapeHtml(invoice.cufe)}</td><td>${escapeHtml(invoice.number || '-')}</td><td>${escapeHtml(invoice.supplier || '-')} / ${escapeHtml(invoice.nit || '-')}</td><td>${escapeHtml(invoice.date || '-')}</td><td>${currency(invoice.amount)}</td></tr>`).join('');
   elements.printSheet.innerHTML = `<div class="print-document"><header><img src="Drone_Innovation_COL.webp" alt="Logo DICOL" /><div><h1>Legalización de gastos</h1><p>${escapeHtml(expense.name)}</p></div></header><section class="print-meta"><p><strong>Responsable:</strong> ${escapeHtml(expense.owner || '-')}</p><p><strong>Destino:</strong> ${escapeHtml(expense.destination || '-')}</p><p><strong>Fecha:</strong> ${escapeHtml(expense.date || '-')}</p><p><strong>Observaciones:</strong> ${escapeHtml(expense.notes || '-')}</p></section><table><thead><tr><th>CUFE / Link</th><th>Factura</th><th>Proveedor / NIT</th><th>Fecha</th><th>Valor</th></tr></thead><tbody>${rows || '<tr><td colspan="5">Sin facturas cargadas.</td></tr>'}</tbody><tfoot><tr><th colspan="4">Total</th><th>${currency(totalExpense(expense))}</th></tr></tfoot></table></div>`;
 }
 
@@ -480,16 +615,22 @@ function render() {
 function bindActions() {
   document.querySelector('[data-action="create-expense"]').addEventListener('click', () => showExpenseModal());
   document.querySelectorAll('[data-action="close-expense-modal"]').forEach((button) => button.addEventListener('click', () => closeModal(elements.expenseModal)));
-  document.querySelector('[data-action="close-detail-modal"]').addEventListener('click', async () => { await stopScanner(); closeModal(elements.detailModal); });
+  document.querySelector('[data-action="close-detail-modal"]').addEventListener('click', () => closeModal(elements.detailModal));
   document.querySelector('[data-action="save-expense"]').addEventListener('click', saveExpense);
   document.querySelector('[data-action="add-invoice"]').addEventListener('click', addInvoice);
   document.querySelector('[data-action="clear-invoice"]').addEventListener('click', clearInvoiceForm);
-  document.querySelector('[data-action="start-scanner"]').addEventListener('click', startScanner);
-  document.querySelector('[data-action="stop-scanner"]').addEventListener('click', stopScanner);
-  elements.dianLookup.addEventListener('click', () => {
-    if (state.dianLookupUrl) window.open(state.dianLookupUrl, '_blank', 'noopener,noreferrer');
-  });
+  document.querySelector('[data-action="take-photo"]').addEventListener('click', () => elements.invoicePhoto.click());
+  document.querySelector('[data-action="choose-pdf"]').addEventListener('click', () => elements.invoiceSupport.click());
+  document.querySelector('[data-action="remove-support"]').addEventListener('click', clearPendingSupport);
+  elements.invoicePhoto.addEventListener('change', () => handlePhoto(elements.invoicePhoto.files[0]));
+  elements.invoiceSupport.addEventListener('change', () => handlePdf(elements.invoiceSupport.files[0]));
   document.querySelector('[data-action="download-excel"]').addEventListener('click', exportExcel);
+  document.querySelector('[data-action="download-supports"]').addEventListener('click', () => {
+    exportSupportsWord().catch((error) => {
+      console.error('ERROR AL GENERAR SOPORTES:', error);
+      elements.saveStatus.textContent = error.message || 'No se pudo crear el Word de soportes.';
+    });
+  });
   document.querySelector('[data-action="print-pdf"]').addEventListener('click', printPdf);
   elements.search.addEventListener('input', render);
   elements.expenseList.addEventListener('click', (event) => {
@@ -504,9 +645,8 @@ function bindActions() {
     const invoiceId = event.target.closest('[data-remove-invoice]')?.dataset.removeInvoice;
     if (invoiceId) removeInvoice(invoiceId);
   });
-  document.querySelectorAll('.cufe-modal').forEach((modal) => modal.addEventListener('click', async (event) => {
+  document.querySelectorAll('.cufe-modal').forEach((modal) => modal.addEventListener('click', (event) => {
     if (event.target !== modal) return;
-    if (modal === elements.detailModal) await stopScanner();
     closeModal(modal);
   }));
 }
