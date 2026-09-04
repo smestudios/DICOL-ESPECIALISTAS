@@ -24,3 +24,11 @@ La aplicación no intenta consultar, automatizar ni eludir controles de la DIAN 
 - Crear un backend. Las credenciales, el NIT configurado y `OPENAI_API_KEY` nunca deben estar en JavaScript del navegador.
 - Definir una base de datos o almacenamiento de auditoría: CUFE, documento recibido, respuesta de consulta, usuario, fecha de aprobación, clasificación y Excel generado.
 - Revisar la plantilla oficial para mapear las celdas, fórmulas y campos obligatorios antes de automatizar la exportación.
+
+## Diligenciamiento del formato de legalización
+
+El módulo usa la segunda hoja del formato institucional (`S-CON-FO-02.6`), no una hoja nueva. A partir del ejemplo entregado se diligencian los campos de la salida (responsable, identificación, cargo, ciudad/fecha, centro de costo, tipo y valor de fondo/anticipo) y cada factura en las columnas **Descripción C.O., Fecha, Medio de pago, No. Factura, NIT, Nombre proveedor, Concepto y Valor**.
+
+Los totales se calculan a partir de las categorías del formato: **Peajes y Parqueadero**, **Hotel**, **Alimentación** y **Otros**. El archivo exportado conserva la plantilla y deja los valores de total, valor a legalizar y valor a reintegrar calculados; la persona responsable debe revisar el resultado antes de radicarlo.
+
+Para extracción, el navegador prioriza el texto contenido en PDF y XML. Las fotos pasan por el filtro de documento existente y OCR en español/inglés; ningún campo detectado se guarda sin que el usuario pueda revisarlo. Los archivos de ejemplo muestran que varios PDF son escaneos, por lo que el OCR es el respaldo necesario cuando no existe texto seleccionable.

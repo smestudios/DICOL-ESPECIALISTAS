@@ -18,6 +18,12 @@ const elements = {
   expenseForm: document.querySelector('#expenseForm'),
   expenseName: document.querySelector('#expenseName'),
   expenseOwner: document.querySelector('#expenseOwner'),
+  expenseIdentification: document.querySelector('#expenseIdentification'),
+  expenseRole: document.querySelector('#expenseRole'),
+  expenseCostCenter: document.querySelector('#expenseCostCenter'),
+  expenseRoute: document.querySelector('#expenseRoute'),
+  expenseLegalizationType: document.querySelector('#expenseLegalizationType'),
+  expenseAdvance: document.querySelector('#expenseAdvance'),
   expenseDate: document.querySelector('#expenseDate'),
   expenseDestination: document.querySelector('#expenseDestination'),
   expenseStatus: document.querySelector('#expenseStatus'),
@@ -34,6 +40,7 @@ const elements = {
   invoiceSupplier: document.querySelector('#invoiceSupplier'),
   invoicePayment: document.querySelector('#invoicePayment'),
   invoiceConcept: document.querySelector('#invoiceConcept'),
+  invoiceDescription: document.querySelector('#invoiceDescription'),
   invoiceAmount: document.querySelector('#invoiceAmount'),
   invoiceSupport: document.querySelector('#invoiceSupport'),
   invoicePhoto: document.querySelector('#invoicePhoto'),
@@ -92,11 +99,13 @@ function normalizeExpense(expense) {
   return {
     destination: '',
     status: 'Pendiente',
+    identification: '', role: '', costCenter: '', route: '', legalizationType: 'FONDO DE GASTOS', advance: 0,
     ...expense,
     invoices: (expense.invoices || []).map((invoice) => ({
       nit: '',
-      payment: 'Tarjeta',
+      payment: 'Otro',
       concept: 'Otros',
+      description: '',
       ...invoice,
     })),
   };
@@ -129,6 +138,12 @@ function showExpenseModal(id = null) {
   elements.expenseModalTitle.textContent = expense ? 'Editar salida' : 'Nueva salida';
   elements.expenseName.value = expense?.name || '';
   elements.expenseOwner.value = expense?.owner || '';
+  elements.expenseIdentification.value = expense?.identification || '';
+  elements.expenseRole.value = expense?.role || '';
+  elements.expenseCostCenter.value = expense?.costCenter || '';
+  elements.expenseRoute.value = expense?.route || '';
+  elements.expenseLegalizationType.value = expense?.legalizationType || 'FONDO DE GASTOS';
+  elements.expenseAdvance.value = expense?.advance || '';
   elements.expenseDate.value = expense?.date || today();
   elements.expenseDestination.value = expense?.destination || '';
   elements.expenseStatus.value = expense?.status || 'Pendiente';
@@ -147,6 +162,12 @@ function saveExpense() {
   const data = {
     name,
     owner: elements.expenseOwner.value.trim(),
+    identification: elements.expenseIdentification.value.trim(),
+    role: elements.expenseRole.value.trim(),
+    costCenter: elements.expenseCostCenter.value.trim(),
+    route: elements.expenseRoute.value.trim(),
+    legalizationType: elements.expenseLegalizationType.value,
+    advance: Number(elements.expenseAdvance.value) || 0,
     date: elements.expenseDate.value || today(),
     destination: elements.expenseDestination.value.trim(),
     status: elements.expenseStatus.value,
@@ -251,6 +272,7 @@ function addInvoice() {
     supplier: elements.invoiceSupplier.value.trim(),
     payment: elements.invoicePayment.value,
     concept: elements.invoiceConcept.value,
+    description: elements.invoiceDescription.value.trim(),
     amount: Number(elements.invoiceAmount.value) || 0,
   };
   expense.invoices.push(invoice);
@@ -262,7 +284,7 @@ function addInvoice() {
 }
 
 function clearInvoiceForm() {
-  [elements.invoiceCufe, elements.invoiceDate, elements.invoiceNumber, elements.invoiceNit, elements.invoiceSupplier, elements.invoiceAmount].forEach((field) => { field.value = ''; });
+  [elements.invoiceCufe, elements.invoiceDate, elements.invoiceNumber, elements.invoiceNit, elements.invoiceSupplier, elements.invoiceDescription, elements.invoiceAmount].forEach((field) => { field.value = ''; });
   clearPendingSupport();
 }
 
@@ -331,7 +353,16 @@ async function handlePhoto(file) {
   elements.supportPreview.hidden = false;
   try {
     const scanned = await scanPhoto(file);
-    showPendingSupport(scanned, 'Foto escaneada lista para adjuntar.', URL.createObjectURL(scanned));
+    showPendingSupport(scanned, 'Foto escaneada lista para adjuntar. Leyendo texto con OCR…', URL.createObjectURL(scanned));
+    if (window.Tesseract) {
+      const result = await window.Tesseract.recognize(scanned, 'spa+eng');
+      const populated = applyInvoiceData(parseDianInvoice(result.data.text));
+      elements.supportStatus.textContent = populated
+        ? `Foto escaneada lista. OCR completó ${populated} campo(s); revisa los datos antes de guardar.`
+        : 'Foto escaneada lista. El OCR no encontró campos confiables; completa los datos manualmente.';
+    } else {
+      elements.supportStatus.textContent = 'Foto escaneada lista para adjuntar. OCR no disponible; completa los datos manualmente.';
+    }
   } catch (error) {
     clearPendingSupport();
     elements.saveStatus.textContent = error.message || 'No se pudo procesar la foto.';
@@ -370,37 +401,34 @@ function firstMatch(text, patterns) {
   return '';
 }
 
+function invoiceCategory(source) {
+  if (/hotel|alojamiento|habitaci[oó]n|hospedaje/i.test(source)) return 'Hotel';
+  if (/peaje|parqueadero|parqueo/i.test(source)) return 'Peajes y Parqueadero';
+  if (/restaurante|alimentaci[oó]n|desayuno|almuerzo|cena|comida|hamburgues|lasagna|hidrataci[oó]n/i.test(source)) return 'Alimentación';
+  return 'Otros';
+}
+
 function parseDianInvoice(text) {
   const source = text.replace(/\s+/g, ' ').trim();
   const date = invoiceDateToIso(firstMatch(source, [
     /(?:fecha\s*(?:de\s*)?(?:emisi[oó]n|expedici[oó]n|factura)?|fecha)\s*[:#-]?\s*(\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4})/i,
     /(\d{4}[\/.\-]\d{1,2}[\/.\-]\d{1,2})/,
   ]));
-  const number = firstMatch(source, [
-    /(?:factura(?:\s+electr[oó]nica(?:\s+de\s+venta)?)?|n[uú]mero\s+de\s+factura|no\.?\s*factura)\s*(?:no\.?|n[uú]mero)?\s*[:#-]?\s*([A-Z]{0,5}[0-9][A-Z0-9\-]{2,})/i,
-  ]);
+  const number = firstMatch(source, [/(?:factura(?:\s+electr[oó]nica(?:\s+de\s+venta)?)?|n[uú]mero\s+de\s+factura|no\.?\s*factura)\s*(?:no\.?|n[uú]mero)?\s*[:#-]?\s*([A-Z]{0,5}[0-9][A-Z0-9\-]{1,})/i]);
   const nit = firstMatch(source, [/(?:N\.?I\.?T\.?|nit)\s*[:#-]?\s*([0-9][0-9.\-]{5,})/i]);
   const cufe = firstMatch(source, [/(?:CUFE|UUID|c[oó]digo\s+[uú]nico\s+de\s+factura)\s*[:#-]?\s*([A-F0-9]{40,130})/i]);
-  const supplier = firstMatch(source, [
-    /(?:raz[oó]n\s+social|nombre\s+o\s+raz[oó]n\s+social|emisor|proveedor)\s*[:#-]?\s*([A-ZÁÉÍÓÚÑ0-9&. ]{3,80}?)(?=\s+(?:N\.?I\.?T\.?|direcci[oó]n|tel[eé]fono|fecha)\b|$)/i,
-  ]);
-  const amount = invoiceAmount(firstMatch(source, [
-    /(?:total\s*(?:a\s*pagar|factura|venta)?|valor\s+total)\s*[:$-]?\s*(?:COP\s*)?\$?\s*([0-9][0-9., ]{2,})/i,
-  ]));
+  const supplier = firstMatch(source, [/(?:raz[oó]n\s+social|nombre\s+o\s+raz[oó]n\s+social|emisor|proveedor)\s*[:#-]?\s*([A-ZÁÉÍÓÚÑ0-9&. ]{3,80}?)(?=\s+(?:N\.?I\.?T\.?|direcci[oó]n|tel[eé]fono|fecha)\b|$)/i]);
+  const amount = invoiceAmount(firstMatch(source, [/(?:total\s*(?:a\s*pagar|factura|venta)?|valor\s+total)\s*[:$-]?\s*(?:COP\s*)?\$?\s*([0-9][0-9., ]{2,})/i]));
   let payment = firstMatch(source, [/(?:forma|medio)\s+de\s+pago\s*[:#-]?\s*([A-ZÁÉÍÓÚÑ ]{3,35})/i]);
-  if (/tarjeta/i.test(payment) || /tarjeta/i.test(source)) payment = 'Tarjeta';
-  else if (/transferencia/i.test(payment) || /transferencia/i.test(source)) payment = 'Transferencia';
+  if (/cr[eé]dito/i.test(payment) || /tarjeta\s+cr[eé]dito/i.test(source)) payment = 'Tarjeta Crédito';
+  else if (/d[eé]bito/i.test(payment) || /tarjeta\s+d[eé]bito/i.test(source)) payment = 'Tarjeta Débito';
+  else if (/transferencia|consignaci[oó]n/i.test(payment) || /transferencia|consignaci[oó]n/i.test(source)) payment = 'Consignación bancaria';
   else if (/efectivo|contado/i.test(payment) || /efectivo|contado/i.test(source)) payment = 'Efectivo';
   else payment = 'Otro';
-  let concept = 'Otros';
-  if (/hotel|alojamiento|habitaci[oó]n/i.test(source)) concept = 'Alojamiento';
-  else if (/restaurante|alimentaci[oó]n|desayuno|almuerzo|cena|comida/i.test(source)) concept = 'Alimentación';
-  else if (/peaje/i.test(source)) concept = 'Peajes';
-  else if (/combustible|gasolina|di[eé]sel|estaci[oó]n de servicio/i.test(source)) concept = 'Combustible';
-  else if (/taxi|transporte|pasaje|vuelo|aerol[ií]nea/i.test(source)) concept = 'Transporte';
-  return { date, number, nit, cufe, supplier, amount, payment, concept };
+  const concept = invoiceCategory(source);
+  const description = firstMatch(source, [/(?:descripci[oó]n|detalle|concepto)\s*[:#-]?\s*([^|]{4,150}?)(?=\s+(?:subtotal|total|iva|forma\s+de\s+pago)\b|$)/i]);
+  return { date, number, nit, cufe, supplier, amount, payment, concept, description };
 }
-
 function applyInvoiceData(data) {
   const fields = {
     date: elements.invoiceDate,
@@ -409,6 +437,7 @@ function applyInvoiceData(data) {
     cufe: elements.invoiceCufe,
     supplier: elements.invoiceSupplier,
     amount: elements.invoiceAmount,
+    description: elements.invoiceDescription,
   };
   const updated = [];
   Object.entries(fields).forEach(([key, field]) => {
@@ -417,8 +446,8 @@ function applyInvoiceData(data) {
       updated.push(key);
     }
   });
-  elements.invoicePayment.value = data.payment;
-  elements.invoiceConcept.value = data.concept;
+  if (data.payment) elements.invoicePayment.value = data.payment;
+  if (data.concept) elements.invoiceConcept.value = data.concept;
   return updated.length;
 }
 
@@ -437,24 +466,23 @@ async function pdfText(file) {
   }
 }
 
-async function handlePdf(file) {
+async function handleDianFile(file) {
   if (!file) return;
-  if (!file.type.includes('pdf') && !file.name.toLowerCase().endsWith('.pdf')) {
-    elements.saveStatus.textContent = 'Selecciona un archivo PDF válido.';
-    return;
-  }
-  showPendingSupport(file, `PDF adjunto: ${file.name}. Leyendo los datos de la factura…`);
+  const isPdf = file.type.includes('pdf') || file.name.toLowerCase().endsWith('.pdf');
+  const isXml = /xml/i.test(file.type) || file.name.toLowerCase().endsWith('.xml');
+  if (!isPdf && !isXml) { elements.saveStatus.textContent = 'Selecciona un PDF o XML válido.'; return; }
+  showPendingSupport(file, `${isXml ? 'XML' : 'PDF'} adjunto: ${file.name}. Leyendo los datos de la factura…`);
   try {
-    const populated = applyInvoiceData(parseDianInvoice(await pdfText(file)));
+    const text = isXml ? await file.text() : await pdfText(file);
+    const populated = applyInvoiceData(parseDianInvoice(text));
     elements.supportStatus.textContent = populated
-      ? `PDF adjunto: ${file.name}. Se completaron ${populated} campo(s); revisa los datos antes de guardar.`
-      : `PDF adjunto: ${file.name}. No se detectó texto suficiente; completa los datos manualmente.`;
+      ? `${isXml ? 'XML' : 'PDF'} adjunto: ${file.name}. Se completaron ${populated} campo(s); revisa los datos antes de guardar.`
+      : `${isXml ? 'XML' : 'PDF'} adjunto: ${file.name}. No se detectó texto suficiente; completa los datos manualmente.`;
   } catch (error) {
-    elements.supportStatus.textContent = `PDF adjunto: ${file.name}. No se pudieron leer los datos automáticamente; completa los campos manualmente.`;
-    console.warn('No se pudo extraer texto del PDF:', error);
+    elements.supportStatus.textContent = `${isXml ? 'XML' : 'PDF'} adjunto: ${file.name}. No se pudieron leer los datos automáticamente; completa los campos manualmente.`;
+    console.warn('No se pudo extraer información del soporte:', error);
   }
 }
-
 function removeInvoice(invoiceId) {
   const expense = activeExpense();
   if (!expense || !window.confirm('¿Eliminar esta factura?')) return;
@@ -465,38 +493,49 @@ function removeInvoice(invoiceId) {
   renderDetail();
 }
 
-function exportExcel() {
-  const expense = activeExpense();
-  if (!expense) return;
-  const rows = orderedInvoices(expense).map((invoice) => ({
-    'Descripción C.O.': invoice.concept,
-    Fecha: invoice.date,
-    'Medio de pago': invoice.payment,
-    'No. Factura': invoice.number,
-    NIT: invoice.nit,
-    'Nombre del proveedor': invoice.supplier,
-    Concepto: invoice.concept,
-    Valor: Number(invoice.amount) || 0,
-    CUFE: invoice.cufe,
-  }));
-  rows.push({ 'Descripción C.O.': 'TOTAL', Valor: totalExpense(expense) });
-
-  if (window.XLSX) {
-    const worksheet = XLSX.utils.json_to_sheet(rows);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Legalización');
-    XLSX.writeFile(workbook, `Legalizacion_${expense.name.replace(/[^a-z0-9]/gi, '_')}.xlsx`);
-    return;
-  }
-
-  const csv = rows.map((row) => Object.values(row).map((cell = '') => `"${String(cell).replaceAll('"', '""')}"`).join(',')).join('\n');
-  const link = document.createElement('a');
-  link.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
-  link.download = `Legalizacion_${expense.name.replace(/[^a-z0-9]/gi, '_')}.csv`;
-  link.click();
-  URL.revokeObjectURL(link.href);
+function excelDate(value) {
+  if (!value) return '';
+  const [year, month, day] = value.split('-').map(Number);
+  return new Date(year, month - 1, day);
 }
 
+function categoryTotals(invoices) {
+  const totals = { 'Peajes y Parqueadero': 0, Hotel: 0, Alimentación: 0, Otros: 0 };
+  invoices.forEach((invoice) => { totals[invoice.concept] = (totals[invoice.concept] || 0) + (Number(invoice.amount) || 0); });
+  return totals;
+}
+
+async function exportExcel() {
+  const expense = activeExpense();
+  if (!expense || !window.XLSX) return;
+  const button = document.querySelector('[data-action="download-excel"]');
+  button.disabled = true;
+  try {
+    const response = await fetch('S-CON-FO-02.6%20LEGALIZACION%20DE%20GASTOS.%20v%202.0.xlsx');
+    if (!response.ok) throw new Error('No se pudo abrir el formato institucional.');
+    const workbook = XLSX.read(await response.arrayBuffer(), { type: 'array', cellStyles: true, cellDates: true });
+    const sheet = workbook.Sheets['Hoja 2'] || workbook.Sheets[workbook.SheetNames[1]];
+    if (!sheet) throw new Error('El formato no contiene la hoja de legalización.');
+    const set = (cell, value, format) => { const { f, ...existing } = sheet[cell] || {}; sheet[cell] = { ...existing, t: value instanceof Date ? 'd' : typeof value === 'number' ? 'n' : 's', v: value, ...(format ? { z: format } : {}) }; };
+    set('D6', expense.owner); set('H6', expense.identification); set('D7', expense.role);
+    set('H7', `Semana ${expense.date ? Math.ceil(Number(expense.date.slice(8)) / 7) : ''}`);
+    set('D8', `${expense.destination || ''}${expense.date ? `, ${expense.date}` : ''}`); set('H8', expense.costCenter);
+    set('F9', expense.legalizationType === 'FONDO CAJA MENOR' ? 'x' : ''); set('H9', expense.legalizationType === 'FONDO DE GASTOS' ? 'x' : ''); set('J9', expense.legalizationType === 'ANTICIPO' ? 'x' : '');
+    const invoices = orderedInvoices(expense).slice(0, 33);
+    invoices.forEach((invoice, index) => {
+      const row = 11 + index;
+      set(`A${row}`, index + 1); set(`B${row}`, invoice.description || invoice.concept); set(`C${row}`, excelDate(invoice.date), 'dd/mm/yyyy');
+      set(`D${row}`, invoice.payment); set(`E${row}`, invoice.number); set(`F${row}`, invoice.nit); set(`G${row}`, invoice.supplier); set(`H${row}`, invoice.concept); set(`I${row}`, Number(invoice.amount) || 0, '#,##0');
+    });
+    const totals = categoryTotals(invoices);
+    set('I45', totals['Peajes y Parqueadero'], '#,##0'); set('I46', totals.Hotel, '#,##0'); set('I47', totals.Alimentación, '#,##0'); set('I48', totals.Otros, '#,##0');
+    const total = totalExpense({ invoices }); set('I49', total, '#,##0'); set('I50', Number(expense.advance) || 0, '#,##0'); set('I52', total, '#,##0'); set('I53', (Number(expense.advance) || 0) - total, '#,##0');
+    XLSX.writeFile(workbook, `Legalizacion_${expense.name.replace(/[^a-z0-9]/gi, '_')}.xlsx`);
+    elements.saveStatus.textContent = expense.invoices.length > 33 ? 'Excel descargado: solo se incluyeron las primeras 33 facturas porque el formato tiene 33 filas.' : 'Excel institucional diligenciado y descargado.';
+  } catch (error) {
+    elements.saveStatus.textContent = error.message || 'No se pudo crear el Excel institucional.';
+  } finally { button.disabled = false; }
+}
 async function pdfLibrary() {
   const pdfjs = await import(PDF_JS_URL);
   pdfjs.GlobalWorkerOptions.workerSrc = PDF_WORKER_URL;
@@ -623,7 +662,7 @@ function bindActions() {
   document.querySelector('[data-action="choose-pdf"]').addEventListener('click', () => elements.invoiceSupport.click());
   document.querySelector('[data-action="remove-support"]').addEventListener('click', clearPendingSupport);
   elements.invoicePhoto.addEventListener('change', () => handlePhoto(elements.invoicePhoto.files[0]));
-  elements.invoiceSupport.addEventListener('change', () => handlePdf(elements.invoiceSupport.files[0]));
+  elements.invoiceSupport.addEventListener('change', () => handleDianFile(elements.invoiceSupport.files[0]));
   document.querySelector('[data-action="download-excel"]').addEventListener('click', exportExcel);
   document.querySelector('[data-action="download-supports"]').addEventListener('click', () => {
     exportSupportsWord().catch((error) => {
