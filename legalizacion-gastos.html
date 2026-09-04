@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="styles.css" />
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="https://unpkg.com/docx@9.5.1/dist/index.iife.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 </head>
 <body class="app-body expense-window-body">
   <nav class="navbar" aria-label="Navegación principal">
@@ -30,7 +31,7 @@
       <div>
         <div class="eyebrow">Legalización de gastos</div>
         <h1>Gestión de salidas y facturas</h1>
-        <p>Administra tus salidas, toma fotos de las facturas con acabado de documento o adjunta los PDF descargados desde DIAN.</p>
+        <p>Administra tus salidas, toma fotos de las facturas con acabado de documento o adjunta PDF o XML de DIAN; las fotos se procesan con OCR local.</p>
       </div>
     </section>
 
@@ -58,7 +59,13 @@
         <label>Nombre / número de salida<input id="expenseName" type="text" placeholder="Ej. Salida Medellín 001" required /></label>
         <label>Fecha<input id="expenseDate" type="date" /></label>
         <label>Responsable<input id="expenseOwner" type="text" placeholder="Nombre del responsable" /></label>
-        <label>Destino<input id="expenseDestination" type="text" placeholder="Ciudad / lugar" /></label>
+        <label>Identificación<input id="expenseIdentification" type="text" placeholder="Cédula / NIT" /></label>
+        <label>Cargo<input id="expenseRole" type="text" placeholder="Ej. Especialista de zona" /></label>
+        <label>Destino / ciudad<input id="expenseDestination" type="text" placeholder="Ciudad / lugar" /></label>
+        <label>Centro de costo<input id="expenseCostCenter" type="text" placeholder="Centro de costo" /></label>
+        <label>Ruta<input id="expenseRoute" type="text" placeholder="Ruta de la comisión" /></label>
+        <label>Tipo de legalización<select id="expenseLegalizationType"><option>FONDO DE GASTOS</option><option>FONDO CAJA MENOR</option><option>ANTICIPO</option></select></label>
+        <label>Valor fondo o anticipo<input id="expenseAdvance" type="number" min="0" step="1" placeholder="0" /></label>
         <label>Estado<select id="expenseStatus"><option>Pendiente</option><option>En proceso</option><option>Finalizada</option></select></label>
         <label class="cufe-form__full">Observaciones<textarea id="expenseNotes" rows="3"></textarea></label>
       </form>
@@ -82,13 +89,13 @@
       <div class="cufe-support-upload" id="documento">
         <div class="cufe-scan-box">
           <h3>📎 Adjuntar soporte</h3>
-          <p class="cufe-notice">Elige cómo cargar el soporte: toma una foto y la página aplicará un filtro de documento, o adjunta el PDF que descargaste desde DIAN.</p>
+          <p class="cufe-notice">Elige cómo cargar el soporte: toma una foto y la página aplicará un filtro de documento, o adjunta el PDF o XML que descargaste desde DIAN.</p>
           <div class="cufe-inline-actions">
             <button class="cufe-button cufe-button--blue" type="button" data-action="take-photo">Tomar foto</button>
-            <button class="cufe-button cufe-button--secondary" type="button" data-action="choose-pdf">Adjuntar PDF DIAN</button>
+            <button class="cufe-button cufe-button--secondary" type="button" data-action="choose-pdf">Adjuntar PDF / XML DIAN</button>
           </div>
           <input id="invoicePhoto" type="file" accept="image/*" capture="environment" hidden />
-          <input id="invoiceSupport" type="file" accept="application/pdf,.pdf" hidden />
+          <input id="invoiceSupport" type="file" accept="application/pdf,.pdf,application/xml,text/xml,.xml" hidden />
           <div class="cufe-support-preview" id="supportPreview" hidden>
             <img id="supportPreviewImage" alt="Vista previa del soporte escaneado" hidden />
             <p id="supportStatus"></p>
@@ -104,8 +111,9 @@
             <label>No. Factura<input id="invoiceNumber" type="text" /></label>
             <label>NIT<input id="invoiceNit" type="text" /></label>
             <label>Proveedor<input id="invoiceSupplier" type="text" /></label>
-            <label>Medio de pago<select id="invoicePayment"><option>Tarjeta</option><option>Transferencia</option><option>Efectivo</option><option>Otro</option></select></label>
-            <label>Concepto<select id="invoiceConcept"><option>Alimentación</option><option>Alojamiento</option><option>Transporte</option><option>Combustible</option><option>Peajes</option><option>Otros</option></select></label>
+            <label>Medio de pago<select id="invoicePayment"><option>Tarjeta Débito</option><option>Tarjeta Crédito</option><option>Consignación bancaria</option><option>Efectivo</option><option>Otro</option></select></label>
+            <label>Concepto<select id="invoiceConcept"><option>Alimentación</option><option>Hotel</option><option>Peajes y Parqueadero</option><option>Otros</option></select></label>
+            <label class="cufe-form__full">Descripción C.O.<textarea id="invoiceDescription" rows="2" placeholder="Detalle del consumo o servicio según la factura"></textarea></label>
             <label>Valor<input id="invoiceAmount" type="number" min="0" step="0.01" /></label>
             <p class="cufe-field-help cufe-form__full">El soporte seleccionado se guardará con la factura y se usará para crear el Word en el mismo orden cronológico del Excel durante esta sesión.</p>
           </div>
