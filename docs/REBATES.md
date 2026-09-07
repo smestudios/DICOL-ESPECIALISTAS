@@ -21,9 +21,11 @@ El archivo completo para pegar está en [`appscript/Code.gs`](../appscript/Code.
 
 `getPartnerSummary(partnerId, period)` también se puede ejecutar desde el editor para verificar el cálculo de una ficha. El código valida los periodos Q1–Q4, limita cada indicador entre 0 % y 100 %, evita eliminar un especialista mientras conserve aliados activos y conserva un historial lógico mediante archivo (`activo=false`).
 
-## Integración pendiente del portal
+## Integración del portal
 
-La interfaz actual persiste los datos en el navegador para permitir probar el diseño sin credenciales. Antes de producción se debe reemplazar esa persistencia por llamadas autenticadas a la URL `/exec` de Apps Script y restringir el despliegue. No se deben incluir credenciales en `rebates.js`.
+El tablero usa la URL publicada de la **Aplicación web** de Apps Script (la que termina en `/exec`), no la URL de biblioteca. Al abrir `rebates.html`, consulta las pestañas de Google Sheets y no carga datos de demostración ni utiliza `localStorage`. Las acciones de crear, editar, eliminar y guardar evaluaciones se envían a esa misma aplicación web.
+
+Para verificar la conexión, ejecute `setup()` una vez en Apps Script y agregue los registros directamente en las pestañas creadas. El estado de conexión que aparece en la esquina superior derecha del tablero confirma si la lectura de Google Sheets fue exitosa. No se deben incluir credenciales en `rebates.js`.
 
 ## Operación diaria en el tablero
 
