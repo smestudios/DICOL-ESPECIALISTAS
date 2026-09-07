@@ -49,6 +49,10 @@
             + Agregar aliado</button
           ><button class="rebate-button" id="specialistButton">
             Gestionar especialistas
+          </button><button class="rebate-button" id="catalogButton">
+            Catálogo y precios
+          </button><button class="rebate-button" id="parametersButton">
+            Parámetros del Q
           </button>
           <p id="connectionStatus" class="connection-status" role="status">
             Conectando con Google Sheets…
@@ -137,6 +141,9 @@
                   ><button class="text-danger" id="deletePartnerButton">
                     Eliminar aliado
                   </button>
+                  <button class="rebate-button" id="downloadSummaryButton" type="button">
+                    Descargar resumen PDF
+                  </button>
                 </div>
               </div>
               <section class="commercial-overview" aria-label="Resumen comercial del aliado">
@@ -195,18 +202,22 @@
                   <button class="rebate-button" id="editEvaluationButton">
                     Editar evaluación
                   </button>
-                  <button class="rebate-button rebate-button--primary" id="saveIndicatorsButton" data-save-action="saveEvaluation" hidden>
-                    Guardar cambios
-                  </button>
                 </div>
                 <div class="evaluation-summary">
                   <label>Resultado de ventas <span class="info-tooltip" tabindex="0">i<span>Ingrese la cantidad de equipos o ventas que califican para rebate en el trimestre seleccionado. Use el reporte comercial o las facturas aprobadas.</span></span><input id="salesResultInput" type="number" min="0" step="1" disabled /></label>
                   <label>% rebate calculado <span class="info-tooltip" tabindex="0">i<span>Porcentaje ganado según la política vigente, el tipo de venta y los soportes validados. Ejemplo: 5 para 5%.</span></span><input id="calculatedRebateInput" type="number" min="0" max="100" step="0.01" disabled /></label>
                   <label>% rebate aplicado <span class="info-tooltip" tabindex="0">i<span>Porcentaje que efectivamente se aplicó o aprobó. Normalmente se registra después de validar soportes y condiciones comerciales.</span></span><input id="appliedRebateInput" type="number" min="0" max="100" step="0.01" disabled /></label>
+                  <label>Demos pequeñas soportadas<input id="smallDemosInput" type="number" min="0" step="1" disabled /></label>
+                  <label>Demos grandes soportadas<input id="largeDemosInput" type="number" min="0" step="1" disabled /></label>
+                  <label>Personas certificadas DJI<input id="djiCertifiedInput" type="number" min="0" step="1" disabled /></label>
                 </div>
                 <label class="evaluation-justification">Justificación y soportes <span class="info-tooltip" tabindex="0">i<span>Indique cotizaciones, facturas, evidencias de demostración, documentos pendientes, excepciones de margen y cualquier motivo que sustente el resultado.</span></span><textarea id="evaluationJustification" rows="4" disabled placeholder="Ej.: COT3434 · T100 · factura validada; evidencia de demo adjunta."></textarea></label>
                 <p id="policyNote" class="policy-note"></p>
                 <div id="indicatorGrid" class="indicator-grid"></div>
+              </section>
+              <section class="requirements-card" aria-label="Requisitos operativos de rebate">
+                <div><p class="eyebrow">REQUISITOS OPERATIVOS</p><h3>Demostraciones y certificación DJI</h3><p>Para postular el rebate se deben soportar <b>3 demostraciones pequeñas y 1 grande</b>. La certificación DJI de al menos una persona por ventas se registra como recomendación; aún no bloquea el rebate.</p></div>
+                <div id="requirementsProgress" class="requirements-progress"></div>
               </section>
               <section class="insight-grid">
                 <article>
@@ -265,6 +276,9 @@
       </form>
     </dialog>
     <dialog id="saleDialog"><form id="saleForm"><div class="dialog-heading"><h2>Registrar venta</h2><button type="button" data-close="saleDialog">×</button></div><p class="dialog-help">El precio se toma de la hoja Precios o Kits; no se digita manualmente.</p><label>Producto o kit<select id="saleItem" required></select></label><label>Fecha<input id="saleDate" type="date" required /></label><label>Cantidad<input id="saleQuantity" type="number" min="1" step="1" required /></label><div class="dialog-actions"><button class="rebate-button" type="button" data-close="saleDialog">Cancelar</button><button class="rebate-button rebate-button--primary" type="submit" data-save-action="saveSale">Registrar venta</button></div></form></dialog>
+    <dialog id="catalogDialog"><form id="catalogForm"><div class="dialog-heading"><h2>Catálogo y precios</h2><button type="button" data-close="catalogDialog">×</button></div><p class="dialog-help">Registre productos individuales o kits. Los kits se contabilizan como equipos y pueden incluir dron, generador y accesorios.</p><div id="catalogList" class="catalog-list"></div><input id="catalogId" type="hidden" /><label>Producto / descripción<input id="catalogDescription" required placeholder="Ej. Kit Agras T25P + generador" /></label><label>Modelo<input id="catalogModel" required placeholder="Ej. T25P" /></label><label>Categoría<select id="catalogCategory"><option value="dron">Equipo / dron</option><option value="refaccion">Refacción</option><option value="kit">Kit</option></select></label><div class="price-fields"><label>Cliente final · con IVA<input id="catalogFinalIva" required type="number" min="0" step="1" /></label><label>Cliente final · sin IVA<input id="catalogFinalNoIva" type="number" min="0" step="1" /></label><label>Aliado · con IVA<input id="catalogPartnerIva" required type="number" min="0" step="1" /></label><label>Aliado · sin IVA<input id="catalogPartnerNoIva" type="number" min="0" step="1" /></label></div><label>Margen base del aliado (%)<input id="catalogMargin" type="number" min="0" max="100" step="0.01" value="22" /></label><div class="dialog-actions"><button class="rebate-button rebate-button--primary" type="submit" data-save-action="savePrice">Guardar producto</button></div></form></dialog>
+    <dialog id="parametersDialog"><form id="parametersForm"><div class="dialog-heading"><h2>Parámetros de cumplimiento</h2><button type="button" data-close="parametersDialog">×</button></div><p class="dialog-help">Metas por trimestre para calcular automáticamente ventas de equipos/kits, demos, DJI Academy y el 8% de refacciones frente a equipos. Puede crear, editar o eliminar parámetros.</p><div id="parametersList" class="parameters-list"></div><button class="rebate-button" id="addParameterButton" type="button">+ Agregar parámetro</button><div class="dialog-actions"><button class="rebate-button rebate-button--primary" type="submit" data-save-action="saveParameters">Guardar parámetros</button></div></form></dialog>
+    <dialog id="evaluationDialog" class="evaluation-dialog"><form id="evaluationForm"><div class="dialog-heading"><div><p class="eyebrow">EDICIÓN AISLADA · <span id="evaluationDialogQuarter"></span></p><h2 id="evaluationDialogPartner">Actualizar cumplimiento</h2></div><button type="button" data-close="evaluationDialog">×</button></div><p class="dialog-help">Revise el efecto de los datos antes de guardar. Las ventas, equipos, kits y refacciones se calculan desde las compras registradas y no se pueden alterar desde esta ventana.</p><div id="evaluationPreview" class="evaluation-preview"></div><div class="evaluation-form-grid"><label>Demos pequeñas realizadas<input id="editSmallDemos" type="number" min="0" step="1" required></label><label>Demos grandes realizadas<input id="editLargeDemos" type="number" min="0" step="1" required></label><label>Personas certificadas DJI Academy<input id="editDjiCertified" type="number" min="0" step="1" required></label><label>Información y soportes (%)<input id="editInformation" type="number" min="0" max="100" step="1" required></label><label>Rebate aprobado / aplicado (%)<input id="editAppliedRebate" type="number" min="0" max="100" step="0.01" required></label></div><label>Justificación y soportes<textarea id="editJustification" rows="4" placeholder="Facturas, evidencias de demos, DJI Academy, excepciones o pendientes."></textarea></label><div class="dialog-actions"><button class="rebate-button" type="button" data-close="evaluationDialog">Cancelar</button><button class="rebate-button rebate-button--primary" type="submit" data-save-action="saveEvaluation">Guardar cambios</button></div></form></dialog>
     <dialog id="specialistDialog">
       <div class="dialog-heading">
         <h2>Especialistas DICOL</h2>
