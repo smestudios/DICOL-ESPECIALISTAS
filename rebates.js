@@ -253,12 +253,30 @@ function renderPartnerDetail() {
         : "No alcanza el mínimo trimestral; requiere un plan de acción con el especialista DICOL.";
   $("#rebateValue").textContent = `${result.tier.rebate}%`;
   $("#gradeName").textContent = `Clasificación ${result.tier.name}`;
+  renderCommercialOverview(result);
   $("#policyNote").textContent = `Política activa: ${rules()
     .map((rule) => `${rule.label} ${rule.weight}%`)
     .join(" · ")}. Los valores son porcentajes de cumplimiento contra la meta.`;
   renderIndicators(result);
   renderTrend(partner);
   renderInsights(result);
+}
+function renderCommercialOverview(result) {
+  const indicators = rules();
+  const met = indicators.filter((rule) => Number(result.values[rule.key] || 0) >= rule.target).length;
+  const calculated = Number(result.values.rebate_calculado || result.tier.rebate || 0);
+  const applied = Number(result.values.rebate_aplicado || 0);
+  $("#commercialQuarter").textContent = q();
+  $("#commercialScore").textContent = `${result.score}%`;
+  $("#commercialCalculated").textContent = `${calculated}%`;
+  $("#commercialApplied").textContent = `${applied}%`;
+  $("#commercialSales").textContent = Number(result.values.resultado_ventas || 0);
+  $("#commercialIndicators").textContent = `${met}/${indicators.length}`;
+  $("#commercialStatus").textContent = `Nivel ${result.tier.name} · Diferencia aplicada: ${(applied - calculated).toFixed(1)}%`;
+  $("#commercialKpis").innerHTML = indicators.map((rule) => {
+    const value = Number(result.values[rule.key] || 0);
+    return `<div class="commercial-kpi"><span>${esc(rule.label)}</span><div><i style="width:${Math.min(100, value)}%"></i></div><b>${value}%</b><small>peso ${rule.weight}%</small></div>`;
+  }).join("");
 }
 function rules() {
   return Object.entries(state.policy)

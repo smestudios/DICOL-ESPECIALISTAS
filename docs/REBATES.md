@@ -33,6 +33,8 @@ La pestaña **Evaluaciones** conserva los indicadores de cumplimiento y añade `
 
 Para diligenciar una evaluación: **Resultado de ventas** es la cantidad de equipos/ventas que califican en el trimestre (tómela del reporte comercial y las facturas aprobadas); **rebate calculado** es el porcentaje que corresponde según el boletín de políticas, el margen y los productos que sí aplican; **rebate aplicado** es el porcentaje que fue efectivamente aprobado/aplicado después de la revisión. La nueva **Justificación y soportes** debe contener las cotizaciones, facturas, evidencias de demo, documentos pendientes o excepciones que respaldan el dato. La interfaz muestra esta misma ayuda al pasar el cursor —o enfocar con teclado— sobre cada icono `i`.
 
+La ficha individual incluye además un **Pulso comercial** para que la conversación con cada aliado tenga en un mismo lugar la evaluación, rebates, ventas calificadas, indicadores al día y la comparación visual de cada KPI con su peso de política. No inventa valores de facturación, modelos o refacciones: esos datos solo se muestran cuando hayan sido incorporados como campos y soportados en la hoja.
+
 El API y la interfaz validan que no existan dos aliados activos con el mismo nombre (sin importar mayúsculas, minúsculas o espacios). También se aplica la misma validación a especialistas y se bloquea el botón mientras una petición está en curso, evitando registros duplicados por doble clic.
 
 ## Operación diaria en el tablero
