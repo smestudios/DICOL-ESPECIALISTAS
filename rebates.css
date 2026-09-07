@@ -53,6 +53,17 @@
   border-radius: 7px;
   background: #0e1711;
 }
+.connection-status {
+  max-width: 220px;
+  margin: 3px 0 0;
+  color: #9da8a0;
+  font-size: 11px;
+  line-height: 1.35;
+  text-align: right;
+}
+.connection-status--error {
+  color: #ff9f8f;
+}
 .rebate-button {
   padding: 10px 14px;
   border: 1px solid #ffffff4d;
