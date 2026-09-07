@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DICOL | Control de rebates</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="rebates.css">
+</head>
+<body class="rebates-body">
+  <nav class="navbar" aria-label="Navegación principal">
+    <a class="logo" href="index.html#inicio"><img src="Drone_Innovation_COL.webp" alt="Logo DICOL"><span>DICOL</span></a>
+    <ul class="nav-links"><li><a href="index.html#inicio">Inicio</a></li><li><a href="legalizacion-gastos.html">Legalización</a></li><li><a href="lector-facturas.html">Facturas</a></li><li><a class="is-current" href="rebates.html">Rebates</a></li></ul>
+    <button class="nav-button" id="policyButton" type="button">Política vigente</button>
+  </nav>
+  <main class="rebates-app">
+    <section class="rebates-hero">
+      <div><p class="eyebrow">DICOL · IMPORTADORA · CONTROL COMERCIAL</p><h1>Rebates claros para DICOL, sus especialistas y cada aliado.</h1><p>Los especialistas de DICOL hacen seguimiento a los aliados asignados. Esta vista reúne el resultado general, el desempeño por especialista y una ficha lista para conversar con cada aliado.</p></div>
+      <div class="hero-controls"><label>Trimestre<select id="quarterFilter"><option>Q1</option><option>Q2</option><option>Q3</option><option>Q4</option></select></label><button class="rebate-button rebate-button--primary" id="newPartnerButton">+ Agregar aliado</button><button class="rebate-button" id="specialistButton">Gestionar especialistas</button></div>
+    </section>
+    <section class="summary-grid" aria-live="polite">
+      <article><span>Aliados activos</span><strong id="partnerCount">0</strong><small id="partnerCountDetail">En seguimiento por DICOL</small></article>
+      <article><span>Cumplimiento general</span><strong id="averageScore">0%</strong><small>Promedio ponderado del trimestre</small></article>
+      <article><span>Rebate proyectado</span><strong id="projectedRebate">0%</strong><small>Estimación, sujeta a validación</small></article>
+      <article><span>Requieren gestión</span><strong id="atRiskCount">0</strong><small>Por debajo de 60% de cumplimiento</small></article>
+    </section>
+    <section class="view-tabs" role="tablist"><button class="active" data-view="general">Resumen DICOL</button><button data-view="specialists">Por especialista</button><button data-view="partner">Ficha del aliado</button></section>
+    <section id="generalView" class="dashboard-view">
+      <div class="section-heading"><div><p class="eyebrow">VISIÓN GENERAL</p><h2>Seguimiento de todos los aliados</h2></div><p>Priorice los compromisos antes de la liquidación del trimestre siguiente.</p></div>
+      <div id="generalTable" class="table-card"></div>
+    </section>
+    <section id="specialistsView" class="dashboard-view" hidden>
+      <div class="section-heading"><div><p class="eyebrow">RESPONSABILIDAD DICOL</p><h2>Indicadores por especialista</h2></div><p>Cada especialista visualiza el estado consolidado de los aliados a su cargo.</p></div>
+      <div id="specialistCards" class="specialist-cards"></div>
+    </section>
+    <section id="partnerView" class="dashboard-view" hidden>
+      <div class="partner-workspace"><aside class="partner-sidebar"><div><p class="eyebrow">ALIADOS</p><h2>Ficha individual</h2></div><input id="partnerSearch" type="search" placeholder="Buscar aliado"><div id="partnerList"></div></aside>
+      <section class="partner-detail"><div id="emptyState" class="empty-state">Seleccione un aliado para ver su ficha.</div><div id="detailContent" hidden>
+        <div class="detail-header"><div><p id="detailSpecialist" class="eyebrow"></p><h2 id="detailName"></h2><p id="detailContext"></p></div><div><button class="rebate-button" id="editPartnerButton">Editar información</button><button class="text-danger" id="deletePartnerButton">Eliminar aliado</button></div></div>
+        <div class="score-grid"><article class="score-card"><p>Resultado trimestral</p><div class="score-ring"><strong id="scoreValue">0%</strong><span id="scoreGrade">Nivel —</span></div><p id="scoreExplanation"></p></article><article class="policy-card"><p>Rebate proyectado</p><strong id="rebateValue">0%</strong><span id="gradeName">Sin clasificar</span><p>Se liquida en el trimestre siguiente únicamente después de validar requisitos, soportes y condiciones comerciales.</p></article><article class="trend-card"><p>Avance anual del aliado</p><div id="trendChart" class="trend-chart"></div><div class="chart-labels"><span>Q1</span><span>Q2</span><span>Q3</span><span>Q4</span></div></article></div>
+        <section class="indicators-section"><div class="section-heading"><div><p class="eyebrow">CUMPLIMIENTO DEL ALIADO</p><h3>Indicadores y evidencias</h3></div><button class="rebate-button rebate-button--primary" id="saveIndicatorsButton">Guardar evaluación</button></div><p id="policyNote" class="policy-note"></p><div id="indicatorGrid" class="indicator-grid"></div></section>
+        <section class="insight-grid"><article><p class="eyebrow">CONCLUSIÓN PARA EL ALIADO</p><h3 id="statusTitle"></h3><p id="statusText"></p></article><article><p class="eyebrow">PRÓXIMOS COMPROMISOS</p><ul id="priorityActions"></ul></article></section>
+      </div></section></div>
+    </section>
+  </main>
+  <dialog id="partnerDialog"><form id="partnerForm"><div class="dialog-heading"><h2 id="partnerDialogTitle">Agregar aliado</h2><button type="button" data-close="partnerDialog">×</button></div><input id="partnerId" type="hidden"><label>Empresa aliada<input id="partnerName" required placeholder="Nombre de la empresa"></label><label>Especialista DICOL responsable<select id="partnerSpecialist" required></select></label><label>Ciudad / zona<input id="partnerZone" placeholder="Ej. Bogotá"></label><label>Información y notas<textarea id="partnerNotes" rows="3" placeholder="Compromisos, contexto o novedades"></textarea></label><div class="dialog-actions"><button class="rebate-button" type="button" data-close="partnerDialog">Cancelar</button><button class="rebate-button rebate-button--primary" type="submit">Guardar aliado</button></div></form></dialog>
+  <dialog id="specialistDialog"><div class="dialog-heading"><h2>Especialistas DICOL</h2><button type="button" data-close="specialistDialog">×</button></div><p class="dialog-help">Los especialistas son personal de DICOL y responden por el seguimiento de los aliados asignados.</p><div id="specialistManager"></div><form id="specialistForm" class="inline-form"><input id="specialistName" required placeholder="Nombre completo"><input id="specialistZone" placeholder="Zona"><button class="rebate-button rebate-button--primary" type="submit">Agregar</button></form></dialog>
+  <dialog id="policyDialog"><form id="policyForm"><div class="dialog-heading"><h2>Política de rebates</h2><button type="button" data-close="policyDialog">×</button></div><p class="dialog-help">Los valores iniciales reflejan la guía entregada. Valide el boletín vigente antes de cambiarlos o de aprobar una liquidación.</p><div id="policyFields"></div><div class="dialog-actions"><button class="rebate-button" type="button" data-close="policyDialog">Cancelar</button><button class="rebate-button rebate-button--primary" type="submit">Aplicar política</button></div></form></dialog>
+  <script src="rebates.js"></script>
+</body></html>
