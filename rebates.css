@@ -549,6 +549,7 @@ dialog textarea {
 .price-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
 .parameter-row { display: grid; grid-template-columns: 1.4fr 1fr 75px 85px 105px auto; gap: 6px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); }
 .parameter-row input, .parameter-row select { box-sizing: border-box; width: 100%; margin: 0; padding: 8px; border: 1px solid var(--line); border-radius: 6px; background: #111a13; color: #fff; font-size: 11px; }.parameter-row label { margin: 0; font-size: 10px; }.parameter-row label input { width: auto; }
+.evaluation-dialog { width: min(860px, calc(100% - 30px)); }.evaluation-preview { display: grid; grid-template-columns: repeat(4, 1fr); gap: 9px; margin: 18px 0; }.evaluation-preview article { padding: 13px; border: 1px solid #2a7048; border-radius: 8px; background: #0a2112; }.evaluation-preview span, .evaluation-preview small { display: block; color: #b2c6b8; font-size: 10px; }.evaluation-preview strong { display: block; margin: 7px 0; color: var(--green); font-size: 23px; }.evaluation-form-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0 14px; }
 .inline-form {
   display: grid;
   grid-template-columns: 1fr 120px auto;
@@ -608,6 +609,7 @@ dialog textarea {
   }
   .requirements-progress, .price-fields { grid-template-columns: 1fr; }
   .parameter-row { grid-template-columns: 1fr; }
+  .evaluation-preview, .evaluation-form-grid { grid-template-columns: 1fr; }
   .section-heading,
   .detail-header,
   .commercial-overview__heading {

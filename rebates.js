@@ -21,7 +21,6 @@ const emptyState = {
 let state = emptyState;
 let selectedPartnerId;
 let activeView = "general";
-let editingEvaluation = false;
 const pendingActions = new Set();
 const $ = (selector) => document.querySelector(selector);
 const q = () => $("#quarterFilter").value;
@@ -183,7 +182,6 @@ function renderGeneral() {
     (button) =>
       (button.onclick = () => {
         selectedPartnerId = button.dataset.openPartner;
-        editingEvaluation = false;
         activeView = "partner";
         render();
       }),
@@ -239,7 +237,6 @@ function renderPartnerList(forceSpecialistId) {
     (button) =>
       (button.onclick = () => {
         selectedPartnerId = button.dataset.partnerId;
-        editingEvaluation = false;
         renderPartnerList();
         renderPartnerDetail();
       }),
@@ -250,8 +247,6 @@ function renderPartnerDetail() {
   $("#emptyState").hidden = Boolean(partner);
   $("#detailContent").hidden = !partner;
   if (!partner) return;
-  $("#editEvaluationButton").hidden = editingEvaluation;
-  $("#saveIndicatorsButton").hidden = !editingEvaluation;
   const result = evaluation(partner);
   $("#detailName").textContent = partner.name;
   $("#detailSpecialist").textContent =
@@ -322,11 +317,11 @@ function renderIndicators(result) {
   $("#largeDemosInput").value = Number(result.values.demos_grandes || 0);
   $("#djiCertifiedInput").value = Number(result.values.certificados_dji || 0);
   $("#evaluationJustification").value = result.values.justificacion || "";
-  ["#salesResultInput", "#calculatedRebateInput", "#appliedRebateInput", "#smallDemosInput", "#largeDemosInput", "#djiCertifiedInput", "#evaluationJustification"].forEach((selector) => ($(selector).disabled = !editingEvaluation));
+  ["#salesResultInput", "#calculatedRebateInput", "#appliedRebateInput", "#smallDemosInput", "#largeDemosInput", "#djiCertifiedInput", "#evaluationJustification"].forEach((selector) => ($(selector).disabled = true));
   $("#indicatorGrid").innerHTML = rules()
     .map((rule) => {
       const value = Number(result.values[rule.key] || 0);
-      return `<article class="indicator"><label>${esc(rule.label)} <span class="info-tooltip" tabindex="0">i<span>Porcentaje de cumplimiento respaldado por evidencias del trimestre. La política lo pondera con un peso de ${rule.weight}%.</span></span><output>${value}%</output></label><small>Peso ${rule.weight}% · meta ${rule.target}%</small><input type="range" min="0" max="100" value="${value}" data-indicator="${rule.key}" ${editingEvaluation ? "" : "disabled"}><progress max="100" value="${value}"></progress></article>`;
+      return `<article class="indicator"><label>${esc(rule.label)} <span class="info-tooltip" tabindex="0">i<span>Porcentaje de cumplimiento respaldado por evidencias del trimestre. La política lo pondera con un peso de ${rule.weight}%.</span></span><output>${value}%</output></label><small>Peso ${rule.weight}% · meta ${rule.target}%</small><input type="range" min="0" max="100" value="${value}" data-indicator="${rule.key}" disabled><progress max="100" value="${value}"></progress></article>`;
     })
     .join("");
   document.querySelectorAll("[data-indicator]").forEach(
@@ -606,39 +601,52 @@ $("#policyForm").onsubmit = (event) => {
   });
 };
 $("#editEvaluationButton").onclick = () => {
-  editingEvaluation = true;
-  $("#editEvaluationButton").hidden = true;
-  $("#saveIndicatorsButton").hidden = false;
-  renderPartnerDetail();
-};
-$("#saveIndicatorsButton").onclick = () => {
   const partner = currentPartner();
   if (!partner) return;
-  partner.quarters[q()] = partner.quarters[q()] || {};
-  document
-    .querySelectorAll("[data-indicator]")
-    .forEach(
-      (input) =>
-        (partner.quarters[q()][input.dataset.indicator] = Number(input.value)),
-    );
+  const values = partner.quarters[q()] || {};
+  $("#evaluationDialogPartner").textContent = partner.name;
+  $("#evaluationDialogQuarter").textContent = q();
+  $("#editSmallDemos").value = Number(values.demos_pequenas || 0);
+  $("#editLargeDemos").value = Number(values.demos_grandes || 0);
+  $("#editDjiCertified").value = Number(values.certificados_dji || 0);
+  $("#editInformation").value = Number(values.information || 0);
+  $("#editAppliedRebate").value = Number(values.rebate_aplicado || 0);
+  $("#editJustification").value = values.justificacion || "";
+  renderEvaluationPreview();
+  $("#evaluationDialog").showModal();
+};
+function evaluationDraft() {
+  const partner = currentPartner();
+  return { ...partner, quarters: { ...partner.quarters, [q()]: { ...(partner.quarters[q()] || {}), demos_pequenas: Number($("#editSmallDemos").value || 0), demos_grandes: Number($("#editLargeDemos").value || 0), certificados_dji: Number($("#editDjiCertified").value || 0), information: Number($("#editInformation").value || 0), rebate_aplicado: Number($("#editAppliedRebate").value || 0), justificacion: $("#editJustification").value.trim() } } };
+}
+function renderEvaluationPreview() {
+  const draft = evaluationDraft();
+  const result = evaluation(draft);
+  const values = result.values;
+  const money = (value) => new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(value || 0);
+  $("#evaluationPreview").innerHTML = `<article><span>Cumplimiento previsto</span><strong>${result.score}%</strong><small>Nivel ${result.tier.name}</small></article><article><span>Margen previsto</span><strong>${22 + result.tier.rebate}%</strong><small>22% + rebate ${result.tier.rebate}%</small></article><article><span>Equipos / kits</span><strong>${values.equipmentUnits || 0}</strong><small>${values.sales.toFixed(0)}% de la meta</small></article><article><span>Refacciones</span><strong>${values.partsRatio.toFixed(1)}%</strong><small>${money(values.partsTotal)} sobre equipos</small></article>`;
+}
+["#editSmallDemos", "#editLargeDemos", "#editDjiCertified", "#editInformation", "#editAppliedRebate"].forEach((selector) => $(selector).oninput = renderEvaluationPreview);
+$("#evaluationForm").onsubmit = (event) => {
+  event.preventDefault();
+  const partner = currentPartner();
+  const draft = evaluationDraft();
+  const result = evaluation(draft);
   persist("saveEvaluation", {
     aliado_id: partner.id,
     periodo: q(),
-    resultado_ventas: $("#salesResultInput").value,
-    rebate_calculado: $("#calculatedRebateInput").value,
-    rebate_aplicado: $("#appliedRebateInput").value,
-    demos_pequenas: $("#smallDemosInput").value,
-    demos_grandes: $("#largeDemosInput").value,
-    certificados_dji: $("#djiCertifiedInput").value,
+    resultado_ventas: result.values.equipmentUnits,
+    rebate_calculado: result.tier.rebate,
+    rebate_aplicado: $("#editAppliedRebate").value,
+    demos_pequenas: $("#editSmallDemos").value,
+    demos_grandes: $("#editLargeDemos").value,
+    certificados_dji: $("#editDjiCertified").value,
     certificacion_dji_obligatoria: false,
-    justificacion: $("#evaluationJustification").value.trim(),
-    ...partner.quarters[q()],
+    justificacion: $("#editJustification").value.trim(), information: $("#editInformation").value,
+    sales: result.values.sales, demos: result.values.demos, parts: result.values.parts, pilots: result.values.pilots,
   }).then((saved) => {
     if (!saved) return;
-    editingEvaluation = false;
-    $("#editEvaluationButton").hidden = false;
-    $("#saveIndicatorsButton").hidden = true;
-    render();
+    $("#evaluationDialog").close();
   });
 };
 $("#deletePartnerButton").onclick = () => {
@@ -670,9 +678,6 @@ document.querySelectorAll("[data-view]").forEach(
     }),
 );
 $("#quarterFilter").onchange = () => {
-  editingEvaluation = false;
-  $("#editEvaluationButton").hidden = false;
-  $("#saveIndicatorsButton").hidden = true;
   render();
 };
 document

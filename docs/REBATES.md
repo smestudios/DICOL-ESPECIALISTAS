@@ -14,6 +14,8 @@ Además de la evaluación ponderada, el tablero muestra los requisitos operativo
 
 Use **Parámetros del Q** para crear, editar o archivar las metas de cada trimestre. La configuración inicial incluye ventas de equipos/kits, demostraciones pequeñas y grandes, certificaciones DJI Academy y el porcentaje de refacciones. El tablero calcula las ventas desde las compras registradas: los artículos `dron` y `kit` cuentan como equipos; los artículos `refaccion` se comparan contra el valor de equipos. La meta inicial exige que las refacciones representen al menos **8 %** de las compras de equipos. No registre estos porcentajes manualmente: se recalculan con el catálogo y las ventas del aliado.
 
+La edición de cumplimiento se abre en una ventana separada. Antes de guardar, muestra una simulación del cumplimiento, nivel, margen previsto, equipos/kits y relación de refacciones; la ficha principal se actualiza únicamente cuando Google Sheets confirma el guardado.
+
 > El resultado del tablero es una herramienta de seguimiento. Nunca aprueba por sí solo un pago: el rebate se revisa para el trimestre siguiente y exige validar la política, los soportes y las condiciones comerciales aplicables.
 
 ## Código de Google Apps Script
