@@ -171,12 +171,17 @@
                     <p class="eyebrow">CUMPLIMIENTO DEL ALIADO</p>
                     <h3>Indicadores y evidencias</h3>
                   </div>
-                  <button
-                    class="rebate-button rebate-button--primary"
-                    id="saveIndicatorsButton"
-                  >
-                    Guardar evaluación
+                  <button class="rebate-button" id="editEvaluationButton">
+                    Editar evaluación
                   </button>
+                  <button class="rebate-button rebate-button--primary" id="saveIndicatorsButton" data-save-action="saveEvaluation" hidden>
+                    Guardar cambios
+                  </button>
+                </div>
+                <div class="evaluation-summary">
+                  <label>Resultado de ventas<input id="salesResultInput" type="number" min="0" step="1" disabled /></label>
+                  <label>% rebate calculado<input id="calculatedRebateInput" type="number" min="0" max="100" step="0.01" disabled /></label>
+                  <label>% rebate aplicado<input id="appliedRebateInput" type="number" min="0" max="100" step="0.01" disabled /></label>
                 </div>
                 <p id="policyNote" class="policy-note"></p>
                 <div id="indicatorGrid" class="indicator-grid"></div>
@@ -231,7 +236,7 @@
             data-close="partnerDialog"
           >
             Cancelar</button
-          ><button class="rebate-button rebate-button--primary" type="submit">
+          ><button id="partnerSubmitButton" class="rebate-button rebate-button--primary" type="submit" data-save-action="savePartner">
             Guardar aliado
           </button>
         </div>
@@ -255,6 +260,7 @@
         /><input id="specialistZone" placeholder="Zona" /><button
           class="rebate-button rebate-button--primary"
           type="submit"
+          data-save-action="saveSpecialist"
         >
           Agregar
         </button>
@@ -274,7 +280,7 @@
         <div class="dialog-actions">
           <button class="rebate-button" type="button" data-close="policyDialog">
             Cancelar</button
-          ><button class="rebate-button rebate-button--primary" type="submit">
+          ><button class="rebate-button rebate-button--primary" type="submit" data-save-action="savePolicy">
             Aplicar política
           </button>
         </div>

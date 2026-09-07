@@ -27,6 +27,12 @@ El tablero usa la URL publicada de la **Aplicación web** de Apps Script (la que
 
 Para verificar la conexión, ejecute `setup()` una vez en Apps Script y agregue los registros directamente en las pestañas creadas. El estado de conexión que aparece en la esquina superior derecha del tablero confirma si la lectura de Google Sheets fue exitosa. No se deben incluir credenciales en `rebates.js`.
 
+## Estructura para la gestión comercial
+
+La pestaña **Evaluaciones** conserva los indicadores de cumplimiento y añade `resultado_ventas`, `rebate_calculado`, `rebate_aplicado` y `diferencia` para cada aliado y trimestre. Así se puede registrar el resultado comercial y contrastar el rebate calculado frente al aplicado, como en el formato de seguimiento compartido. Al ejecutar `setup()` en una hoja existente se agregan estos encabezados sin eliminar el historial previo.
+
+El API y la interfaz validan que no existan dos aliados activos con el mismo nombre (sin importar mayúsculas, minúsculas o espacios). También se aplica la misma validación a especialistas y se bloquea el botón mientras una petición está en curso, evitando registros duplicados por doble clic.
+
 ## Operación diaria en el tablero
 
 1. En **Gestionar especialistas**, agregue o elimine especialistas de DICOL. Para eliminar uno con aliados asignados, primero reasigne cada aliado.

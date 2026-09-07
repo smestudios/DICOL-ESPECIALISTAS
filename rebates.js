@@ -21,6 +21,8 @@ const emptyState = {
 let state = emptyState;
 let selectedPartnerId;
 let activeView = "general";
+let editingEvaluation = false;
+const pendingActions = new Set();
 const $ = (selector) => document.querySelector(selector);
 const q = () => $("#quarterFilter").value;
 const currentPartner = () =>
@@ -78,6 +80,9 @@ async function loadData() {
   render();
 }
 async function persist(action, data, id) {
+  if (pendingActions.has(action)) return false;
+  pendingActions.add(action);
+  document.querySelectorAll(`[data-save-action="${action}"]`).forEach((button) => (button.disabled = true));
   try {
     setConnectionStatus("Guardando en Google Sheets…");
     await api(action, data, id);
@@ -86,6 +91,9 @@ async function persist(action, data, id) {
   } catch (error) {
     setConnectionStatus(error.message, true);
     return false;
+  } finally {
+    pendingActions.delete(action);
+    document.querySelectorAll(`[data-save-action="${action}"]`).forEach((button) => (button.disabled = false));
   }
 }
 function evaluation(partner, period = q()) {
@@ -156,6 +164,7 @@ function renderGeneral() {
     (button) =>
       (button.onclick = () => {
         selectedPartnerId = button.dataset.openPartner;
+        editingEvaluation = false;
         activeView = "partner";
         render();
       }),
@@ -211,6 +220,7 @@ function renderPartnerList(forceSpecialistId) {
     (button) =>
       (button.onclick = () => {
         selectedPartnerId = button.dataset.partnerId;
+        editingEvaluation = false;
         renderPartnerList();
         renderPartnerDetail();
       }),
@@ -221,6 +231,8 @@ function renderPartnerDetail() {
   $("#emptyState").hidden = Boolean(partner);
   $("#detailContent").hidden = !partner;
   if (!partner) return;
+  $("#editEvaluationButton").hidden = editingEvaluation;
+  $("#saveIndicatorsButton").hidden = !editingEvaluation;
   const result = evaluation(partner);
   $("#detailName").textContent = partner.name;
   $("#detailSpecialist").textContent =
@@ -254,10 +266,14 @@ function rules() {
     .map(([key, rule]) => ({ key, ...rule }));
 }
 function renderIndicators(result) {
+  $("#salesResultInput").value = Number(result.values.resultado_ventas || 0);
+  $("#calculatedRebateInput").value = Number(result.values.rebate_calculado || result.tier.rebate || 0);
+  $("#appliedRebateInput").value = Number(result.values.rebate_aplicado || 0);
+  ["#salesResultInput", "#calculatedRebateInput", "#appliedRebateInput"].forEach((selector) => ($(selector).disabled = !editingEvaluation));
   $("#indicatorGrid").innerHTML = rules()
     .map((rule) => {
       const value = Number(result.values[rule.key] || 0);
-      return `<article class="indicator"><label>${esc(rule.label)}<output>${value}%</output></label><small>Peso ${rule.weight}% · meta ${rule.target}%</small><input type="range" min="0" max="100" value="${value}" data-indicator="${rule.key}"><progress max="100" value="${value}"></progress></article>`;
+      return `<article class="indicator"><label>${esc(rule.label)}<output>${value}%</output></label><small>Peso ${rule.weight}% · meta ${rule.target}%</small><input type="range" min="0" max="100" value="${value}" data-indicator="${rule.key}" ${editingEvaluation ? "" : "disabled"}><progress max="100" value="${value}"></progress></article>`;
     })
     .join("");
   document.querySelectorAll("[data-indicator]").forEach(
@@ -316,6 +332,9 @@ function openPartnerDialog(partner) {
   $("#partnerDialogTitle").textContent = partner
     ? "Editar aliado"
     : "Agregar aliado";
+  $("#partnerSubmitButton").textContent = partner
+    ? "Guardar cambios"
+    : "Guardar aliado";
   $("#partnerId").value = partner?.id || "";
   $("#partnerName").value = partner?.name || "";
   $("#partnerZone").value = partner?.zone || "";
@@ -387,6 +406,8 @@ $("#partnerForm").onsubmit = (event) => {
     creado_en: old?.createdAt,
   };
   if (!partner.nombre) return;
+  const duplicate = state.partners.some((item) => item.id !== id && item.name.trim().toUpperCase() === partner.nombre.toUpperCase());
+  if (duplicate) return alert("Ya existe un aliado activo con ese nombre.");
   persist("savePartner", partner).then((saved) => {
     if (!saved) return;
     selectedPartnerId = id;
@@ -399,6 +420,7 @@ $("#specialistForm").onsubmit = (event) => {
   event.preventDefault();
   const name = $("#specialistName").value.trim();
   if (!name) return;
+  if (state.specialists.some((person) => person.name.trim().toUpperCase() === name.toUpperCase())) return alert("Ya existe un especialista activo con ese nombre.");
   const specialistData = {
     id: `sp-${Date.now()}`,
     nombre: name,
@@ -432,6 +454,12 @@ $("#policyForm").onsubmit = (event) => {
     if (saved) $("#policyDialog").close();
   });
 };
+$("#editEvaluationButton").onclick = () => {
+  editingEvaluation = true;
+  $("#editEvaluationButton").hidden = true;
+  $("#saveIndicatorsButton").hidden = false;
+  renderPartnerDetail();
+};
 $("#saveIndicatorsButton").onclick = () => {
   const partner = currentPartner();
   if (!partner) return;
@@ -445,7 +473,16 @@ $("#saveIndicatorsButton").onclick = () => {
   persist("saveEvaluation", {
     aliado_id: partner.id,
     periodo: q(),
+    resultado_ventas: $("#salesResultInput").value,
+    rebate_calculado: $("#calculatedRebateInput").value,
+    rebate_aplicado: $("#appliedRebateInput").value,
     ...partner.quarters[q()],
+  }).then((saved) => {
+    if (!saved) return;
+    editingEvaluation = false;
+    $("#editEvaluationButton").hidden = false;
+    $("#saveIndicatorsButton").hidden = true;
+    render();
   });
 };
 $("#deletePartnerButton").onclick = () => {
@@ -462,7 +499,12 @@ document.querySelectorAll("[data-view]").forEach(
       render();
     }),
 );
-$("#quarterFilter").onchange = render;
+$("#quarterFilter").onchange = () => {
+  editingEvaluation = false;
+  $("#editEvaluationButton").hidden = false;
+  $("#saveIndicatorsButton").hidden = true;
+  render();
+};
 document
   .querySelectorAll("[data-close]")
   .forEach(

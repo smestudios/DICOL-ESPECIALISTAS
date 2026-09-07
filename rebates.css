@@ -64,6 +64,10 @@
 .connection-status--error {
   color: #ff9f8f;
 }
+.evaluation-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 14px 0; }
+.evaluation-summary label { color: #aab3ad; font-size: 12px; }
+.evaluation-summary input { display: block; box-sizing: border-box; width: 100%; margin-top: 5px; padding: 9px; border: 1px solid var(--line); border-radius: 6px; background: #0e1711; color: #fff; }
+.rebate-button:disabled { cursor: wait; opacity: .6; }
 .rebate-button {
   padding: 10px 14px;
   border: 1px solid #ffffff4d;
