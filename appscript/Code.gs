@@ -93,6 +93,14 @@ function setup() {
     parameterSheet.getRange(2, 1, rows.length, HEADERS.parameters.length).setValues(rows);
   }
 }
+// Ejecute esta función una sola vez solo si desea restaurar los valores del
+// boletín 2025 (A 5 %, B 3 %, C 0 %) en una hoja que tenía valores de prueba.
+function restorePolicyBoletin2025() {
+  const sheet = sheet_(SHEET_NAMES.policy);
+  if (sheet.getLastRow() > 1)
+    sheet.getRange(2, 1, sheet.getLastRow() - 1, HEADERS.policy.length).clearContent();
+  sheet.getRange(2, 1, DEFAULT_POLICY.length, HEADERS.policy.length).setValues(DEFAULT_POLICY);
+}
 function doGet(event) {
   return response_({ ok: true, data: getData_() }, event);
 }
