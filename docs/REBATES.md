@@ -6,7 +6,13 @@
 - **Los aliados son empresas.** Cada ficha individual muestra solamente sus resultados, los indicadores pendientes y una conclusión que puede usarse durante la reunión con ese aliado.
 - **DICOL** puede consultar el resumen general y las tarjetas por especialista. Estas tarjetas consolidan cuántos aliados tiene cada persona, el cumplimiento promedio y cuántos necesitan gestión.
 
-La evaluación inicial pondera PSI/ventas 50 %, demostraciones 20 %, repuestos 10 %, pilotos certificados 10 % e información/soportes 10 %. El nivel A empieza en 80 % y proyecta 5 %; B empieza en 60 % y proyecta 3 %; C proyecta 0 %. Los pesos son configurables desde **Política vigente**, pero se deben contrastar con el boletín de políticas vigente antes de modificar o liquidar un rebate.
+La evaluación inicial pondera PSI/ventas 50 %, demostraciones 20 %, repuestos 10 %, pilotos certificados 10 % e información/soportes 10 %. El aliado inicia con un margen base de **22 %**. La configuración inicial proyecta rebates de 10 %, 5 % y 3 % para los niveles A, B y C, respectivamente, que llevan el margen a 32 %, 27 % o 25 %. Los pesos y niveles son configurables desde **Política vigente**, pero se deben contrastar con el boletín de políticas vigente antes de modificar o liquidar un rebate.
+
+Además de la evaluación ponderada, el tablero muestra los requisitos operativos: **3 demostraciones pequeñas y 1 demostración grande** con soportes. Se registra también la certificación DJI de al menos una persona del equipo de ventas; por ahora se muestra como recomendación y no bloquea el rebate. El botón **Descargar resumen PDF** genera una ficha descargable con avances, faltantes, compras del trimestre e información de soportes.
+
+## Parámetros trimestrales y cálculo automático
+
+Use **Parámetros del Q** para crear, editar o archivar las metas de cada trimestre. La configuración inicial incluye ventas de equipos/kits, demostraciones pequeñas y grandes, certificaciones DJI Academy y el porcentaje de refacciones. El tablero calcula las ventas desde las compras registradas: los artículos `dron` y `kit` cuentan como equipos; los artículos `refaccion` se comparan contra el valor de equipos. La meta inicial exige que las refacciones representen al menos **8 %** de las compras de equipos. No registre estos porcentajes manualmente: se recalculan con el catálogo y las ventas del aliado.
 
 > El resultado del tablero es una herramienta de seguimiento. Nunca aprueba por sí solo un pago: el rebate se revisa para el trimestre siguiente y exige validar la política, los soportes y las condiciones comerciales aplicables.
 
@@ -17,7 +23,7 @@ El archivo completo para pegar está en [`appscript/Code.gs`](../appscript/Code.
 1. Cree la hoja de cálculo que será la base de datos de rebates y abra **Extensiones → Apps Script**.
 2. Reemplace el contenido por `Code.gs`, guarde y ejecute `setup()` una vez. Esto crea las pestañas **Especialistas**, **Aliados**, **Evaluaciones** y **Politica** con sus encabezados.
 3. Use **Implementar → Nueva implementación → Aplicación web**. Ejecútela como la cuenta de DICOL y limite el acceso a los usuarios autorizados por DICOL. Copie la URL terminada en `/exec`.
-4. La API recibe JSON con una propiedad `action`: `getData`, `saveSpecialist`, `savePartner`, `saveEvaluation`, `savePolicy`, `deletePartner` o `deleteSpecialist`.
+4. La API recibe JSON con una propiedad `action`: `getData`, `saveSpecialist`, `savePartner`, `saveEvaluation`, `savePolicy`, `savePrice`, `saveSale`, `deletePartner` o `deleteSpecialist`. Después de actualizar el script, cree una **nueva implementación** para que la URL `/exec` use estos cambios.
 
 `getPartnerSummary(partnerId, period)` también se puede ejecutar desde el editor para verificar el cálculo de una ficha. El código valida los periodos Q1–Q4, limita cada indicador entre 0 % y 100 %, evita eliminar un especialista mientras conserve aliados activos y conserva un historial lógico mediante archivo (`activo=false`).
 
@@ -37,7 +43,7 @@ La ficha individual incluye además un **Pulso comercial** para que la conversac
 
 ## Catálogo, kits y ventas
 
-`setup()` crea tres pestañas adicionales: **Precios**, **Kits** y **Ventas**. En **Precios** registre cada producto individual con su categoría (`dron` o `refaccion`), modelo, MSRP con/sin IVA, margen base, y precios al aliado. En **Kits** registre cada combinación con sus componentes y el precio pactado; así un kit se conserva como una venta distinta y no duplica las piezas que lo componen. Todos los aliados parten de un margen base de 22 %: el rebate aprobado se registra por separado, por lo que no debe sobrescribirse el margen de precio. Las sanciones o excepciones se sustentan en la justificación de la evaluación y deben reflejarse en el precio/margen específico aprobado.
+`setup()` crea tres pestañas adicionales: **Precios**, **Kits** y **Ventas**. En **Catálogo y precios** registre cada producto individual con su categoría (`dron` o `refaccion`), modelo, precio para cliente final con/sin IVA, precio para aliado con/sin IVA y margen base. En **Kits** registre cada combinación con sus componentes y el precio pactado; así un kit se conserva como una venta distinta y no duplica las piezas que lo componen. Todos los aliados parten de un margen base de 22 %: el rebate aprobado se registra por separado, por lo que no debe sobrescribirse el margen de precio. Las sanciones o excepciones se sustentan en la justificación de la evaluación y deben reflejarse en el precio/margen específico aprobado.
 
 Desde la ficha del aliado use **Registrar venta**: selecciona un producto o kit del catálogo y el sistema toma el precio al aliado con IVA, calcula la facturación y acumula las unidades por modelo y las compras de refacciones para el trimestre. Esto es la fuente del panel comercial; no modifique a mano el total de la pestaña Ventas.
 

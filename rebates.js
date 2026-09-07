@@ -8,9 +8,9 @@ const POLICY = {
   pilots: { label: "Pilotos certificados", weight: 10, target: 100 },
   information: { label: "Información y soportes", weight: 10, target: 100 },
   tiers: [
-    { name: "A", min: 80, rebate: 5 },
-    { name: "B", min: 60, rebate: 3 },
-    { name: "C", min: 0, rebate: 0 },
+    { name: "A", min: 80, rebate: 10 },
+    { name: "B", min: 60, rebate: 5 },
+    { name: "C", min: 0, rebate: 3 },
   ],
 };
 const emptyState = {
@@ -54,6 +54,7 @@ function normalizeData(data) {
     prices: data.prices || [],
     kits: data.kits || [],
     sales: data.sales || [],
+    parameters: data.parameters || [],
   };
 }
 async function api(action, data, id) {
@@ -100,7 +101,7 @@ async function persist(action, data, id) {
   }
 }
 function evaluation(partner, period = q()) {
-  const values = partner.quarters[period] || {};
+  const values = { ...(partner.quarters[period] || {}), ...calculatedCompliance(partner, period) };
   const score = Math.round(
     Object.entries(state.policy)
       .filter(([key]) => key !== "tiers")
@@ -117,6 +118,21 @@ function evaluation(partner, period = q()) {
       state.policy.tiers.find((tier) => score >= tier.min) ||
       state.policy.tiers.at(-1),
   };
+}
+function parametersFor(period = q()) { return state.parameters.filter((item) => item.periodo === period); }
+function parameter(key, period = q()) { return parametersFor(period).find((item) => item.clave === key); }
+function calculatedCompliance(partner, period = q()) {
+  const raw = partner.quarters[period] || {};
+  const rows = state.sales.filter((sale) => sale.aliado_id === partner.id && sale.periodo === period);
+  const equipment = rows.filter((sale) => sale.tipo === "dron" || sale.tipo === "equipo" || sale.tipo === "kit");
+  const parts = rows.filter((sale) => sale.tipo === "refaccion");
+  const equipmentTotal = equipment.reduce((sum, sale) => sum + Number(sale.total_iva || 0), 0);
+  const partsTotal = parts.reduce((sum, sale) => sum + Number(sale.total_iva || 0), 0);
+  const equipmentUnits = equipment.reduce((sum, sale) => sum + Number(sale.cantidad || 0), 0);
+  const ratio = equipmentTotal ? (partsTotal / equipmentTotal) * 100 : 0;
+  const percent = (actual, key) => { const target = Number(parameter(key, period)?.meta || 0); return target ? Math.min(100, (actual / target) * 100) : Number(raw[key] || 0); };
+  const demos = Math.min(percent(Number(raw.demos_pequenas || 0), "demos_pequenas"), percent(Number(raw.demos_grandes || 0), "demos_grandes"));
+  return { sales: percent(equipmentUnits, "ventas_equipos"), demos, parts: percent(ratio, "porcentaje_refacciones"), pilots: percent(Number(raw.certificados_dji || 0), "certificados_dji"), equipmentUnits, equipmentTotal, partsTotal, partsRatio: ratio };
 }
 function allEvaluations() {
   return state.partners.map((partner) => ({ partner, ...evaluation(partner) }));
@@ -146,7 +162,7 @@ function renderSummary() {
   $("#partnerCountDetail").textContent =
     `${state.specialists.length} especialista(s) DICOL`;
   $("#averageScore").textContent = `${average}%`;
-  $("#projectedRebate").textContent = `${projected}%`;
+  $("#projectedRebate").textContent = `${(22 + Number(projected)).toFixed(1)}%`;
   $("#atRiskCount").textContent = results.filter((r) => r.score < 60).length;
 }
 function renderTabs() {
@@ -254,13 +270,14 @@ function renderPartnerDetail() {
       : result.score >= 60
         ? "Cumple el mínimo, pero tiene oportunidades para alcanzar el nivel A."
         : "No alcanza el mínimo trimestral; requiere un plan de acción con el especialista DICOL.";
-  $("#rebateValue").textContent = `${result.tier.rebate}%`;
-  $("#gradeName").textContent = `Clasificación ${result.tier.name}`;
+  $("#rebateValue").textContent = `${22 + Number(result.tier.rebate)}%`;
+  $("#gradeName").textContent = `Margen base 22% + rebate ${result.tier.rebate}% · Nivel ${result.tier.name}`;
   renderCommercialOverview(result);
   $("#policyNote").textContent = `Política activa: ${rules()
     .map((rule) => `${rule.label} ${rule.weight}%`)
     .join(" · ")}. Los valores son porcentajes de cumplimiento contra la meta.`;
   renderIndicators(result);
+  renderRequirements(result);
   renderTrend(partner);
   renderInsights(result);
 }
@@ -276,15 +293,15 @@ function renderCommercialOverview(result) {
   const applied = Number(result.values.rebate_aplicado || 0);
   $("#commercialQuarter").textContent = q();
   $("#commercialScore").textContent = `${result.score}%`;
-  $("#commercialCalculated").textContent = `${calculated}%`;
-  $("#commercialApplied").textContent = `${applied}%`;
+  $("#commercialCalculated").textContent = `${22 + calculated}%`;
+  $("#commercialApplied").textContent = `${22 + applied}%`;
   $("#commercialSales").textContent = units;
   $("#commercialBilling").textContent = money(billing);
-  $("#commercialDemos").textContent = `${Number(result.values.demos || 0)}%`;
+  $("#commercialDemos").textContent = `${Math.round(Number(result.values.demos || 0))}%`;
   $("#commercialParts").textContent = money(parts);
   $("#commercialPartsChart").textContent = money(parts);
   $("#commercialIndicators").textContent = `${met}/${indicators.length}`;
-  $("#commercialStatus").textContent = `Nivel ${result.tier.name} · Diferencia aplicada: ${(applied - calculated).toFixed(1)}%`;
+  $("#commercialStatus").textContent = `Nivel ${result.tier.name} · Margen 22% + rebate ${calculated}% · aplicado: ${(applied - calculated).toFixed(1)}% vs. calculado`;
   $("#commercialKpis").innerHTML = indicators.map((rule) => {
     const value = Number(result.values[rule.key] || 0);
     return `<div class="commercial-kpi"><span>${esc(rule.label)}</span><div><i style="width:${Math.min(100, value)}%"></i></div><b>${value}%</b><small>peso ${rule.weight}%</small></div>`;
@@ -301,8 +318,11 @@ function renderIndicators(result) {
   $("#salesResultInput").value = Number(result.values.resultado_ventas || 0);
   $("#calculatedRebateInput").value = Number(result.values.rebate_calculado || result.tier.rebate || 0);
   $("#appliedRebateInput").value = Number(result.values.rebate_aplicado || 0);
+  $("#smallDemosInput").value = Number(result.values.demos_pequenas || 0);
+  $("#largeDemosInput").value = Number(result.values.demos_grandes || 0);
+  $("#djiCertifiedInput").value = Number(result.values.certificados_dji || 0);
   $("#evaluationJustification").value = result.values.justificacion || "";
-  ["#salesResultInput", "#calculatedRebateInput", "#appliedRebateInput", "#evaluationJustification"].forEach((selector) => ($(selector).disabled = !editingEvaluation));
+  ["#salesResultInput", "#calculatedRebateInput", "#appliedRebateInput", "#smallDemosInput", "#largeDemosInput", "#djiCertifiedInput", "#evaluationJustification"].forEach((selector) => ($(selector).disabled = !editingEvaluation));
   $("#indicatorGrid").innerHTML = rules()
     .map((rule) => {
       const value = Number(result.values[rule.key] || 0);
@@ -317,6 +337,20 @@ function renderIndicators(result) {
         input.parentElement.querySelector("progress").value = input.value;
       }),
   );
+}
+function renderRequirements(result) {
+  const values = result.values;
+  const requirements = [
+    { label: "Demos pequeñas", current: Number(values.demos_pequenas || 0), target: Number(parameter("demos_pequenas")?.meta || 3), required: true },
+    { label: "Demo grande", current: Number(values.demos_grandes || 0), target: Number(parameter("demos_grandes")?.meta || 1), required: true },
+    { label: "Certificación DJI", current: Number(values.certificados_dji || 0), target: Number(parameter("certificados_dji")?.meta || 1), required: false },
+    { label: "Refacciones", current: Number(values.partsRatio || 0), target: Number(parameter("porcentaje_refacciones")?.meta || 8), required: true, suffix: "%" },
+  ];
+  $("#requirementsProgress").innerHTML = requirements.map((item) => {
+    const complete = item.current >= item.target;
+    const wording = complete ? "Cumplido" : `Faltan ${item.target - item.current}`;
+    return `<article class="requirement ${complete ? "requirement--complete" : ""}"><span>${item.required ? "Obligatorio" : "Recomendado"}</span><b>${esc(item.label)}</b><strong>${item.current.toFixed?.(item.suffix ? 1 : 0) || item.current}${item.suffix || ""}/${item.target}${item.suffix || ""}</strong><small>${wording}${item.required ? " para postular rebate" : " · aún no obligatorio"}</small></article>`;
+  }).join("");
 }
 function renderTrend(partner) {
   $("#trendChart").innerHTML = ["Q1", "Q2", "Q3", "Q4"]
@@ -416,13 +450,97 @@ $("#specialistButton").onclick = () => {
   renderSpecialistManager();
   $("#specialistDialog").showModal();
 };
+function renderCatalog() {
+  const money = (value) => new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(value || 0);
+  $("#catalogList").innerHTML = state.prices.length
+    ? state.prices.map((item) => `<div class="catalog-row"><div><b>${esc(item.descripcion)}</b><small>${esc(item.modelo)} · ${esc(item.categoria)}</small></div><span>Final: ${money(item.precio_final_iva)}<br>Aliado: ${money(item.precio_aliado_iva)}</span></div>`).join("")
+    : '<p class="dialog-help">Aún no hay productos. Agregue el primero a continuación.</p>';
+}
+$("#catalogButton").onclick = () => {
+  $("#catalogForm").reset();
+  $("#catalogId").value = "";
+  $("#catalogMargin").value = 22;
+  renderCatalog();
+  $("#catalogDialog").showModal();
+};
+$("#catalogForm").onsubmit = (event) => {
+  event.preventDefault();
+  persist("savePrice", {
+    id: $("#catalogId").value || `pr-${Date.now()}`,
+    descripcion: $("#catalogDescription").value.trim(), modelo: $("#catalogModel").value.trim(),
+    categoria: $("#catalogCategory").value, precio_final_iva: $("#catalogFinalIva").value,
+    precio_final_sin_iva: $("#catalogFinalNoIva").value, precio_aliado_iva: $("#catalogPartnerIva").value,
+    precio_aliado_sin_iva: $("#catalogPartnerNoIva").value, margen_base: $("#catalogMargin").value,
+  }).then((saved) => {
+    if (!saved) return;
+    event.target.reset();
+    $("#catalogMargin").value = 22;
+    renderCatalog();
+  });
+};
+function parameterRow(item = {}) {
+  return `<div class="parameter-row" data-parameter-id="${esc(item.id || "")}"><input data-field="nombre" value="${esc(item.nombre || "Nuevo parámetro")}" required><input data-field="clave" value="${esc(item.clave || "nueva_meta")}" required><input data-field="meta" type="number" min="0" step="0.01" value="${esc(item.meta || 0)}" required><select data-field="unidad"><option ${item.unidad === "unidades" ? "selected" : ""}>unidades</option><option ${item.unidad === "eventos" ? "selected" : ""}>eventos</option><option ${item.unidad === "personas" ? "selected" : ""}>personas</option><option ${item.unidad === "%" ? "selected" : ""}>%</option></select><label><input data-field="obligatorio" type="checkbox" ${String(item.obligatorio) !== "false" ? "checked" : ""}> Obligatorio</label><button class="text-danger" data-delete-parameter="${esc(item.id || "")}" type="button">Eliminar</button></div>`;
+}
+function renderParameters() {
+  $("#parametersList").innerHTML = parametersFor().map(parameterRow).join("") || parameterRow();
+  document.querySelectorAll("[data-delete-parameter]").forEach((button) => button.onclick = () => {
+    if (!button.dataset.deleteParameter) return button.closest(".parameter-row").remove();
+    persist("deleteParameter", undefined, button.dataset.deleteParameter).then((saved) => saved && renderParameters());
+  });
+}
+$("#parametersButton").onclick = () => { renderParameters(); $("#parametersDialog").showModal(); };
+$("#addParameterButton").onclick = () => $("#parametersList").insertAdjacentHTML("beforeend", parameterRow());
+$("#parametersForm").onsubmit = (event) => {
+  event.preventDefault();
+  const items = [...document.querySelectorAll(".parameter-row")].map((row) => ({ id: row.dataset.parameterId, periodo: q(), nombre: row.querySelector('[data-field="nombre"]').value.trim(), clave: row.querySelector('[data-field="clave"]').value.trim(), meta: row.querySelector('[data-field="meta"]').value, unidad: row.querySelector('[data-field="unidad"]').value, obligatorio: row.querySelector('[data-field="obligatorio"]').checked }));
+  persist("saveParameters", items).then((saved) => { if (saved) $("#parametersDialog").close(); });
+};
+function makePdf(lines) {
+  const clean = (text) => String(text).normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^\x20-\x7e]/g, "?").replace(/[\\()]/g, "\\$&");
+  const text = (value, x, y, size = 10, color = "0.12 0.16 0.14") => `${color} rg BT /F1 ${size} Tf ${x} ${y} Td (${clean(value)}) Tj ET`;
+  const content = ["0.04 0.12 0.07 rg 0 760 612 82 re f", text("DICOL  |  CONTROL COMERCIAL", 42, 812, 11, "0.55 0.95 0.66"), text(lines[0], 42, 785, 20, "1 1 1"), text(lines[1], 42, 768, 9, "0.8 0.9 0.83"), "0.93 0.96 0.94 rg 32 640 548 94 re f", text(lines[2], 48, 710, 12), text(lines[3], 48, 685, 12, "0.02 0.42 0.16"), text(lines[4], 48, 660, 11), "0.06 0.14 0.09 rg 32 604 548 25 re f", text("REQUISITOS Y FALTANTES", 45, 612, 10, "1 1 1"), ...lines.slice(5).map((line, index) => text(line, 45, 580 - index * 19, index === 5 ? 11 : 9, index === 7 ? "0.72 0.35 0.12" : "0.12 0.16 0.14"))].join("\n");
+  const objects = ["<< /Type /Catalog /Pages 2 0 R >>", "<< /Type /Pages /Kids [3 0 R] /Count 1 >>", "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>", "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>", `<< /Length ${content.length} >>\nstream\n${content}\nendstream`];
+  let pdf = "%PDF-1.4\n";
+  const offsets = [0];
+  objects.forEach((object, index) => { offsets.push(pdf.length); pdf += `${index + 1} 0 obj\n${object}\nendobj\n`; });
+  const xref = pdf.length;
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets.slice(1).map((offset) => `${String(offset).padStart(10, "0")} 00000 n \n`).join("")}trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+  return new Blob([pdf], { type: "application/pdf" });
+}
+$("#downloadSummaryButton").onclick = () => {
+  const partner = currentPartner();
+  if (!partner) return;
+  const result = evaluation(partner);
+  const values = result.values;
+  const missing = [
+    Number(values.demos_pequenas || 0) < 3 && `faltan ${3 - Number(values.demos_pequenas || 0)} demos pequenas`,
+    Number(values.demos_grandes || 0) < 1 && "falta 1 demo grande",
+    Number(values.certificados_dji || 0) < 1 && "se recomienda certificar 1 persona DJI",
+  ].filter(Boolean);
+  const lines = [
+    `DICOL | Resumen de rebate - ${partner.name}`, `Periodo: ${q()} | Especialista: ${partnerSpecialistName(partner)}`,
+    `Cumplimiento ponderado: ${result.score}% | Nivel: ${result.tier.name}`,
+    `Margen base: 22% | Rebate calculado: ${Number(values.rebate_calculado || result.tier.rebate)}% | Margen proyectado: ${22 + Number(values.rebate_calculado || result.tier.rebate)}%`,
+    `Ventas calificadas: ${Number(values.resultado_ventas || 0)} | Facturacion registrada: ${state.sales.filter((sale) => sale.aliado_id === partner.id && sale.periodo === q()).reduce((sum, sale) => sum + Number(sale.total_iva || 0), 0).toLocaleString("es-CO")} COP`,
+    `Demos pequenas: ${Number(values.demos_pequenas || 0)}/3 | Demos grandes: ${Number(values.demos_grandes || 0)}/1`,
+    `Certificados DJI: ${Number(values.certificados_dji || 0)}/1 (recomendado, aun no obligatorio)`,
+    `Pendientes: ${missing.length ? missing.join("; ") : "Requisitos operativos registrados. Validar soportes."}`,
+    "Indicadores de politica:", ...rules().map((rule) => `- ${rule.label}: ${Number(values[rule.key] || 0)}% (peso ${rule.weight}%)`),
+    `Soportes / justificacion: ${values.justificacion || "Sin registrar"}`,
+    "Este resumen es de seguimiento; no autoriza pagos. Validar politica vigente, facturas y evidencias antes de liquidar.",
+  ];
+  const url = URL.createObjectURL(makePdf(lines));
+  const link = Object.assign(document.createElement("a"), { href: url, download: `resumen-rebate-${partner.name.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-${q()}.pdf` });
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+};
 $("#policyButton").onclick = () => {
-  const fields = rules()
+  const fields = `${rules()
     .map(
       (rule) =>
         `<label>${esc(rule.label)} — peso (%)<input name="${rule.key}" type="number" min="0" max="100" value="${rule.weight}"></label>`,
     )
-    .join("");
+    .join("")}<p class="dialog-help">Rebate adicional sobre el margen base de 22 %. El margen mostrado será 22 % + el rebate del nivel.</p>${state.policy.tiers.map((tier) => `<label>Nivel ${esc(tier.name)} — rebate adicional (%)<input name="tier-${esc(tier.name)}" type="number" min="0" max="100" step="0.01" value="${tier.rebate}"></label>`).join("")}`;
   $("#policyFields").innerHTML = fields;
   $("#policyDialog").showModal();
 };
@@ -479,7 +597,7 @@ $("#policyForm").onsubmit = (event) => {
       type: "nivel",
       key: tier.name,
       label: `Nivel ${tier.name}`,
-      value: tier.rebate,
+      value: Math.max(0, Number(event.target.elements[`tier-${tier.name}`].value) || 0),
       target: tier.min,
     })),
   ];
@@ -509,6 +627,10 @@ $("#saveIndicatorsButton").onclick = () => {
     resultado_ventas: $("#salesResultInput").value,
     rebate_calculado: $("#calculatedRebateInput").value,
     rebate_aplicado: $("#appliedRebateInput").value,
+    demos_pequenas: $("#smallDemosInput").value,
+    demos_grandes: $("#largeDemosInput").value,
+    certificados_dji: $("#djiCertifiedInput").value,
+    certificacion_dji_obligatoria: false,
     justificacion: $("#evaluationJustification").value.trim(),
     ...partner.quarters[q()],
   }).then((saved) => {

@@ -19,6 +19,7 @@ const SHEET_NAMES = {
   prices: "Precios",
   kits: "Kits",
   sales: "Ventas",
+  parameters: "Parametros",
 };
 const HEADERS = {
   specialists: ["id", "nombre", "zona", "activo", "creado_en"],
@@ -44,22 +45,34 @@ const HEADERS = {
     "parts",
     "pilots",
     "information",
+    "demos_pequenas",
+    "demos_grandes",
+    "certificados_dji",
+    "certificacion_dji_obligatoria",
     "actualizado_en",
   ],
   policy: ["tipo", "clave", "nombre", "valor", "meta"],
-  prices: ["id", "descripcion", "categoria", "modelo", "msrp_iva", "msrp_sin_iva", "margen_base", "precio_aliado_iva", "precio_aliado_sin_iva", "activo"],
-  kits: ["id", "nombre", "modelo", "componentes", "margen_base", "precio_aliado_iva", "precio_aliado_sin_iva", "activo"],
+  prices: ["id", "descripcion", "categoria", "modelo", "precio_final_iva", "precio_final_sin_iva", "margen_base", "precio_aliado_iva", "precio_aliado_sin_iva", "activo"],
+  kits: ["id", "nombre", "modelo", "componentes", "precio_final_iva", "precio_final_sin_iva", "margen_base", "precio_aliado_iva", "precio_aliado_sin_iva", "activo"],
   sales: ["id", "aliado_id", "periodo", "fecha", "item_id", "tipo", "modelo", "cantidad", "precio_unitario_iva", "total_iva", "creado_en"],
+  parameters: ["id", "periodo", "clave", "nombre", "meta", "unidad", "obligatorio", "activo"],
 };
+const DEFAULT_PARAMETERS = [
+  ["Q1", "ventas_equipos", "Ventas de equipos / kits", 1, "unidades", true],
+  ["Q1", "demos_pequenas", "Demostraciones pequeñas", 3, "eventos", true],
+  ["Q1", "demos_grandes", "Demostraciones grandes", 1, "eventos", true],
+  ["Q1", "certificados_dji", "Certificaciones DJI Academy", 1, "personas", false],
+  ["Q1", "porcentaje_refacciones", "Compra de refacciones sobre equipos", 8, "%", true],
+];
 const DEFAULT_POLICY = [
   ["indicador", "sales", "PSI / ventas", 50, 100],
   ["indicador", "demos", "Demostraciones", 20, 100],
   ["indicador", "parts", "Repuestos", 10, 100],
   ["indicador", "pilots", "Pilotos certificados", 10, 100],
   ["indicador", "information", "Información y soportes", 10, 100],
-  ["nivel", "A", "Nivel A", 5, 80],
-  ["nivel", "B", "Nivel B", 3, 60],
-  ["nivel", "C", "Nivel C", 0, 0],
+  ["nivel", "A", "Nivel A", 10, 80],
+  ["nivel", "B", "Nivel B", 5, 60],
+  ["nivel", "C", "Nivel C", 3, 0],
 ];
 
 function setup() {
@@ -72,6 +85,13 @@ function setup() {
     policySheet
       .getRange(2, 1, DEFAULT_POLICY.length, 5)
       .setValues(DEFAULT_POLICY);
+  const parameterSheet = spreadsheet.getSheetByName(SHEET_NAMES.parameters);
+  if (parameterSheet.getLastRow() === 1) {
+    const rows = ["Q1", "Q2", "Q3", "Q4"].flatMap((period) =>
+      DEFAULT_PARAMETERS.map((item) => [Utilities.getUuid(), period, ...item.slice(1), true]),
+    );
+    parameterSheet.getRange(2, 1, rows.length, HEADERS.parameters.length).setValues(rows);
+  }
 }
 function doGet(event) {
   return response_({ ok: true, data: getData_() }, event);
@@ -104,6 +124,12 @@ function dispatch_(request) {
       return savePolicy_(data);
     case "saveSale":
       return saveSale_(data);
+    case "savePrice":
+      return savePrice_(data);
+    case "saveParameters":
+      return saveParameters_(data);
+    case "deleteParameter":
+      return archiveParameter_(request.id);
     case "deletePartner":
       return archivePartner_(request.id);
     case "deleteSpecialist":
@@ -120,9 +146,17 @@ function getData_() {
     (row) => row.activo !== "false",
   );
   const evaluations = rows_(SHEET_NAMES.evaluations);
-  const prices = rows_(SHEET_NAMES.prices).filter((row) => row.activo !== "false");
+  const prices = rows_(SHEET_NAMES.prices)
+    .filter((row) => row.activo !== "false")
+    .map((row) => ({
+      ...row,
+      // Conserva los catálogos creados antes del cambio de encabezados.
+      precio_final_iva: row.precio_final_iva || row.msrp_iva || "",
+      precio_final_sin_iva: row.precio_final_sin_iva || row.msrp_sin_iva || "",
+    }));
   const kits = rows_(SHEET_NAMES.kits).filter((row) => row.activo !== "false");
   const sales = rows_(SHEET_NAMES.sales);
+  const parameters = rows_(SHEET_NAMES.parameters).filter((row) => row.activo !== "false");
   const policy = { tiers: [] };
   rows_(SHEET_NAMES.policy).forEach((row) => {
     if (row.tipo === "nivel")
@@ -151,7 +185,21 @@ function getData_() {
     prices,
     kits,
     sales,
+    parameters,
   };
+}
+function saveParameters_(items) {
+  if (!Array.isArray(items) || !items.length) throw new Error("Agregue al menos un parámetro.");
+  return items.map((item) => {
+    require_(item, ["periodo", "clave", "nombre", "meta"]);
+    if (!/^Q[1-4]$/.test(item.periodo)) throw new Error("El periodo debe ser Q1, Q2, Q3 o Q4.");
+    return upsert_(SHEET_NAMES.parameters, { id: item.id || Utilities.getUuid(), periodo: item.periodo, clave: item.clave, nombre: item.nombre, meta: Math.max(0, number_(item.meta)), unidad: item.unidad || "unidades", obligatorio: String(item.obligatorio) !== "false", activo: true });
+  });
+}
+function archiveParameter_(id) {
+  const item = byId_(SHEET_NAMES.parameters, id);
+  if (!item) throw new Error("Parámetro no encontrado.");
+  return upsert_(SHEET_NAMES.parameters, { ...item, activo: false });
 }
 function saveSale_(data) {
   require_(data, ["aliado_id", "periodo", "item_id", "cantidad"]);
@@ -167,6 +215,24 @@ function saveSale_(data) {
     tipo: item.categoria || "kit", modelo: item.modelo || item.nombre, cantidad: quantity,
     precio_unitario_iva: unitPrice, total_iva: quantity * unitPrice, creado_en: new Date().toISOString(),
   });
+}
+function savePrice_(data) {
+  require_(data, ["descripcion", "categoria", "modelo"]);
+  const finalWithTax = Math.max(0, number_(data.precio_final_iva));
+  const finalWithoutTax = Math.max(0, number_(data.precio_final_sin_iva));
+  const partnerWithTax = Math.max(0, number_(data.precio_aliado_iva));
+  const partnerWithoutTax = Math.max(0, number_(data.precio_aliado_sin_iva));
+  if (!finalWithTax || !partnerWithTax)
+    throw new Error("Registre los precios con IVA para cliente final y aliado.");
+  const value = {
+    id: data.id || Utilities.getUuid(), descripcion: String(data.descripcion).trim(),
+    categoria: data.categoria, modelo: String(data.modelo).trim(),
+    precio_final_iva: finalWithTax, precio_final_sin_iva: finalWithoutTax,
+    margen_base: number_(data.margen_base) || 22, precio_aliado_iva: partnerWithTax,
+    precio_aliado_sin_iva: partnerWithoutTax, activo: true,
+  };
+  if (data.categoria === "kit") return upsert_(SHEET_NAMES.kits, { id: value.id, nombre: value.descripcion, modelo: value.modelo, componentes: String(data.componentes || ""), precio_final_iva: finalWithTax, precio_final_sin_iva: finalWithoutTax, margen_base: value.margen_base, precio_aliado_iva: partnerWithTax, precio_aliado_sin_iva: partnerWithoutTax, activo: true });
+  return upsert_(SHEET_NAMES.prices, value);
 }
 function saveSpecialist_(data) {
   require_(data, ["nombre"]);
@@ -206,6 +272,10 @@ function saveEvaluation_(data) {
   ["sales", "demos", "parts", "pilots", "information"].forEach(
     (key) => (values[key] = Math.max(0, Math.min(100, number_(data[key])))),
   );
+  values.demos_pequenas = Math.max(0, number_(data.demos_pequenas));
+  values.demos_grandes = Math.max(0, number_(data.demos_grandes));
+  values.certificados_dji = Math.max(0, number_(data.certificados_dji));
+  values.certificacion_dji_obligatoria = String(data.certificacion_dji_obligatoria) === "true";
   return upsert_(SHEET_NAMES.evaluations, values, ["aliado_id", "periodo"]);
 }
 function savePolicy_(items) {
