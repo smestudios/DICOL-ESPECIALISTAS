@@ -24,3 +24,10 @@ El archivo completo para pegar está en [`appscript/Code.gs`](../appscript/Code.
 ## Integración pendiente del portal
 
 La interfaz actual persiste los datos en el navegador para permitir probar el diseño sin credenciales. Antes de producción se debe reemplazar esa persistencia por llamadas autenticadas a la URL `/exec` de Apps Script y restringir el despliegue. No se deben incluir credenciales en `rebates.js`.
+
+## Operación diaria en el tablero
+
+1. En **Gestionar especialistas**, agregue o elimine especialistas de DICOL. Para eliminar uno con aliados asignados, primero reasigne cada aliado.
+2. Use **Agregar aliado** para registrar una empresa aliada y asignarla al especialista DICOL responsable.
+3. Desde la ficha del aliado, use **Cambiar especialista** para reasignarlo sin perder su historial, notas ni evaluaciones.
+4. Ajuste los deslizadores de los indicadores y seleccione **Guardar evaluación**. La ficha recalcula de inmediato el porcentaje, nivel, rebate proyectado y los pendientes del trimestre seleccionado.
