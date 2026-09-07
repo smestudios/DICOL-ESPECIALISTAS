@@ -53,6 +53,26 @@
   border-radius: 7px;
   background: #0e1711;
 }
+.connection-status {
+  max-width: 220px;
+  margin: 3px 0 0;
+  color: #9da8a0;
+  font-size: 11px;
+  line-height: 1.35;
+  text-align: right;
+}
+.connection-status--error {
+  color: #ff9f8f;
+}
+.evaluation-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 14px 0; }
+.evaluation-summary label { color: #aab3ad; font-size: 12px; }
+.evaluation-summary input { display: block; box-sizing: border-box; width: 100%; margin-top: 5px; padding: 9px; border: 1px solid var(--line); border-radius: 6px; background: #0e1711; color: #fff; }
+.evaluation-justification { display: block; margin: 12px 0; color: #aab3ad; font-size: 12px; }
+.evaluation-justification textarea { display: block; box-sizing: border-box; width: 100%; margin-top: 5px; padding: 9px; border: 1px solid var(--line); border-radius: 6px; background: #0e1711; color: #fff; resize: vertical; }
+.info-tooltip { position: relative; display: inline-grid; width: 15px; height: 15px; margin-left: 3px; place-items: center; border: 1px solid var(--green); border-radius: 50%; color: var(--green); font-size: 10px; font-weight: 700; font-style: normal; cursor: help; }
+.info-tooltip > span { position: absolute; z-index: 4; bottom: calc(100% + 8px); left: 50%; display: none; width: 230px; padding: 9px; transform: translateX(-50%); border: 1px solid #4b6352; border-radius: 7px; background: #101a12; color: #fff; font-size: 11px; font-weight: 400; line-height: 1.4; text-align: left; }
+.info-tooltip:hover > span, .info-tooltip:focus > span { display: block; }
+.rebate-button:disabled { cursor: wait; opacity: .6; }
 .rebate-button {
   padding: 10px 14px;
   border: 1px solid #ffffff4d;
@@ -69,6 +89,25 @@
   background: var(--green);
   color: #000;
 }
+.commercial-overview { margin: 20px 0; padding: 22px; border: 1px solid #2a7048; border-radius: 14px; background: linear-gradient(135deg, #0a2213, #0a0e0b); }
+.commercial-overview__heading { display: flex; justify-content: space-between; gap: 20px; align-items: end; }
+.commercial-overview__heading h3 { margin: 4px 0 0; font-size: 22px; }
+.commercial-overview__heading > p { margin: 0; color: #c7d1ca; font-size: 13px; }
+.commercial-metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 18px 0; }
+.commercial-metrics article { padding: 14px; border: 1px solid #335540; background: #0c1510; }
+.commercial-metrics span, .commercial-metrics small { display: block; color: #aab3ad; font-size: 11px; }
+.commercial-metrics strong { display: block; margin: 7px 0; color: var(--green); font-size: 25px; }
+.commercial-kpis { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+.commercial-kpi { color: #c7d1ca; font-size: 11px; }
+.commercial-kpi > span { display: block; min-height: 30px; }
+.commercial-kpi > div { height: 7px; overflow: hidden; border-radius: 9px; background: #26302a; }
+.commercial-kpi i { display: block; height: 100%; background: var(--green); }
+.commercial-kpi b { display: inline-block; margin: 5px 4px 0 0; color: #fff; }
+.commercial-kpi small { color: #8e9b92; }
+.commercial-charts { display: grid; grid-template-columns: 2fr 1fr; gap: 15px; margin-top: 18px; }
+.commercial-charts section { min-height: 100px; padding: 14px; border: 1px solid #335540; background: #0c1510; }
+.commercial-charts h4 { margin: 0 0 12px; font-size: 13px; }.commercial-charts p { color: #aab3ad; font-size: 11px; }
+.model-sales > div { display: grid; grid-template-columns: 120px 1fr 35px; gap: 8px; align-items: center; margin: 7px 0; font-size: 11px; }.model-sales span { display: block; height: 9px; background: var(--green); }.model-sales small { text-align: right; }
 .summary-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -518,9 +557,12 @@ dialog textarea {
     align-items: flex-start;
   }
   .summary-grid,
-  .score-grid {
+  .score-grid,
+  .commercial-metrics,
+  .commercial-kpis {
     grid-template-columns: repeat(2, 1fr);
   }
+  .commercial-charts { grid-template-columns: 1fr; }
   .specialist-cards {
     grid-template-columns: repeat(2, 1fr);
   }
@@ -540,13 +582,17 @@ dialog textarea {
   }
   .summary-grid,
   .score-grid,
+  .commercial-metrics,
+  .commercial-kpis,
+  .commercial-charts,
   .specialist-cards,
   .indicator-grid,
   .insight-grid {
     grid-template-columns: 1fr;
   }
   .section-heading,
-  .detail-header {
+  .detail-header,
+  .commercial-overview__heading {
     display: block;
   }
   .section-heading > p {

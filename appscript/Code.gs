@@ -16,6 +16,9 @@ const SHEET_NAMES = {
   partners: "Aliados",
   evaluations: "Evaluaciones",
   policy: "Politica",
+  prices: "Precios",
+  kits: "Kits",
+  sales: "Ventas",
 };
 const HEADERS = {
   specialists: ["id", "nombre", "zona", "activo", "creado_en"],
@@ -31,6 +34,11 @@ const HEADERS = {
   evaluations: [
     "aliado_id",
     "periodo",
+    "resultado_ventas",
+    "rebate_calculado",
+    "rebate_aplicado",
+    "diferencia",
+    "justificacion",
     "sales",
     "demos",
     "parts",
@@ -39,6 +47,9 @@ const HEADERS = {
     "actualizado_en",
   ],
   policy: ["tipo", "clave", "nombre", "valor", "meta"],
+  prices: ["id", "descripcion", "categoria", "modelo", "msrp_iva", "msrp_sin_iva", "margen_base", "precio_aliado_iva", "precio_aliado_sin_iva", "activo"],
+  kits: ["id", "nombre", "modelo", "componentes", "margen_base", "precio_aliado_iva", "precio_aliado_sin_iva", "activo"],
+  sales: ["id", "aliado_id", "periodo", "fecha", "item_id", "tipo", "modelo", "cantidad", "precio_unitario_iva", "total_iva", "creado_en"],
 };
 const DEFAULT_POLICY = [
   ["indicador", "sales", "PSI / ventas", 50, 100],
@@ -91,6 +102,8 @@ function dispatch_(request) {
       return saveEvaluation_(data);
     case "savePolicy":
       return savePolicy_(data);
+    case "saveSale":
+      return saveSale_(data);
     case "deletePartner":
       return archivePartner_(request.id);
     case "deleteSpecialist":
@@ -107,6 +120,9 @@ function getData_() {
     (row) => row.activo !== "false",
   );
   const evaluations = rows_(SHEET_NAMES.evaluations);
+  const prices = rows_(SHEET_NAMES.prices).filter((row) => row.activo !== "false");
+  const kits = rows_(SHEET_NAMES.kits).filter((row) => row.activo !== "false");
+  const sales = rows_(SHEET_NAMES.sales);
   const policy = { tiers: [] };
   rows_(SHEET_NAMES.policy).forEach((row) => {
     if (row.tipo === "nivel")
@@ -132,28 +148,45 @@ function getData_() {
         .reduce((all, item) => ((all[item.periodo] = item), all), {}),
     })),
     policy,
+    prices,
+    kits,
+    sales,
   };
+}
+function saveSale_(data) {
+  require_(data, ["aliado_id", "periodo", "item_id", "cantidad"]);
+  if (!/^Q[1-4]$/.test(data.periodo)) throw new Error("El periodo debe ser Q1, Q2, Q3 o Q4.");
+  const item = rows_(SHEET_NAMES.prices).concat(rows_(SHEET_NAMES.kits)).find((row) => row.id === data.item_id && row.activo !== "false");
+  if (!item) throw new Error("El producto o kit seleccionado no existe o está inactivo.");
+  const quantity = number_(data.cantidad);
+  if (quantity <= 0) throw new Error("La cantidad debe ser mayor que cero.");
+  const unitPrice = number_(item.precio_aliado_iva);
+  return upsert_(SHEET_NAMES.sales, {
+    id: data.id || Utilities.getUuid(), aliado_id: data.aliado_id, periodo: data.periodo,
+    fecha: data.fecha || new Date().toISOString().slice(0, 10), item_id: item.id,
+    tipo: item.categoria || "kit", modelo: item.modelo || item.nombre, cantidad: quantity,
+    precio_unitario_iva: unitPrice, total_iva: quantity * unitPrice, creado_en: new Date().toISOString(),
+  });
 }
 function saveSpecialist_(data) {
   require_(data, ["nombre"]);
-  return upsert_(SHEET_NAMES.specialists, {
-    id: data.id || Utilities.getUuid(),
-    nombre: data.nombre,
-    zona: data.zona || "",
-    activo: true,
-    creado_en: data.creado_en || new Date().toISOString(),
+  return withLock_(function () {
+    assertUniqueName_(SHEET_NAMES.specialists, data.nombre, data.id, "especialista");
+    return upsert_(SHEET_NAMES.specialists, {
+      id: data.id || Utilities.getUuid(), nombre: data.nombre, zona: data.zona || "",
+      activo: true, creado_en: data.creado_en || new Date().toISOString(),
+    });
   });
 }
 function savePartner_(data) {
   require_(data, ["nombre", "especialista_id"]);
-  return upsert_(SHEET_NAMES.partners, {
-    id: data.id || Utilities.getUuid(),
-    nombre: data.nombre,
-    especialista_id: data.especialista_id,
-    zona: data.zona || "",
-    notas: data.notas || "",
-    activo: true,
-    creado_en: data.creado_en || new Date().toISOString(),
+  return withLock_(function () {
+    assertUniqueName_(SHEET_NAMES.partners, data.nombre, data.id, "aliado");
+    return upsert_(SHEET_NAMES.partners, {
+      id: data.id || Utilities.getUuid(), nombre: data.nombre,
+      especialista_id: data.especialista_id, zona: data.zona || "", notas: data.notas || "",
+      activo: true, creado_en: data.creado_en || new Date().toISOString(),
+    });
   });
 }
 function saveEvaluation_(data) {
@@ -165,6 +198,11 @@ function saveEvaluation_(data) {
     periodo: data.periodo,
     actualizado_en: new Date().toISOString(),
   };
+  values.resultado_ventas = Math.max(0, number_(data.resultado_ventas));
+  values.rebate_calculado = Math.max(0, number_(data.rebate_calculado));
+  values.rebate_aplicado = Math.max(0, number_(data.rebate_aplicado));
+  values.diferencia = values.rebate_aplicado - values.rebate_calculado;
+  values.justificacion = String(data.justificacion || "").trim();
   ["sales", "demos", "parts", "pilots", "information"].forEach(
     (key) => (values[key] = Math.max(0, Math.min(100, number_(data[key])))),
   );
@@ -244,7 +282,28 @@ function ensureSheet_(spreadsheet, name, headers) {
     sheet.setFrozenRows(1);
     sheet.getRange(1, 1, 1, headers.length).setFontWeight("bold");
   }
+  ensureHeaders_(sheet, headers);
   return sheet;
+}
+function ensureHeaders_(sheet, headers) {
+  const current = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const missing = headers.filter((header) => current.indexOf(header) === -1);
+  if (missing.length) {
+    sheet.getRange(1, current.length + 1, 1, missing.length).setValues([missing]);
+    sheet.getRange(1, 1, 1, current.length + missing.length).setFontWeight("bold");
+  }
+}
+function assertUniqueName_(sheetName, name, id, label) {
+  const normalized = String(name).trim().toUpperCase();
+  const exists = rows_(sheetName).some(
+    (row) => row.activo !== "false" && row.id !== id && String(row.nombre).trim().toUpperCase() === normalized,
+  );
+  if (exists) throw new Error(`Ya existe un ${label} activo con ese nombre.`);
+}
+function withLock_(callback) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try { return callback(); } finally { lock.releaseLock(); }
 }
 function sheet_(name) {
   const sheet = SpreadsheetApp.getActive().getSheetByName(name);

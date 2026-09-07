@@ -50,6 +50,9 @@
           ><button class="rebate-button" id="specialistButton">
             Gestionar especialistas
           </button>
+          <p id="connectionStatus" class="connection-status" role="status">
+            Conectando con Google Sheets…
+          </p>
         </div>
       </section>
       <section class="summary-grid" aria-live="polite">
@@ -136,6 +139,27 @@
                   </button>
                 </div>
               </div>
+              <section class="commercial-overview" aria-label="Resumen comercial del aliado">
+                <div class="commercial-overview__heading">
+                  <div>
+                    <p class="eyebrow">PULSO COMERCIAL · <span id="commercialQuarter">Q1</span></p>
+                    <h3>Resumen para la gestión del aliado</h3>
+                  </div>
+                  <div><p id="commercialStatus"></p><button id="newSaleButton" class="rebate-button" type="button">+ Registrar venta</button></div>
+                </div>
+                <div class="commercial-metrics">
+                  <article><span>Evaluación</span><strong id="commercialScore">0%</strong><small>cumplimiento ponderado</small></article>
+                  <article><span>Facturación</span><strong id="commercialBilling">$0</strong><small>ventas registradas con IVA</small></article>
+                  <article><span>Rebate calculado</span><strong id="commercialCalculated">0%</strong><small>según política vigente</small></article>
+                  <article><span>Rebate aplicado</span><strong id="commercialApplied">0%</strong><small>aprobado / aplicado</small></article>
+                  <article><span>Resultado ventas</span><strong id="commercialSales">0</strong><small>unidades o ventas calificadas</small></article>
+                  <article><span>Demos totales</span><strong id="commercialDemos">0%</strong><small>cumplimiento registrado</small></article>
+                  <article><span>Refacciones</span><strong id="commercialParts">$0</strong><small>compra registrada con IVA</small></article>
+                  <article><span>Indicadores al día</span><strong id="commercialIndicators">0/0</strong><small>con meta cumplida</small></article>
+                </div>
+                <div id="commercialKpis" class="commercial-kpis"></div>
+                <div class="commercial-charts"><section><h4>Ventas por modelo (unidades)</h4><div id="modelSales" class="model-sales"></div></section><section><h4>Compra de refacciones (COP)</h4><strong id="commercialPartsChart">$0</strong><p>Se calcula desde las ventas registradas como refacción.</p></section></div>
+              </section>
               <div class="score-grid">
                 <article class="score-card">
                   <p>Resultado trimestral</p>
@@ -168,13 +192,19 @@
                     <p class="eyebrow">CUMPLIMIENTO DEL ALIADO</p>
                     <h3>Indicadores y evidencias</h3>
                   </div>
-                  <button
-                    class="rebate-button rebate-button--primary"
-                    id="saveIndicatorsButton"
-                  >
-                    Guardar evaluación
+                  <button class="rebate-button" id="editEvaluationButton">
+                    Editar evaluación
+                  </button>
+                  <button class="rebate-button rebate-button--primary" id="saveIndicatorsButton" data-save-action="saveEvaluation" hidden>
+                    Guardar cambios
                   </button>
                 </div>
+                <div class="evaluation-summary">
+                  <label>Resultado de ventas <span class="info-tooltip" tabindex="0">i<span>Ingrese la cantidad de equipos o ventas que califican para rebate en el trimestre seleccionado. Use el reporte comercial o las facturas aprobadas.</span></span><input id="salesResultInput" type="number" min="0" step="1" disabled /></label>
+                  <label>% rebate calculado <span class="info-tooltip" tabindex="0">i<span>Porcentaje ganado según la política vigente, el tipo de venta y los soportes validados. Ejemplo: 5 para 5%.</span></span><input id="calculatedRebateInput" type="number" min="0" max="100" step="0.01" disabled /></label>
+                  <label>% rebate aplicado <span class="info-tooltip" tabindex="0">i<span>Porcentaje que efectivamente se aplicó o aprobó. Normalmente se registra después de validar soportes y condiciones comerciales.</span></span><input id="appliedRebateInput" type="number" min="0" max="100" step="0.01" disabled /></label>
+                </div>
+                <label class="evaluation-justification">Justificación y soportes <span class="info-tooltip" tabindex="0">i<span>Indique cotizaciones, facturas, evidencias de demostración, documentos pendientes, excepciones de margen y cualquier motivo que sustente el resultado.</span></span><textarea id="evaluationJustification" rows="4" disabled placeholder="Ej.: COT3434 · T100 · factura validada; evidencia de demo adjunta."></textarea></label>
                 <p id="policyNote" class="policy-note"></p>
                 <div id="indicatorGrid" class="indicator-grid"></div>
               </section>
@@ -201,21 +231,21 @@
           <button type="button" data-close="partnerDialog">×</button>
         </div>
         <input id="partnerId" type="hidden" /><label
-          >Empresa aliada<input
+          >Empresa aliada <span class="info-tooltip" tabindex="0">i<span>Nombre comercial único del aliado. No se permiten duplicados.</span></span><input
             id="partnerName"
             required
             placeholder="Nombre de la empresa" /></label
         ><label
-          >Especialista DICOL responsable<select
+          >Especialista DICOL responsable <span class="info-tooltip" tabindex="0">i<span>Persona DICOL que administra el seguimiento y los soportes del aliado.</span></span><select
             id="partnerSpecialist"
             required
           ></select></label
         ><label
-          >Ciudad / zona<input
+          >Ciudad / zona <span class="info-tooltip" tabindex="0">i<span>Ubicación comercial o zona asignada para facilitar filtros y seguimiento.</span></span><input
             id="partnerZone"
             placeholder="Ej. Bogotá" /></label
         ><label
-          >Información y notas<textarea
+          >Información y notas <span class="info-tooltip" tabindex="0">i<span>Contexto permanente del aliado. Para soportes de un trimestre use Justificación y soportes en la evaluación.</span></span><textarea
             id="partnerNotes"
             rows="3"
             placeholder="Compromisos, contexto o novedades"
@@ -228,12 +258,13 @@
             data-close="partnerDialog"
           >
             Cancelar</button
-          ><button class="rebate-button rebate-button--primary" type="submit">
+          ><button id="partnerSubmitButton" class="rebate-button rebate-button--primary" type="submit" data-save-action="savePartner">
             Guardar aliado
           </button>
         </div>
       </form>
     </dialog>
+    <dialog id="saleDialog"><form id="saleForm"><div class="dialog-heading"><h2>Registrar venta</h2><button type="button" data-close="saleDialog">×</button></div><p class="dialog-help">El precio se toma de la hoja Precios o Kits; no se digita manualmente.</p><label>Producto o kit<select id="saleItem" required></select></label><label>Fecha<input id="saleDate" type="date" required /></label><label>Cantidad<input id="saleQuantity" type="number" min="1" step="1" required /></label><div class="dialog-actions"><button class="rebate-button" type="button" data-close="saleDialog">Cancelar</button><button class="rebate-button rebate-button--primary" type="submit" data-save-action="saveSale">Registrar venta</button></div></form></dialog>
     <dialog id="specialistDialog">
       <div class="dialog-heading">
         <h2>Especialistas DICOL</h2>
@@ -252,6 +283,7 @@
         /><input id="specialistZone" placeholder="Zona" /><button
           class="rebate-button rebate-button--primary"
           type="submit"
+          data-save-action="saveSpecialist"
         >
           Agregar
         </button>
@@ -271,7 +303,7 @@
         <div class="dialog-actions">
           <button class="rebate-button" type="button" data-close="policyDialog">
             Cancelar</button
-          ><button class="rebate-button rebate-button--primary" type="submit">
+          ><button class="rebate-button rebate-button--primary" type="submit" data-save-action="savePolicy">
             Aplicar política
           </button>
         </div>
