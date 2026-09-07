@@ -1,18 +1,26 @@
-# Módulo de rebates
+# Control de rebates DICOL
 
-La interfaz está en `rebates.html`. Esta primera versión permite crear aliados y especialistas, editar el contexto comercial de cada aliado y registrar el cumplimiento para Q1–Q4. Los datos permanecen en el navegador mientras se prepara la conexión con Google Sheets.
+## Responsables y lectura del tablero
 
-## Política activa
+- **DICOL es la importadora.** Sus especialistas son responsables de acompañar a los aliados asignados, registrar el avance y hacer seguimiento de los compromisos.
+- **Los aliados son empresas.** Cada ficha individual muestra solamente sus resultados, los indicadores pendientes y una conclusión que puede usarse durante la reunión con ese aliado.
+- **DICOL** puede consultar el resumen general y las tarjetas por especialista. Estas tarjetas consolidan cuántos aliados tiene cada persona, el cumplimiento promedio y cuántos necesitan gestión.
 
-La ponderación inicial usada en la vista es PSI/ventas 50%, demostraciones 20%, repuestos 10%, pilotos certificados 10% e información/soportes 10%. La escala es A (80% o más, 5%), B (60% o más, 3%) y C (menos de 60%, 0%). La política se puede revisar desde **Política y metas**; debe validarse contra el boletín vigente antes de liquidar un rebate.
+La evaluación inicial pondera PSI/ventas 50 %, demostraciones 20 %, repuestos 10 %, pilotos certificados 10 % e información/soportes 10 %. El nivel A empieza en 80 % y proyecta 5 %; B empieza en 60 % y proyecta 3 %; C proyecta 0 %. Los pesos son configurables desde **Política vigente**, pero se deben contrastar con el boletín de políticas vigente antes de modificar o liquidar un rebate.
 
-El cálculo es solo un indicador de seguimiento. La pantalla recalca que el rebate se liquida en el trimestre siguiente y que deben validarse soportes y demás condiciones de la política. Esto evita convertir el reporte en una aprobación automática.
+> El resultado del tablero es una herramienta de seguimiento. Nunca aprueba por sí solo un pago: el rebate se revisa para el trimestre siguiente y exige validar la política, los soportes y las condiciones comerciales aplicables.
 
-## Google Apps Script
+## Código de Google Apps Script
 
-1. Cree una hoja de cálculo de Google destinada al proceso y abra **Extensiones → Apps Script**.
-2. Pegue `appscript/Code.gs`, guarde y ejecute `setup()` una sola vez.
-3. Implemente como **Aplicación web**, con los usuarios y permisos definidos por DICOL.
-4. La API expone los recursos de especialistas, aliados, evaluaciones y política. No publique la URL sin controles de acceso.
+El archivo completo para pegar está en [`appscript/Code.gs`](../appscript/Code.gs). Para instalarlo:
 
-Cuando se habilite la conexión, el frontend debe enviar JSON con `action` a la URL de la aplicación web: `getData`, `saveSpecialist`, `savePartner`, `saveEvaluation`, `setPolicy` o `deletePartner`.
+1. Cree la hoja de cálculo que será la base de datos de rebates y abra **Extensiones → Apps Script**.
+2. Reemplace el contenido por `Code.gs`, guarde y ejecute `setup()` una vez. Esto crea las pestañas **Especialistas**, **Aliados**, **Evaluaciones** y **Politica** con sus encabezados.
+3. Use **Implementar → Nueva implementación → Aplicación web**. Ejecútela como la cuenta de DICOL y limite el acceso a los usuarios autorizados por DICOL. Copie la URL terminada en `/exec`.
+4. La API recibe JSON con una propiedad `action`: `getData`, `saveSpecialist`, `savePartner`, `saveEvaluation`, `savePolicy`, `deletePartner` o `deleteSpecialist`.
+
+`getPartnerSummary(partnerId, period)` también se puede ejecutar desde el editor para verificar el cálculo de una ficha. El código valida los periodos Q1–Q4, limita cada indicador entre 0 % y 100 %, evita eliminar un especialista mientras conserve aliados activos y conserva un historial lógico mediante archivo (`activo=false`).
+
+## Integración pendiente del portal
+
+La interfaz actual persiste los datos en el navegador para permitir probar el diseño sin credenciales. Antes de producción se debe reemplazar esa persistencia por llamadas autenticadas a la URL `/exec` de Apps Script y restringir el despliegue. No se deben incluir credenciales en `rebates.js`.
