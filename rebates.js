@@ -54,6 +54,7 @@ function normalizeData(data) {
     prices: data.prices || [],
     kits: data.kits || [],
     sales: data.sales || [],
+    parameters: data.parameters || [],
   };
 }
 async function api(action, data, id) {
@@ -100,7 +101,7 @@ async function persist(action, data, id) {
   }
 }
 function evaluation(partner, period = q()) {
-  const values = partner.quarters[period] || {};
+  const values = { ...(partner.quarters[period] || {}), ...calculatedCompliance(partner, period) };
   const score = Math.round(
     Object.entries(state.policy)
       .filter(([key]) => key !== "tiers")
@@ -117,6 +118,21 @@ function evaluation(partner, period = q()) {
       state.policy.tiers.find((tier) => score >= tier.min) ||
       state.policy.tiers.at(-1),
   };
+}
+function parametersFor(period = q()) { return state.parameters.filter((item) => item.periodo === period); }
+function parameter(key, period = q()) { return parametersFor(period).find((item) => item.clave === key); }
+function calculatedCompliance(partner, period = q()) {
+  const raw = partner.quarters[period] || {};
+  const rows = state.sales.filter((sale) => sale.aliado_id === partner.id && sale.periodo === period);
+  const equipment = rows.filter((sale) => sale.tipo === "dron" || sale.tipo === "equipo" || sale.tipo === "kit");
+  const parts = rows.filter((sale) => sale.tipo === "refaccion");
+  const equipmentTotal = equipment.reduce((sum, sale) => sum + Number(sale.total_iva || 0), 0);
+  const partsTotal = parts.reduce((sum, sale) => sum + Number(sale.total_iva || 0), 0);
+  const equipmentUnits = equipment.reduce((sum, sale) => sum + Number(sale.cantidad || 0), 0);
+  const ratio = equipmentTotal ? (partsTotal / equipmentTotal) * 100 : 0;
+  const percent = (actual, key) => { const target = Number(parameter(key, period)?.meta || 0); return target ? Math.min(100, (actual / target) * 100) : Number(raw[key] || 0); };
+  const demos = Math.min(percent(Number(raw.demos_pequenas || 0), "demos_pequenas"), percent(Number(raw.demos_grandes || 0), "demos_grandes"));
+  return { sales: percent(equipmentUnits, "ventas_equipos"), demos, parts: percent(ratio, "porcentaje_refacciones"), pilots: percent(Number(raw.certificados_dji || 0), "certificados_dji"), equipmentUnits, equipmentTotal, partsTotal, partsRatio: ratio };
 }
 function allEvaluations() {
   return state.partners.map((partner) => ({ partner, ...evaluation(partner) }));
@@ -281,7 +297,7 @@ function renderCommercialOverview(result) {
   $("#commercialApplied").textContent = `${22 + applied}%`;
   $("#commercialSales").textContent = units;
   $("#commercialBilling").textContent = money(billing);
-  $("#commercialDemos").textContent = `${Number(result.values.demos || 0)}%`;
+  $("#commercialDemos").textContent = `${Math.round(Number(result.values.demos || 0))}%`;
   $("#commercialParts").textContent = money(parts);
   $("#commercialPartsChart").textContent = money(parts);
   $("#commercialIndicators").textContent = `${met}/${indicators.length}`;
@@ -325,14 +341,15 @@ function renderIndicators(result) {
 function renderRequirements(result) {
   const values = result.values;
   const requirements = [
-    { label: "Demos pequeñas", current: Number(values.demos_pequenas || 0), target: 3, required: true },
-    { label: "Demo grande", current: Number(values.demos_grandes || 0), target: 1, required: true },
-    { label: "Certificación DJI", current: Number(values.certificados_dji || 0), target: 1, required: false },
+    { label: "Demos pequeñas", current: Number(values.demos_pequenas || 0), target: Number(parameter("demos_pequenas")?.meta || 3), required: true },
+    { label: "Demo grande", current: Number(values.demos_grandes || 0), target: Number(parameter("demos_grandes")?.meta || 1), required: true },
+    { label: "Certificación DJI", current: Number(values.certificados_dji || 0), target: Number(parameter("certificados_dji")?.meta || 1), required: false },
+    { label: "Refacciones", current: Number(values.partsRatio || 0), target: Number(parameter("porcentaje_refacciones")?.meta || 8), required: true, suffix: "%" },
   ];
   $("#requirementsProgress").innerHTML = requirements.map((item) => {
     const complete = item.current >= item.target;
     const wording = complete ? "Cumplido" : `Faltan ${item.target - item.current}`;
-    return `<article class="requirement ${complete ? "requirement--complete" : ""}"><span>${item.required ? "Obligatorio" : "Recomendado"}</span><b>${esc(item.label)}</b><strong>${item.current}/${item.target}</strong><small>${wording}${item.required ? " para postular rebate" : " · aún no obligatorio"}</small></article>`;
+    return `<article class="requirement ${complete ? "requirement--complete" : ""}"><span>${item.required ? "Obligatorio" : "Recomendado"}</span><b>${esc(item.label)}</b><strong>${item.current.toFixed?.(item.suffix ? 1 : 0) || item.current}${item.suffix || ""}/${item.target}${item.suffix || ""}</strong><small>${wording}${item.required ? " para postular rebate" : " · aún no obligatorio"}</small></article>`;
   }).join("");
 }
 function renderTrend(partner) {
@@ -461,9 +478,27 @@ $("#catalogForm").onsubmit = (event) => {
     renderCatalog();
   });
 };
+function parameterRow(item = {}) {
+  return `<div class="parameter-row" data-parameter-id="${esc(item.id || "")}"><input data-field="nombre" value="${esc(item.nombre || "Nuevo parámetro")}" required><input data-field="clave" value="${esc(item.clave || "nueva_meta")}" required><input data-field="meta" type="number" min="0" step="0.01" value="${esc(item.meta || 0)}" required><select data-field="unidad"><option ${item.unidad === "unidades" ? "selected" : ""}>unidades</option><option ${item.unidad === "eventos" ? "selected" : ""}>eventos</option><option ${item.unidad === "personas" ? "selected" : ""}>personas</option><option ${item.unidad === "%" ? "selected" : ""}>%</option></select><label><input data-field="obligatorio" type="checkbox" ${String(item.obligatorio) !== "false" ? "checked" : ""}> Obligatorio</label><button class="text-danger" data-delete-parameter="${esc(item.id || "")}" type="button">Eliminar</button></div>`;
+}
+function renderParameters() {
+  $("#parametersList").innerHTML = parametersFor().map(parameterRow).join("") || parameterRow();
+  document.querySelectorAll("[data-delete-parameter]").forEach((button) => button.onclick = () => {
+    if (!button.dataset.deleteParameter) return button.closest(".parameter-row").remove();
+    persist("deleteParameter", undefined, button.dataset.deleteParameter).then((saved) => saved && renderParameters());
+  });
+}
+$("#parametersButton").onclick = () => { renderParameters(); $("#parametersDialog").showModal(); };
+$("#addParameterButton").onclick = () => $("#parametersList").insertAdjacentHTML("beforeend", parameterRow());
+$("#parametersForm").onsubmit = (event) => {
+  event.preventDefault();
+  const items = [...document.querySelectorAll(".parameter-row")].map((row) => ({ id: row.dataset.parameterId, periodo: q(), nombre: row.querySelector('[data-field="nombre"]').value.trim(), clave: row.querySelector('[data-field="clave"]').value.trim(), meta: row.querySelector('[data-field="meta"]').value, unidad: row.querySelector('[data-field="unidad"]').value, obligatorio: row.querySelector('[data-field="obligatorio"]').checked }));
+  persist("saveParameters", items).then((saved) => { if (saved) $("#parametersDialog").close(); });
+};
 function makePdf(lines) {
   const clean = (text) => String(text).normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^\x20-\x7e]/g, "?").replace(/[\\()]/g, "\\$&");
-  const content = lines.map((line, index) => `BT /F1 ${index === 0 ? 18 : 10} Tf 45 ${790 - index * 18} Td (${clean(line)}) Tj ET`).join("\n");
+  const text = (value, x, y, size = 10, color = "0.12 0.16 0.14") => `${color} rg BT /F1 ${size} Tf ${x} ${y} Td (${clean(value)}) Tj ET`;
+  const content = ["0.04 0.12 0.07 rg 0 760 612 82 re f", text("DICOL  |  CONTROL COMERCIAL", 42, 812, 11, "0.55 0.95 0.66"), text(lines[0], 42, 785, 20, "1 1 1"), text(lines[1], 42, 768, 9, "0.8 0.9 0.83"), "0.93 0.96 0.94 rg 32 640 548 94 re f", text(lines[2], 48, 710, 12), text(lines[3], 48, 685, 12, "0.02 0.42 0.16"), text(lines[4], 48, 660, 11), "0.06 0.14 0.09 rg 32 604 548 25 re f", text("REQUISITOS Y FALTANTES", 45, 612, 10, "1 1 1"), ...lines.slice(5).map((line, index) => text(line, 45, 580 - index * 19, index === 5 ? 11 : 9, index === 7 ? "0.72 0.35 0.12" : "0.12 0.16 0.14"))].join("\n");
   const objects = ["<< /Type /Catalog /Pages 2 0 R >>", "<< /Type /Pages /Kids [3 0 R] /Count 1 >>", "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>", "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>", `<< /Length ${content.length} >>\nstream\n${content}\nendstream`];
   let pdf = "%PDF-1.4\n";
   const offsets = [0];

@@ -10,6 +10,10 @@ La evaluación inicial pondera PSI/ventas 50 %, demostraciones 20 %, repuestos 1
 
 Además de la evaluación ponderada, el tablero muestra los requisitos operativos: **3 demostraciones pequeñas y 1 demostración grande** con soportes. Se registra también la certificación DJI de al menos una persona del equipo de ventas; por ahora se muestra como recomendación y no bloquea el rebate. El botón **Descargar resumen PDF** genera una ficha descargable con avances, faltantes, compras del trimestre e información de soportes.
 
+## Parámetros trimestrales y cálculo automático
+
+Use **Parámetros del Q** para crear, editar o archivar las metas de cada trimestre. La configuración inicial incluye ventas de equipos/kits, demostraciones pequeñas y grandes, certificaciones DJI Academy y el porcentaje de refacciones. El tablero calcula las ventas desde las compras registradas: los artículos `dron` y `kit` cuentan como equipos; los artículos `refaccion` se comparan contra el valor de equipos. La meta inicial exige que las refacciones representen al menos **8 %** de las compras de equipos. No registre estos porcentajes manualmente: se recalculan con el catálogo y las ventas del aliado.
+
 > El resultado del tablero es una herramienta de seguimiento. Nunca aprueba por sí solo un pago: el rebate se revisa para el trimestre siguiente y exige validar la política, los soportes y las condiciones comerciales aplicables.
 
 ## Código de Google Apps Script
