@@ -70,9 +70,9 @@ const DEFAULT_POLICY = [
   ["indicador", "parts", "Repuestos", 10, 100],
   ["indicador", "pilots", "Pilotos certificados", 10, 100],
   ["indicador", "information", "Información y soportes", 10, 100],
-  ["nivel", "A", "Nivel A", 10, 80],
-  ["nivel", "B", "Nivel B", 5, 60],
-  ["nivel", "C", "Nivel C", 3, 0],
+  ["nivel", "A", "Nivel A", 5, 80],
+  ["nivel", "B", "Nivel B", 3, 60],
+  ["nivel", "C", "Nivel C", 0, 0],
 ];
 
 function setup() {
