@@ -44,10 +44,14 @@ const HEADERS = {
     "parts",
     "pilots",
     "information",
+    "demos_pequenas",
+    "demos_grandes",
+    "certificados_dji",
+    "certificacion_dji_obligatoria",
     "actualizado_en",
   ],
   policy: ["tipo", "clave", "nombre", "valor", "meta"],
-  prices: ["id", "descripcion", "categoria", "modelo", "msrp_iva", "msrp_sin_iva", "margen_base", "precio_aliado_iva", "precio_aliado_sin_iva", "activo"],
+  prices: ["id", "descripcion", "categoria", "modelo", "precio_final_iva", "precio_final_sin_iva", "margen_base", "precio_aliado_iva", "precio_aliado_sin_iva", "activo"],
   kits: ["id", "nombre", "modelo", "componentes", "margen_base", "precio_aliado_iva", "precio_aliado_sin_iva", "activo"],
   sales: ["id", "aliado_id", "periodo", "fecha", "item_id", "tipo", "modelo", "cantidad", "precio_unitario_iva", "total_iva", "creado_en"],
 };
@@ -57,9 +61,9 @@ const DEFAULT_POLICY = [
   ["indicador", "parts", "Repuestos", 10, 100],
   ["indicador", "pilots", "Pilotos certificados", 10, 100],
   ["indicador", "information", "Información y soportes", 10, 100],
-  ["nivel", "A", "Nivel A", 5, 80],
-  ["nivel", "B", "Nivel B", 3, 60],
-  ["nivel", "C", "Nivel C", 0, 0],
+  ["nivel", "A", "Nivel A", 10, 80],
+  ["nivel", "B", "Nivel B", 5, 60],
+  ["nivel", "C", "Nivel C", 3, 0],
 ];
 
 function setup() {
@@ -104,6 +108,8 @@ function dispatch_(request) {
       return savePolicy_(data);
     case "saveSale":
       return saveSale_(data);
+    case "savePrice":
+      return savePrice_(data);
     case "deletePartner":
       return archivePartner_(request.id);
     case "deleteSpecialist":
@@ -120,7 +126,14 @@ function getData_() {
     (row) => row.activo !== "false",
   );
   const evaluations = rows_(SHEET_NAMES.evaluations);
-  const prices = rows_(SHEET_NAMES.prices).filter((row) => row.activo !== "false");
+  const prices = rows_(SHEET_NAMES.prices)
+    .filter((row) => row.activo !== "false")
+    .map((row) => ({
+      ...row,
+      // Conserva los catálogos creados antes del cambio de encabezados.
+      precio_final_iva: row.precio_final_iva || row.msrp_iva || "",
+      precio_final_sin_iva: row.precio_final_sin_iva || row.msrp_sin_iva || "",
+    }));
   const kits = rows_(SHEET_NAMES.kits).filter((row) => row.activo !== "false");
   const sales = rows_(SHEET_NAMES.sales);
   const policy = { tiers: [] };
@@ -168,6 +181,22 @@ function saveSale_(data) {
     precio_unitario_iva: unitPrice, total_iva: quantity * unitPrice, creado_en: new Date().toISOString(),
   });
 }
+function savePrice_(data) {
+  require_(data, ["descripcion", "categoria", "modelo"]);
+  const finalWithTax = Math.max(0, number_(data.precio_final_iva));
+  const finalWithoutTax = Math.max(0, number_(data.precio_final_sin_iva));
+  const partnerWithTax = Math.max(0, number_(data.precio_aliado_iva));
+  const partnerWithoutTax = Math.max(0, number_(data.precio_aliado_sin_iva));
+  if (!finalWithTax || !partnerWithTax)
+    throw new Error("Registre los precios con IVA para cliente final y aliado.");
+  return upsert_(SHEET_NAMES.prices, {
+    id: data.id || Utilities.getUuid(), descripcion: String(data.descripcion).trim(),
+    categoria: data.categoria, modelo: String(data.modelo).trim(),
+    precio_final_iva: finalWithTax, precio_final_sin_iva: finalWithoutTax,
+    margen_base: number_(data.margen_base) || 22, precio_aliado_iva: partnerWithTax,
+    precio_aliado_sin_iva: partnerWithoutTax, activo: true,
+  });
+}
 function saveSpecialist_(data) {
   require_(data, ["nombre"]);
   return withLock_(function () {
@@ -206,6 +235,10 @@ function saveEvaluation_(data) {
   ["sales", "demos", "parts", "pilots", "information"].forEach(
     (key) => (values[key] = Math.max(0, Math.min(100, number_(data[key])))),
   );
+  values.demos_pequenas = Math.max(0, number_(data.demos_pequenas));
+  values.demos_grandes = Math.max(0, number_(data.demos_grandes));
+  values.certificados_dji = Math.max(0, number_(data.certificados_dji));
+  values.certificacion_dji_obligatoria = String(data.certificacion_dji_obligatoria) === "true";
   return upsert_(SHEET_NAMES.evaluations, values, ["aliado_id", "periodo"]);
 }
 function savePolicy_(items) {

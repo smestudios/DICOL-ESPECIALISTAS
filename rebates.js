@@ -8,9 +8,9 @@ const POLICY = {
   pilots: { label: "Pilotos certificados", weight: 10, target: 100 },
   information: { label: "Información y soportes", weight: 10, target: 100 },
   tiers: [
-    { name: "A", min: 80, rebate: 5 },
-    { name: "B", min: 60, rebate: 3 },
-    { name: "C", min: 0, rebate: 0 },
+    { name: "A", min: 80, rebate: 10 },
+    { name: "B", min: 60, rebate: 5 },
+    { name: "C", min: 0, rebate: 3 },
   ],
 };
 const emptyState = {
@@ -146,7 +146,7 @@ function renderSummary() {
   $("#partnerCountDetail").textContent =
     `${state.specialists.length} especialista(s) DICOL`;
   $("#averageScore").textContent = `${average}%`;
-  $("#projectedRebate").textContent = `${projected}%`;
+  $("#projectedRebate").textContent = `${(22 + Number(projected)).toFixed(1)}%`;
   $("#atRiskCount").textContent = results.filter((r) => r.score < 60).length;
 }
 function renderTabs() {
@@ -254,13 +254,14 @@ function renderPartnerDetail() {
       : result.score >= 60
         ? "Cumple el mínimo, pero tiene oportunidades para alcanzar el nivel A."
         : "No alcanza el mínimo trimestral; requiere un plan de acción con el especialista DICOL.";
-  $("#rebateValue").textContent = `${result.tier.rebate}%`;
-  $("#gradeName").textContent = `Clasificación ${result.tier.name}`;
+  $("#rebateValue").textContent = `${22 + Number(result.tier.rebate)}%`;
+  $("#gradeName").textContent = `Margen base 22% + rebate ${result.tier.rebate}% · Nivel ${result.tier.name}`;
   renderCommercialOverview(result);
   $("#policyNote").textContent = `Política activa: ${rules()
     .map((rule) => `${rule.label} ${rule.weight}%`)
     .join(" · ")}. Los valores son porcentajes de cumplimiento contra la meta.`;
   renderIndicators(result);
+  renderRequirements(result);
   renderTrend(partner);
   renderInsights(result);
 }
@@ -276,15 +277,15 @@ function renderCommercialOverview(result) {
   const applied = Number(result.values.rebate_aplicado || 0);
   $("#commercialQuarter").textContent = q();
   $("#commercialScore").textContent = `${result.score}%`;
-  $("#commercialCalculated").textContent = `${calculated}%`;
-  $("#commercialApplied").textContent = `${applied}%`;
+  $("#commercialCalculated").textContent = `${22 + calculated}%`;
+  $("#commercialApplied").textContent = `${22 + applied}%`;
   $("#commercialSales").textContent = units;
   $("#commercialBilling").textContent = money(billing);
   $("#commercialDemos").textContent = `${Number(result.values.demos || 0)}%`;
   $("#commercialParts").textContent = money(parts);
   $("#commercialPartsChart").textContent = money(parts);
   $("#commercialIndicators").textContent = `${met}/${indicators.length}`;
-  $("#commercialStatus").textContent = `Nivel ${result.tier.name} · Diferencia aplicada: ${(applied - calculated).toFixed(1)}%`;
+  $("#commercialStatus").textContent = `Nivel ${result.tier.name} · Margen 22% + rebate ${calculated}% · aplicado: ${(applied - calculated).toFixed(1)}% vs. calculado`;
   $("#commercialKpis").innerHTML = indicators.map((rule) => {
     const value = Number(result.values[rule.key] || 0);
     return `<div class="commercial-kpi"><span>${esc(rule.label)}</span><div><i style="width:${Math.min(100, value)}%"></i></div><b>${value}%</b><small>peso ${rule.weight}%</small></div>`;
@@ -301,8 +302,11 @@ function renderIndicators(result) {
   $("#salesResultInput").value = Number(result.values.resultado_ventas || 0);
   $("#calculatedRebateInput").value = Number(result.values.rebate_calculado || result.tier.rebate || 0);
   $("#appliedRebateInput").value = Number(result.values.rebate_aplicado || 0);
+  $("#smallDemosInput").value = Number(result.values.demos_pequenas || 0);
+  $("#largeDemosInput").value = Number(result.values.demos_grandes || 0);
+  $("#djiCertifiedInput").value = Number(result.values.certificados_dji || 0);
   $("#evaluationJustification").value = result.values.justificacion || "";
-  ["#salesResultInput", "#calculatedRebateInput", "#appliedRebateInput", "#evaluationJustification"].forEach((selector) => ($(selector).disabled = !editingEvaluation));
+  ["#salesResultInput", "#calculatedRebateInput", "#appliedRebateInput", "#smallDemosInput", "#largeDemosInput", "#djiCertifiedInput", "#evaluationJustification"].forEach((selector) => ($(selector).disabled = !editingEvaluation));
   $("#indicatorGrid").innerHTML = rules()
     .map((rule) => {
       const value = Number(result.values[rule.key] || 0);
@@ -317,6 +321,19 @@ function renderIndicators(result) {
         input.parentElement.querySelector("progress").value = input.value;
       }),
   );
+}
+function renderRequirements(result) {
+  const values = result.values;
+  const requirements = [
+    { label: "Demos pequeñas", current: Number(values.demos_pequenas || 0), target: 3, required: true },
+    { label: "Demo grande", current: Number(values.demos_grandes || 0), target: 1, required: true },
+    { label: "Certificación DJI", current: Number(values.certificados_dji || 0), target: 1, required: false },
+  ];
+  $("#requirementsProgress").innerHTML = requirements.map((item) => {
+    const complete = item.current >= item.target;
+    const wording = complete ? "Cumplido" : `Faltan ${item.target - item.current}`;
+    return `<article class="requirement ${complete ? "requirement--complete" : ""}"><span>${item.required ? "Obligatorio" : "Recomendado"}</span><b>${esc(item.label)}</b><strong>${item.current}/${item.target}</strong><small>${wording}${item.required ? " para postular rebate" : " · aún no obligatorio"}</small></article>`;
+  }).join("");
 }
 function renderTrend(partner) {
   $("#trendChart").innerHTML = ["Q1", "Q2", "Q3", "Q4"]
@@ -416,13 +433,79 @@ $("#specialistButton").onclick = () => {
   renderSpecialistManager();
   $("#specialistDialog").showModal();
 };
+function renderCatalog() {
+  const money = (value) => new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(value || 0);
+  $("#catalogList").innerHTML = state.prices.length
+    ? state.prices.map((item) => `<div class="catalog-row"><div><b>${esc(item.descripcion)}</b><small>${esc(item.modelo)} · ${esc(item.categoria)}</small></div><span>Final: ${money(item.precio_final_iva)}<br>Aliado: ${money(item.precio_aliado_iva)}</span></div>`).join("")
+    : '<p class="dialog-help">Aún no hay productos. Agregue el primero a continuación.</p>';
+}
+$("#catalogButton").onclick = () => {
+  $("#catalogForm").reset();
+  $("#catalogId").value = "";
+  $("#catalogMargin").value = 22;
+  renderCatalog();
+  $("#catalogDialog").showModal();
+};
+$("#catalogForm").onsubmit = (event) => {
+  event.preventDefault();
+  persist("savePrice", {
+    id: $("#catalogId").value || `pr-${Date.now()}`,
+    descripcion: $("#catalogDescription").value.trim(), modelo: $("#catalogModel").value.trim(),
+    categoria: $("#catalogCategory").value, precio_final_iva: $("#catalogFinalIva").value,
+    precio_final_sin_iva: $("#catalogFinalNoIva").value, precio_aliado_iva: $("#catalogPartnerIva").value,
+    precio_aliado_sin_iva: $("#catalogPartnerNoIva").value, margen_base: $("#catalogMargin").value,
+  }).then((saved) => {
+    if (!saved) return;
+    event.target.reset();
+    $("#catalogMargin").value = 22;
+    renderCatalog();
+  });
+};
+function makePdf(lines) {
+  const clean = (text) => String(text).normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^\x20-\x7e]/g, "?").replace(/[\\()]/g, "\\$&");
+  const content = lines.map((line, index) => `BT /F1 ${index === 0 ? 18 : 10} Tf 45 ${790 - index * 18} Td (${clean(line)}) Tj ET`).join("\n");
+  const objects = ["<< /Type /Catalog /Pages 2 0 R >>", "<< /Type /Pages /Kids [3 0 R] /Count 1 >>", "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>", "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>", `<< /Length ${content.length} >>\nstream\n${content}\nendstream`];
+  let pdf = "%PDF-1.4\n";
+  const offsets = [0];
+  objects.forEach((object, index) => { offsets.push(pdf.length); pdf += `${index + 1} 0 obj\n${object}\nendobj\n`; });
+  const xref = pdf.length;
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets.slice(1).map((offset) => `${String(offset).padStart(10, "0")} 00000 n \n`).join("")}trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+  return new Blob([pdf], { type: "application/pdf" });
+}
+$("#downloadSummaryButton").onclick = () => {
+  const partner = currentPartner();
+  if (!partner) return;
+  const result = evaluation(partner);
+  const values = result.values;
+  const missing = [
+    Number(values.demos_pequenas || 0) < 3 && `faltan ${3 - Number(values.demos_pequenas || 0)} demos pequenas`,
+    Number(values.demos_grandes || 0) < 1 && "falta 1 demo grande",
+    Number(values.certificados_dji || 0) < 1 && "se recomienda certificar 1 persona DJI",
+  ].filter(Boolean);
+  const lines = [
+    `DICOL | Resumen de rebate - ${partner.name}`, `Periodo: ${q()} | Especialista: ${partnerSpecialistName(partner)}`,
+    `Cumplimiento ponderado: ${result.score}% | Nivel: ${result.tier.name}`,
+    `Margen base: 22% | Rebate calculado: ${Number(values.rebate_calculado || result.tier.rebate)}% | Margen proyectado: ${22 + Number(values.rebate_calculado || result.tier.rebate)}%`,
+    `Ventas calificadas: ${Number(values.resultado_ventas || 0)} | Facturacion registrada: ${state.sales.filter((sale) => sale.aliado_id === partner.id && sale.periodo === q()).reduce((sum, sale) => sum + Number(sale.total_iva || 0), 0).toLocaleString("es-CO")} COP`,
+    `Demos pequenas: ${Number(values.demos_pequenas || 0)}/3 | Demos grandes: ${Number(values.demos_grandes || 0)}/1`,
+    `Certificados DJI: ${Number(values.certificados_dji || 0)}/1 (recomendado, aun no obligatorio)`,
+    `Pendientes: ${missing.length ? missing.join("; ") : "Requisitos operativos registrados. Validar soportes."}`,
+    "Indicadores de politica:", ...rules().map((rule) => `- ${rule.label}: ${Number(values[rule.key] || 0)}% (peso ${rule.weight}%)`),
+    `Soportes / justificacion: ${values.justificacion || "Sin registrar"}`,
+    "Este resumen es de seguimiento; no autoriza pagos. Validar politica vigente, facturas y evidencias antes de liquidar.",
+  ];
+  const url = URL.createObjectURL(makePdf(lines));
+  const link = Object.assign(document.createElement("a"), { href: url, download: `resumen-rebate-${partner.name.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-${q()}.pdf` });
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+};
 $("#policyButton").onclick = () => {
-  const fields = rules()
+  const fields = `${rules()
     .map(
       (rule) =>
         `<label>${esc(rule.label)} — peso (%)<input name="${rule.key}" type="number" min="0" max="100" value="${rule.weight}"></label>`,
     )
-    .join("");
+    .join("")}<p class="dialog-help">Rebate adicional sobre el margen base de 22 %. El margen mostrado será 22 % + el rebate del nivel.</p>${state.policy.tiers.map((tier) => `<label>Nivel ${esc(tier.name)} — rebate adicional (%)<input name="tier-${esc(tier.name)}" type="number" min="0" max="100" step="0.01" value="${tier.rebate}"></label>`).join("")}`;
   $("#policyFields").innerHTML = fields;
   $("#policyDialog").showModal();
 };
@@ -479,7 +562,7 @@ $("#policyForm").onsubmit = (event) => {
       type: "nivel",
       key: tier.name,
       label: `Nivel ${tier.name}`,
-      value: tier.rebate,
+      value: Math.max(0, Number(event.target.elements[`tier-${tier.name}`].value) || 0),
       target: tier.min,
     })),
   ];
@@ -509,6 +592,10 @@ $("#saveIndicatorsButton").onclick = () => {
     resultado_ventas: $("#salesResultInput").value,
     rebate_calculado: $("#calculatedRebateInput").value,
     rebate_aplicado: $("#appliedRebateInput").value,
+    demos_pequenas: $("#smallDemosInput").value,
+    demos_grandes: $("#largeDemosInput").value,
+    certificados_dji: $("#djiCertifiedInput").value,
+    certificacion_dji_obligatoria: false,
     justificacion: $("#evaluationJustification").value.trim(),
     ...partner.quarters[q()],
   }).then((saved) => {
