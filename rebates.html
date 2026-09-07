@@ -179,10 +179,11 @@
                   </button>
                 </div>
                 <div class="evaluation-summary">
-                  <label>Resultado de ventas<input id="salesResultInput" type="number" min="0" step="1" disabled /></label>
-                  <label>% rebate calculado<input id="calculatedRebateInput" type="number" min="0" max="100" step="0.01" disabled /></label>
-                  <label>% rebate aplicado<input id="appliedRebateInput" type="number" min="0" max="100" step="0.01" disabled /></label>
+                  <label>Resultado de ventas <span class="info-tooltip" tabindex="0">i<span>Ingrese la cantidad de equipos o ventas que califican para rebate en el trimestre seleccionado. Use el reporte comercial o las facturas aprobadas.</span></span><input id="salesResultInput" type="number" min="0" step="1" disabled /></label>
+                  <label>% rebate calculado <span class="info-tooltip" tabindex="0">i<span>Porcentaje ganado según la política vigente, el tipo de venta y los soportes validados. Ejemplo: 5 para 5%.</span></span><input id="calculatedRebateInput" type="number" min="0" max="100" step="0.01" disabled /></label>
+                  <label>% rebate aplicado <span class="info-tooltip" tabindex="0">i<span>Porcentaje que efectivamente se aplicó o aprobó. Normalmente se registra después de validar soportes y condiciones comerciales.</span></span><input id="appliedRebateInput" type="number" min="0" max="100" step="0.01" disabled /></label>
                 </div>
+                <label class="evaluation-justification">Justificación y soportes <span class="info-tooltip" tabindex="0">i<span>Indique cotizaciones, facturas, evidencias de demostración, documentos pendientes, excepciones de margen y cualquier motivo que sustente el resultado.</span></span><textarea id="evaluationJustification" rows="4" disabled placeholder="Ej.: COT3434 · T100 · factura validada; evidencia de demo adjunta."></textarea></label>
                 <p id="policyNote" class="policy-note"></p>
                 <div id="indicatorGrid" class="indicator-grid"></div>
               </section>
@@ -209,21 +210,21 @@
           <button type="button" data-close="partnerDialog">×</button>
         </div>
         <input id="partnerId" type="hidden" /><label
-          >Empresa aliada<input
+          >Empresa aliada <span class="info-tooltip" tabindex="0">i<span>Nombre comercial único del aliado. No se permiten duplicados.</span></span><input
             id="partnerName"
             required
             placeholder="Nombre de la empresa" /></label
         ><label
-          >Especialista DICOL responsable<select
+          >Especialista DICOL responsable <span class="info-tooltip" tabindex="0">i<span>Persona DICOL que administra el seguimiento y los soportes del aliado.</span></span><select
             id="partnerSpecialist"
             required
           ></select></label
         ><label
-          >Ciudad / zona<input
+          >Ciudad / zona <span class="info-tooltip" tabindex="0">i<span>Ubicación comercial o zona asignada para facilitar filtros y seguimiento.</span></span><input
             id="partnerZone"
             placeholder="Ej. Bogotá" /></label
         ><label
-          >Información y notas<textarea
+          >Información y notas <span class="info-tooltip" tabindex="0">i<span>Contexto permanente del aliado. Para soportes de un trimestre use Justificación y soportes en la evaluación.</span></span><textarea
             id="partnerNotes"
             rows="3"
             placeholder="Compromisos, contexto o novedades"

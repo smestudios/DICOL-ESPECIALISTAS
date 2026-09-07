@@ -35,6 +35,7 @@ const HEADERS = {
     "rebate_calculado",
     "rebate_aplicado",
     "diferencia",
+    "justificacion",
     "sales",
     "demos",
     "parts",
@@ -172,6 +173,7 @@ function saveEvaluation_(data) {
   values.rebate_calculado = Math.max(0, number_(data.rebate_calculado));
   values.rebate_aplicado = Math.max(0, number_(data.rebate_aplicado));
   values.diferencia = values.rebate_aplicado - values.rebate_calculado;
+  values.justificacion = String(data.justificacion || "").trim();
   ["sales", "demos", "parts", "pilots", "information"].forEach(
     (key) => (values[key] = Math.max(0, Math.min(100, number_(data[key])))),
   );

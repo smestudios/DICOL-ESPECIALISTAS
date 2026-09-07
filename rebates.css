@@ -67,6 +67,11 @@
 .evaluation-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 14px 0; }
 .evaluation-summary label { color: #aab3ad; font-size: 12px; }
 .evaluation-summary input { display: block; box-sizing: border-box; width: 100%; margin-top: 5px; padding: 9px; border: 1px solid var(--line); border-radius: 6px; background: #0e1711; color: #fff; }
+.evaluation-justification { display: block; margin: 12px 0; color: #aab3ad; font-size: 12px; }
+.evaluation-justification textarea { display: block; box-sizing: border-box; width: 100%; margin-top: 5px; padding: 9px; border: 1px solid var(--line); border-radius: 6px; background: #0e1711; color: #fff; resize: vertical; }
+.info-tooltip { position: relative; display: inline-grid; width: 15px; height: 15px; margin-left: 3px; place-items: center; border: 1px solid var(--green); border-radius: 50%; color: var(--green); font-size: 10px; font-weight: 700; font-style: normal; cursor: help; }
+.info-tooltip > span { position: absolute; z-index: 4; bottom: calc(100% + 8px); left: 50%; display: none; width: 230px; padding: 9px; transform: translateX(-50%); border: 1px solid #4b6352; border-radius: 7px; background: #101a12; color: #fff; font-size: 11px; font-weight: 400; line-height: 1.4; text-align: left; }
+.info-tooltip:hover > span, .info-tooltip:focus > span { display: block; }
 .rebate-button:disabled { cursor: wait; opacity: .6; }
 .rebate-button {
   padding: 10px 14px;

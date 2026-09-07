@@ -269,11 +269,12 @@ function renderIndicators(result) {
   $("#salesResultInput").value = Number(result.values.resultado_ventas || 0);
   $("#calculatedRebateInput").value = Number(result.values.rebate_calculado || result.tier.rebate || 0);
   $("#appliedRebateInput").value = Number(result.values.rebate_aplicado || 0);
-  ["#salesResultInput", "#calculatedRebateInput", "#appliedRebateInput"].forEach((selector) => ($(selector).disabled = !editingEvaluation));
+  $("#evaluationJustification").value = result.values.justificacion || "";
+  ["#salesResultInput", "#calculatedRebateInput", "#appliedRebateInput", "#evaluationJustification"].forEach((selector) => ($(selector).disabled = !editingEvaluation));
   $("#indicatorGrid").innerHTML = rules()
     .map((rule) => {
       const value = Number(result.values[rule.key] || 0);
-      return `<article class="indicator"><label>${esc(rule.label)}<output>${value}%</output></label><small>Peso ${rule.weight}% · meta ${rule.target}%</small><input type="range" min="0" max="100" value="${value}" data-indicator="${rule.key}" ${editingEvaluation ? "" : "disabled"}><progress max="100" value="${value}"></progress></article>`;
+      return `<article class="indicator"><label>${esc(rule.label)} <span class="info-tooltip" tabindex="0">i<span>Porcentaje de cumplimiento respaldado por evidencias del trimestre. La política lo pondera con un peso de ${rule.weight}%.</span></span><output>${value}%</output></label><small>Peso ${rule.weight}% · meta ${rule.target}%</small><input type="range" min="0" max="100" value="${value}" data-indicator="${rule.key}" ${editingEvaluation ? "" : "disabled"}><progress max="100" value="${value}"></progress></article>`;
     })
     .join("");
   document.querySelectorAll("[data-indicator]").forEach(
@@ -476,6 +477,7 @@ $("#saveIndicatorsButton").onclick = () => {
     resultado_ventas: $("#salesResultInput").value,
     rebate_calculado: $("#calculatedRebateInput").value,
     rebate_aplicado: $("#appliedRebateInput").value,
+    justificacion: $("#evaluationJustification").value.trim(),
     ...partner.quarters[q()],
   }).then((saved) => {
     if (!saved) return;
