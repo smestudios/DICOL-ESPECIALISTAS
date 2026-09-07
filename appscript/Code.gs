@@ -190,11 +190,17 @@ function getData_() {
 }
 function saveParameters_(items) {
   if (!Array.isArray(items) || !items.length) throw new Error("Agregue al menos un parámetro.");
-  return items.map((item) => {
+  const keys = {};
+  return withLock_(function () { return items.map((item) => {
     require_(item, ["periodo", "clave", "nombre", "meta"]);
     if (!/^Q[1-4]$/.test(item.periodo)) throw new Error("El periodo debe ser Q1, Q2, Q3 o Q4.");
-    return upsert_(SHEET_NAMES.parameters, { id: item.id || Utilities.getUuid(), periodo: item.periodo, clave: item.clave, nombre: item.nombre, meta: Math.max(0, number_(item.meta)), unidad: item.unidad || "unidades", obligatorio: String(item.obligatorio) !== "false", activo: true });
-  });
+    const key = `${item.periodo}:${String(item.clave).trim()}`;
+    if (keys[key]) throw new Error("No puede repetir una clave de parámetro dentro del mismo trimestre.");
+    keys[key] = true;
+    const current = rows_(SHEET_NAMES.parameters).find((row) => row.periodo === item.periodo && row.clave === String(item.clave).trim() && row.activo !== "false");
+    if (current && item.id && current.id !== item.id) throw new Error("Ya existe un parámetro activo con esta clave para el trimestre.");
+    return upsert_(SHEET_NAMES.parameters, { id: current ? current.id : (item.id || Utilities.getUuid()), periodo: item.periodo, clave: String(item.clave).trim(), nombre: item.nombre, meta: Math.max(0, number_(item.meta)), unidad: item.unidad || "unidades", obligatorio: String(item.obligatorio) !== "false", activo: true });
+  }); });
 }
 function archiveParameter_(id) {
   const item = byId_(SHEET_NAMES.parameters, id);

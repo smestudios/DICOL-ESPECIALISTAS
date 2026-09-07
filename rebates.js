@@ -335,16 +335,24 @@ function renderIndicators(result) {
 }
 function renderRequirements(result) {
   const values = result.values;
+  const config = (key, fallback, required = true) => ({ target: Number(parameter(key)?.meta || fallback), required: String(parameter(key)?.obligatorio ?? required) !== "false" });
+  const equipment = config("ventas_equipos", 1);
+  const small = config("demos_pequenas", 3);
+  const large = config("demos_grandes", 1);
+  const dji = config("certificados_dji", 1, false);
+  const parts = config("porcentaje_refacciones", 8);
   const requirements = [
-    { label: "Demos pequeñas", current: Number(values.demos_pequenas || 0), target: Number(parameter("demos_pequenas")?.meta || 3), required: true },
-    { label: "Demo grande", current: Number(values.demos_grandes || 0), target: Number(parameter("demos_grandes")?.meta || 1), required: true },
-    { label: "Certificación DJI", current: Number(values.certificados_dji || 0), target: Number(parameter("certificados_dji")?.meta || 1), required: false },
-    { label: "Refacciones", current: Number(values.partsRatio || 0), target: Number(parameter("porcentaje_refacciones")?.meta || 8), required: true, suffix: "%" },
+    { label: "Equipos y kits", current: Number(values.equipmentUnits || 0), ...equipment },
+    { label: "Demos pequeñas", current: Number(values.demos_pequenas || 0), ...small },
+    { label: "Demo grande", current: Number(values.demos_grandes || 0), ...large },
+    { label: "Certificación DJI", current: Number(values.certificados_dji || 0), ...dji },
+    { label: "Refacciones", current: Number(values.partsRatio || 0), ...parts, suffix: "%" },
   ];
   $("#requirementsProgress").innerHTML = requirements.map((item) => {
     const complete = item.current >= item.target;
     const wording = complete ? "Cumplido" : `Faltan ${item.target - item.current}`;
-    return `<article class="requirement ${complete ? "requirement--complete" : ""}"><span>${item.required ? "Obligatorio" : "Recomendado"}</span><b>${esc(item.label)}</b><strong>${item.current.toFixed?.(item.suffix ? 1 : 0) || item.current}${item.suffix || ""}/${item.target}${item.suffix || ""}</strong><small>${wording}${item.required ? " para postular rebate" : " · aún no obligatorio"}</small></article>`;
+    const percentage = item.target ? Math.min(100, (item.current / item.target) * 100) : 0;
+    return `<article class="requirement ${complete ? "requirement--complete" : ""}"><span>${item.required ? "Obligatorio" : "Recomendado"}</span><b>${esc(item.label)}</b><strong>${item.current.toFixed?.(item.suffix ? 1 : 0) || item.current}${item.suffix || ""}/${item.target}${item.suffix || ""}</strong><small>${percentage.toFixed(0)}% · ${wording}${item.required ? " para postular rebate" : " · aún no obligatorio"}</small></article>`;
   }).join("");
 }
 function renderTrend(partner) {
