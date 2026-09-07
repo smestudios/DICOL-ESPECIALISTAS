@@ -31,6 +31,10 @@ const HEADERS = {
   evaluations: [
     "aliado_id",
     "periodo",
+    "resultado_ventas",
+    "rebate_calculado",
+    "rebate_aplicado",
+    "diferencia",
     "sales",
     "demos",
     "parts",
@@ -136,24 +140,23 @@ function getData_() {
 }
 function saveSpecialist_(data) {
   require_(data, ["nombre"]);
-  return upsert_(SHEET_NAMES.specialists, {
-    id: data.id || Utilities.getUuid(),
-    nombre: data.nombre,
-    zona: data.zona || "",
-    activo: true,
-    creado_en: data.creado_en || new Date().toISOString(),
+  return withLock_(function () {
+    assertUniqueName_(SHEET_NAMES.specialists, data.nombre, data.id, "especialista");
+    return upsert_(SHEET_NAMES.specialists, {
+      id: data.id || Utilities.getUuid(), nombre: data.nombre, zona: data.zona || "",
+      activo: true, creado_en: data.creado_en || new Date().toISOString(),
+    });
   });
 }
 function savePartner_(data) {
   require_(data, ["nombre", "especialista_id"]);
-  return upsert_(SHEET_NAMES.partners, {
-    id: data.id || Utilities.getUuid(),
-    nombre: data.nombre,
-    especialista_id: data.especialista_id,
-    zona: data.zona || "",
-    notas: data.notas || "",
-    activo: true,
-    creado_en: data.creado_en || new Date().toISOString(),
+  return withLock_(function () {
+    assertUniqueName_(SHEET_NAMES.partners, data.nombre, data.id, "aliado");
+    return upsert_(SHEET_NAMES.partners, {
+      id: data.id || Utilities.getUuid(), nombre: data.nombre,
+      especialista_id: data.especialista_id, zona: data.zona || "", notas: data.notas || "",
+      activo: true, creado_en: data.creado_en || new Date().toISOString(),
+    });
   });
 }
 function saveEvaluation_(data) {
@@ -165,6 +168,10 @@ function saveEvaluation_(data) {
     periodo: data.periodo,
     actualizado_en: new Date().toISOString(),
   };
+  values.resultado_ventas = Math.max(0, number_(data.resultado_ventas));
+  values.rebate_calculado = Math.max(0, number_(data.rebate_calculado));
+  values.rebate_aplicado = Math.max(0, number_(data.rebate_aplicado));
+  values.diferencia = values.rebate_aplicado - values.rebate_calculado;
   ["sales", "demos", "parts", "pilots", "information"].forEach(
     (key) => (values[key] = Math.max(0, Math.min(100, number_(data[key])))),
   );
@@ -244,7 +251,28 @@ function ensureSheet_(spreadsheet, name, headers) {
     sheet.setFrozenRows(1);
     sheet.getRange(1, 1, 1, headers.length).setFontWeight("bold");
   }
+  ensureHeaders_(sheet, headers);
   return sheet;
+}
+function ensureHeaders_(sheet, headers) {
+  const current = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const missing = headers.filter((header) => current.indexOf(header) === -1);
+  if (missing.length) {
+    sheet.getRange(1, current.length + 1, 1, missing.length).setValues([missing]);
+    sheet.getRange(1, 1, 1, current.length + missing.length).setFontWeight("bold");
+  }
+}
+function assertUniqueName_(sheetName, name, id, label) {
+  const normalized = String(name).trim().toUpperCase();
+  const exists = rows_(sheetName).some(
+    (row) => row.activo !== "false" && row.id !== id && String(row.nombre).trim().toUpperCase() === normalized,
+  );
+  if (exists) throw new Error(`Ya existe un ${label} activo con ese nombre.`);
+}
+function withLock_(callback) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try { return callback(); } finally { lock.releaseLock(); }
 }
 function sheet_(name) {
   const sheet = SpreadsheetApp.getActive().getSheetByName(name);
