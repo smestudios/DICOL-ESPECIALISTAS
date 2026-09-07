@@ -1,5 +1,6 @@
-/* Datos locales mientras se conecta la URL publicada de Apps Script. No autoriza liquidaciones automáticamente. */
-const STORAGE_KEY = "dicol.rebates.v2";
+/* La información se consulta y actualiza únicamente en Google Sheets mediante Apps Script. */
+const APPS_SCRIPT_URL =
+  "https://script.google.com/macros/s/AKfycbyxEKQfHQ_39AcIjS69B-5xRyleIsL4w25LJTGMmwyKMgp9uLucsNWFfHwuyWBOtUjVjQ/exec";
 const POLICY = {
   sales: { label: "PSI / ventas", weight: 50, target: 100 },
   demos: { label: "Demostraciones", weight: 20, target: 100 },
@@ -12,64 +13,88 @@ const POLICY = {
     { name: "C", min: 0, rebate: 0 },
   ],
 };
-const initialState = {
+const emptyState = {
   policy: POLICY,
-  specialists: [
-    { id: "sp-1", name: "Manuel Alejandro Chavarro Arteaga", zone: "Centro" },
-  ],
-  partners: [
-    {
-      id: "pa-1",
-      name: "Helidrones",
-      specialistId: "sp-1",
-      zone: "Bogotá",
-      notes: "Validar soportes antes de la liquidación.",
-      quarters: {
-        Q1: { sales: 90, demos: 100, parts: 80, pilots: 100, information: 100 },
-        Q2: { sales: 65, demos: 70, parts: 100, pilots: 50, information: 100 },
-      },
-    },
-    {
-      id: "pa-2",
-      name: "Innova Dron",
-      specialistId: "sp-1",
-      zone: "Centro",
-      notes: "Dar prioridad a demostraciones.",
-      quarters: {
-        Q1: { sales: 65, demos: 40, parts: 100, pilots: 40, information: 100 },
-        Q2: { sales: 55, demos: 50, parts: 60, pilots: 0, information: 100 },
-      },
-    },
-    {
-      id: "pa-3",
-      name: "Mapagro",
-      specialistId: "sp-1",
-      zone: "Norte",
-      notes: "Aliado de alto volumen.",
-      quarters: {
-        Q1: {
-          sales: 100,
-          demos: 100,
-          parts: 90,
-          pilots: 100,
-          information: 100,
-        },
-        Q2: { sales: 72, demos: 80, parts: 60, pilots: 70, information: 100 },
-      },
-    },
-  ],
+  specialists: [],
+  partners: [],
 };
-let state =
-  JSON.parse(localStorage.getItem(STORAGE_KEY) || "null") || initialState;
-let selectedPartnerId = state.partners[0]?.id;
+let state = emptyState;
+let selectedPartnerId;
 let activeView = "general";
+let editingEvaluation = false;
+const pendingActions = new Set();
 const $ = (selector) => document.querySelector(selector);
 const q = () => $("#quarterFilter").value;
 const currentPartner = () =>
   state.partners.find((p) => p.id === selectedPartnerId);
 const specialist = (id) => state.specialists.find((s) => s.id === id);
-function save() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+function setConnectionStatus(message, isError = false) {
+  const status = $("#connectionStatus");
+  status.textContent = message;
+  status.classList.toggle("connection-status--error", isError);
+}
+function normalizeData(data) {
+  return {
+    policy: { ...POLICY, ...(data.policy || {}) },
+    specialists: (data.specialists || []).map((person) => ({
+      id: person.id,
+      name: person.nombre,
+      zone: person.zona,
+      createdAt: person.creado_en,
+    })),
+    partners: (data.partners || []).map((partner) => ({
+      id: partner.id,
+      name: partner.nombre,
+      specialistId: partner.especialista_id,
+      zone: partner.zona,
+      notes: partner.notas,
+      quarters: partner.quarters || {},
+      createdAt: partner.creado_en,
+    })),
+  };
+}
+async function api(action, data, id) {
+  const response = await fetch(APPS_SCRIPT_URL, {
+    method: action === "getData" ? "GET" : "POST",
+    headers: action === "getData" ? undefined : { "Content-Type": "text/plain;charset=utf-8" },
+    body: action === "getData" ? undefined : JSON.stringify({ action, data, id }),
+  });
+  if (!response.ok) throw new Error(`No fue posible conectar con Google Sheets (${response.status}).`);
+  const payload = await response.json();
+  if (!payload.ok) throw new Error(payload.error || "Google Sheets no aceptó la solicitud.");
+  return payload.data;
+}
+async function loadData() {
+  setConnectionStatus("Conectando con Google Sheets…");
+  try {
+    state = normalizeData(await api("getData"));
+    selectedPartnerId = state.partners.some((partner) => partner.id === selectedPartnerId)
+      ? selectedPartnerId
+      : state.partners[0]?.id;
+    setConnectionStatus("Datos sincronizados con Google Sheets.");
+  } catch (error) {
+    state = emptyState;
+    selectedPartnerId = undefined;
+    setConnectionStatus(error.message, true);
+  }
+  render();
+}
+async function persist(action, data, id) {
+  if (pendingActions.has(action)) return false;
+  pendingActions.add(action);
+  document.querySelectorAll(`[data-save-action="${action}"]`).forEach((button) => (button.disabled = true));
+  try {
+    setConnectionStatus("Guardando en Google Sheets…");
+    await api(action, data, id);
+    await loadData();
+    return true;
+  } catch (error) {
+    setConnectionStatus(error.message, true);
+    return false;
+  } finally {
+    pendingActions.delete(action);
+    document.querySelectorAll(`[data-save-action="${action}"]`).forEach((button) => (button.disabled = false));
+  }
 }
 function evaluation(partner, period = q()) {
   const values = partner.quarters[period] || {};
@@ -139,6 +164,7 @@ function renderGeneral() {
     (button) =>
       (button.onclick = () => {
         selectedPartnerId = button.dataset.openPartner;
+        editingEvaluation = false;
         activeView = "partner";
         render();
       }),
@@ -194,6 +220,7 @@ function renderPartnerList(forceSpecialistId) {
     (button) =>
       (button.onclick = () => {
         selectedPartnerId = button.dataset.partnerId;
+        editingEvaluation = false;
         renderPartnerList();
         renderPartnerDetail();
       }),
@@ -204,6 +231,8 @@ function renderPartnerDetail() {
   $("#emptyState").hidden = Boolean(partner);
   $("#detailContent").hidden = !partner;
   if (!partner) return;
+  $("#editEvaluationButton").hidden = editingEvaluation;
+  $("#saveIndicatorsButton").hidden = !editingEvaluation;
   const result = evaluation(partner);
   $("#detailName").textContent = partner.name;
   $("#detailSpecialist").textContent =
@@ -237,10 +266,15 @@ function rules() {
     .map(([key, rule]) => ({ key, ...rule }));
 }
 function renderIndicators(result) {
+  $("#salesResultInput").value = Number(result.values.resultado_ventas || 0);
+  $("#calculatedRebateInput").value = Number(result.values.rebate_calculado || result.tier.rebate || 0);
+  $("#appliedRebateInput").value = Number(result.values.rebate_aplicado || 0);
+  $("#evaluationJustification").value = result.values.justificacion || "";
+  ["#salesResultInput", "#calculatedRebateInput", "#appliedRebateInput", "#evaluationJustification"].forEach((selector) => ($(selector).disabled = !editingEvaluation));
   $("#indicatorGrid").innerHTML = rules()
     .map((rule) => {
       const value = Number(result.values[rule.key] || 0);
-      return `<article class="indicator"><label>${esc(rule.label)}<output>${value}%</output></label><small>Peso ${rule.weight}% · meta ${rule.target}%</small><input type="range" min="0" max="100" value="${value}" data-indicator="${rule.key}"><progress max="100" value="${value}"></progress></article>`;
+      return `<article class="indicator"><label>${esc(rule.label)} <span class="info-tooltip" tabindex="0">i<span>Porcentaje de cumplimiento respaldado por evidencias del trimestre. La política lo pondera con un peso de ${rule.weight}%.</span></span><output>${value}%</output></label><small>Peso ${rule.weight}% · meta ${rule.target}%</small><input type="range" min="0" max="100" value="${value}" data-indicator="${rule.key}" ${editingEvaluation ? "" : "disabled"}><progress max="100" value="${value}"></progress></article>`;
     })
     .join("");
   document.querySelectorAll("[data-indicator]").forEach(
@@ -299,6 +333,9 @@ function openPartnerDialog(partner) {
   $("#partnerDialogTitle").textContent = partner
     ? "Editar aliado"
     : "Agregar aliado";
+  $("#partnerSubmitButton").textContent = partner
+    ? "Guardar cambios"
+    : "Guardar aliado";
   $("#partnerId").value = partner?.id || "";
   $("#partnerName").value = partner?.name || "";
   $("#partnerZone").value = partner?.zone || "";
@@ -325,12 +362,9 @@ function renderSpecialistManager() {
   document.querySelectorAll("[data-delete-specialist]").forEach(
     (button) =>
       (button.onclick = () => {
-        state.specialists = state.specialists.filter(
-          (person) => person.id !== button.dataset.deleteSpecialist,
+        persist("deleteSpecialist", undefined, button.dataset.deleteSpecialist).then(
+          (saved) => saved && renderSpecialistManager(),
         );
-        save();
-        renderSpecialistManager();
-        render();
       }),
   );
 }
@@ -366,51 +400,70 @@ $("#partnerForm").onsubmit = (event) => {
   const old = state.partners.find((partner) => partner.id === id);
   const partner = {
     id,
-    name: $("#partnerName").value.trim(),
-    specialistId: $("#partnerSpecialist").value,
-    zone: $("#partnerZone").value.trim(),
-    notes: $("#partnerNotes").value.trim(),
-    quarters: old?.quarters || {},
+    nombre: $("#partnerName").value.trim(),
+    especialista_id: $("#partnerSpecialist").value,
+    zona: $("#partnerZone").value.trim(),
+    notas: $("#partnerNotes").value.trim(),
+    creado_en: old?.createdAt,
   };
-  if (!partner.name) return;
-  state.partners = old
-    ? state.partners.map((item) => (item.id === id ? partner : item))
-    : [partner, ...state.partners];
-  selectedPartnerId = id;
-  save();
-  $("#partnerDialog").close();
-  activeView = "partner";
-  render();
+  if (!partner.nombre) return;
+  const duplicate = state.partners.some((item) => item.id !== id && item.name.trim().toUpperCase() === partner.nombre.toUpperCase());
+  if (duplicate) return alert("Ya existe un aliado activo con ese nombre.");
+  persist("savePartner", partner).then((saved) => {
+    if (!saved) return;
+    selectedPartnerId = id;
+    $("#partnerDialog").close();
+    activeView = "partner";
+    render();
+  });
 };
 $("#specialistForm").onsubmit = (event) => {
   event.preventDefault();
   const name = $("#specialistName").value.trim();
   if (!name) return;
-  state.specialists.push({
+  if (state.specialists.some((person) => person.name.trim().toUpperCase() === name.toUpperCase())) return alert("Ya existe un especialista activo con ese nombre.");
+  const specialistData = {
     id: `sp-${Date.now()}`,
-    name,
-    zone: $("#specialistZone").value.trim(),
+    nombre: name,
+    zona: $("#specialistZone").value.trim(),
+  };
+  persist("saveSpecialist", specialistData).then((saved) => {
+    if (!saved) return;
+    event.target.reset();
+    renderSpecialistManager();
   });
-  save();
-  event.target.reset();
-  renderSpecialistManager();
-  render();
 };
 $("#policyForm").onsubmit = (event) => {
   event.preventDefault();
-  rules().forEach(
-    (rule) =>
-      (state.policy[rule.key].weight = Math.max(
-        0,
-        Number(event.target.elements[rule.key].value) || 0,
-      )),
-  );
-  save();
-  $("#policyDialog").close();
-  render();
+  const policy = [
+    ...rules().map((rule) => ({
+      type: "indicador",
+      key: rule.key,
+      label: rule.label,
+      value: Math.max(0, Number(event.target.elements[rule.key].value) || 0),
+      target: rule.target,
+    })),
+    ...state.policy.tiers.map((tier) => ({
+      type: "nivel",
+      key: tier.name,
+      label: `Nivel ${tier.name}`,
+      value: tier.rebate,
+      target: tier.min,
+    })),
+  ];
+  persist("savePolicy", policy).then((saved) => {
+    if (saved) $("#policyDialog").close();
+  });
+};
+$("#editEvaluationButton").onclick = () => {
+  editingEvaluation = true;
+  $("#editEvaluationButton").hidden = true;
+  $("#saveIndicatorsButton").hidden = false;
+  renderPartnerDetail();
 };
 $("#saveIndicatorsButton").onclick = () => {
   const partner = currentPartner();
+  if (!partner) return;
   partner.quarters[q()] = partner.quarters[q()] || {};
   document
     .querySelectorAll("[data-indicator]")
@@ -418,16 +471,26 @@ $("#saveIndicatorsButton").onclick = () => {
       (input) =>
         (partner.quarters[q()][input.dataset.indicator] = Number(input.value)),
     );
-  save();
-  render();
+  persist("saveEvaluation", {
+    aliado_id: partner.id,
+    periodo: q(),
+    resultado_ventas: $("#salesResultInput").value,
+    rebate_calculado: $("#calculatedRebateInput").value,
+    rebate_aplicado: $("#appliedRebateInput").value,
+    justificacion: $("#evaluationJustification").value.trim(),
+    ...partner.quarters[q()],
+  }).then((saved) => {
+    if (!saved) return;
+    editingEvaluation = false;
+    $("#editEvaluationButton").hidden = false;
+    $("#saveIndicatorsButton").hidden = true;
+    render();
+  });
 };
 $("#deletePartnerButton").onclick = () => {
   const partner = currentPartner();
   if (partner && confirm(`¿Eliminar el aliado ${partner.name}?`)) {
-    state.partners = state.partners.filter((item) => item.id !== partner.id);
-    selectedPartnerId = state.partners[0]?.id;
-    save();
-    render();
+    persist("deletePartner", undefined, partner.id);
   }
 };
 $("#partnerSearch").oninput = () => renderPartnerList();
@@ -438,10 +501,15 @@ document.querySelectorAll("[data-view]").forEach(
       render();
     }),
 );
-$("#quarterFilter").onchange = render;
+$("#quarterFilter").onchange = () => {
+  editingEvaluation = false;
+  $("#editEvaluationButton").hidden = false;
+  $("#saveIndicatorsButton").hidden = true;
+  render();
+};
 document
   .querySelectorAll("[data-close]")
   .forEach(
     (button) => (button.onclick = () => $(`#${button.dataset.close}`).close()),
   );
-render();
+loadData();
