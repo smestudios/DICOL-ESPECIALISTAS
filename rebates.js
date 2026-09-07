@@ -51,6 +51,9 @@ function normalizeData(data) {
       quarters: partner.quarters || {},
       createdAt: partner.creado_en,
     })),
+    prices: data.prices || [],
+    kits: data.kits || [],
+    sales: data.sales || [],
   };
 }
 async function api(action, data, id) {
@@ -262,6 +265,11 @@ function renderPartnerDetail() {
   renderInsights(result);
 }
 function renderCommercialOverview(result) {
+  const partnerSales = state.sales.filter((sale) => sale.aliado_id === currentPartner().id && sale.periodo === q());
+  const money = (value) => new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(value || 0);
+  const billing = partnerSales.reduce((sum, sale) => sum + Number(sale.total_iva || 0), 0);
+  const units = partnerSales.filter((sale) => sale.tipo !== "refaccion").reduce((sum, sale) => sum + Number(sale.cantidad || 0), 0);
+  const parts = partnerSales.filter((sale) => sale.tipo === "refaccion").reduce((sum, sale) => sum + Number(sale.total_iva || 0), 0);
   const indicators = rules();
   const met = indicators.filter((rule) => Number(result.values[rule.key] || 0) >= rule.target).length;
   const calculated = Number(result.values.rebate_calculado || result.tier.rebate || 0);
@@ -270,13 +278,19 @@ function renderCommercialOverview(result) {
   $("#commercialScore").textContent = `${result.score}%`;
   $("#commercialCalculated").textContent = `${calculated}%`;
   $("#commercialApplied").textContent = `${applied}%`;
-  $("#commercialSales").textContent = Number(result.values.resultado_ventas || 0);
+  $("#commercialSales").textContent = units;
+  $("#commercialBilling").textContent = money(billing);
+  $("#commercialDemos").textContent = `${Number(result.values.demos || 0)}%`;
+  $("#commercialParts").textContent = money(parts);
+  $("#commercialPartsChart").textContent = money(parts);
   $("#commercialIndicators").textContent = `${met}/${indicators.length}`;
   $("#commercialStatus").textContent = `Nivel ${result.tier.name} · Diferencia aplicada: ${(applied - calculated).toFixed(1)}%`;
   $("#commercialKpis").innerHTML = indicators.map((rule) => {
     const value = Number(result.values[rule.key] || 0);
     return `<div class="commercial-kpi"><span>${esc(rule.label)}</span><div><i style="width:${Math.min(100, value)}%"></i></div><b>${value}%</b><small>peso ${rule.weight}%</small></div>`;
   }).join("");
+  const models = partnerSales.filter((sale) => sale.tipo !== "refaccion").reduce((all, sale) => ((all[sale.modelo] = (all[sale.modelo] || 0) + Number(sale.cantidad || 0)), all), {});
+  $("#modelSales").innerHTML = Object.entries(models).map(([model, quantity]) => `<div><b>${esc(model)}</b><span style="width:${Math.min(100, quantity * 12)}%"></span><small>${quantity} u</small></div>`).join("") || '<p class="empty-state">Registre ventas para ver unidades por modelo.</p>';
 }
 function rules() {
   return Object.entries(state.policy)
@@ -510,6 +524,20 @@ $("#deletePartnerButton").onclick = () => {
   if (partner && confirm(`¿Eliminar el aliado ${partner.name}?`)) {
     persist("deletePartner", undefined, partner.id);
   }
+};
+$("#newSaleButton").onclick = () => {
+  const items = [...state.prices, ...state.kits];
+  if (!items.length) return alert("Primero agregue el catálogo en las hojas Precios o Kits.");
+  $("#saleItem").innerHTML = items.map((item) => `<option value="${esc(item.id)}">${esc(item.descripcion || item.nombre)} · ${esc(item.modelo || "sin modelo")}</option>`).join("");
+  $("#saleDate").value = new Date().toISOString().slice(0, 10);
+  $("#saleQuantity").value = 1;
+  $("#saleDialog").showModal();
+};
+$("#saleForm").onsubmit = (event) => {
+  event.preventDefault();
+  const partner = currentPartner();
+  if (!partner) return;
+  persist("saveSale", { aliado_id: partner.id, periodo: q(), item_id: $("#saleItem").value, fecha: $("#saleDate").value, cantidad: $("#saleQuantity").value }).then((saved) => { if (saved) $("#saleDialog").close(); });
 };
 $("#partnerSearch").oninput = () => renderPartnerList();
 document.querySelectorAll("[data-view]").forEach(

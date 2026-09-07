@@ -145,16 +145,20 @@
                     <p class="eyebrow">PULSO COMERCIAL · <span id="commercialQuarter">Q1</span></p>
                     <h3>Resumen para la gestión del aliado</h3>
                   </div>
-                  <p id="commercialStatus"></p>
+                  <div><p id="commercialStatus"></p><button id="newSaleButton" class="rebate-button" type="button">+ Registrar venta</button></div>
                 </div>
                 <div class="commercial-metrics">
                   <article><span>Evaluación</span><strong id="commercialScore">0%</strong><small>cumplimiento ponderado</small></article>
+                  <article><span>Facturación</span><strong id="commercialBilling">$0</strong><small>ventas registradas con IVA</small></article>
                   <article><span>Rebate calculado</span><strong id="commercialCalculated">0%</strong><small>según política vigente</small></article>
                   <article><span>Rebate aplicado</span><strong id="commercialApplied">0%</strong><small>aprobado / aplicado</small></article>
                   <article><span>Resultado ventas</span><strong id="commercialSales">0</strong><small>unidades o ventas calificadas</small></article>
+                  <article><span>Demos totales</span><strong id="commercialDemos">0%</strong><small>cumplimiento registrado</small></article>
+                  <article><span>Refacciones</span><strong id="commercialParts">$0</strong><small>compra registrada con IVA</small></article>
                   <article><span>Indicadores al día</span><strong id="commercialIndicators">0/0</strong><small>con meta cumplida</small></article>
                 </div>
                 <div id="commercialKpis" class="commercial-kpis"></div>
+                <div class="commercial-charts"><section><h4>Ventas por modelo (unidades)</h4><div id="modelSales" class="model-sales"></div></section><section><h4>Compra de refacciones (COP)</h4><strong id="commercialPartsChart">$0</strong><p>Se calcula desde las ventas registradas como refacción.</p></section></div>
               </section>
               <div class="score-grid">
                 <article class="score-card">
@@ -260,6 +264,7 @@
         </div>
       </form>
     </dialog>
+    <dialog id="saleDialog"><form id="saleForm"><div class="dialog-heading"><h2>Registrar venta</h2><button type="button" data-close="saleDialog">×</button></div><p class="dialog-help">El precio se toma de la hoja Precios o Kits; no se digita manualmente.</p><label>Producto o kit<select id="saleItem" required></select></label><label>Fecha<input id="saleDate" type="date" required /></label><label>Cantidad<input id="saleQuantity" type="number" min="1" step="1" required /></label><div class="dialog-actions"><button class="rebate-button" type="button" data-close="saleDialog">Cancelar</button><button class="rebate-button rebate-button--primary" type="submit" data-save-action="saveSale">Registrar venta</button></div></form></dialog>
     <dialog id="specialistDialog">
       <div class="dialog-heading">
         <h2>Especialistas DICOL</h2>

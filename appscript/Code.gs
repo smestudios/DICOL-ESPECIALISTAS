@@ -16,6 +16,9 @@ const SHEET_NAMES = {
   partners: "Aliados",
   evaluations: "Evaluaciones",
   policy: "Politica",
+  prices: "Precios",
+  kits: "Kits",
+  sales: "Ventas",
 };
 const HEADERS = {
   specialists: ["id", "nombre", "zona", "activo", "creado_en"],
@@ -44,6 +47,9 @@ const HEADERS = {
     "actualizado_en",
   ],
   policy: ["tipo", "clave", "nombre", "valor", "meta"],
+  prices: ["id", "descripcion", "categoria", "modelo", "msrp_iva", "msrp_sin_iva", "margen_base", "precio_aliado_iva", "precio_aliado_sin_iva", "activo"],
+  kits: ["id", "nombre", "modelo", "componentes", "margen_base", "precio_aliado_iva", "precio_aliado_sin_iva", "activo"],
+  sales: ["id", "aliado_id", "periodo", "fecha", "item_id", "tipo", "modelo", "cantidad", "precio_unitario_iva", "total_iva", "creado_en"],
 };
 const DEFAULT_POLICY = [
   ["indicador", "sales", "PSI / ventas", 50, 100],
@@ -96,6 +102,8 @@ function dispatch_(request) {
       return saveEvaluation_(data);
     case "savePolicy":
       return savePolicy_(data);
+    case "saveSale":
+      return saveSale_(data);
     case "deletePartner":
       return archivePartner_(request.id);
     case "deleteSpecialist":
@@ -112,6 +120,9 @@ function getData_() {
     (row) => row.activo !== "false",
   );
   const evaluations = rows_(SHEET_NAMES.evaluations);
+  const prices = rows_(SHEET_NAMES.prices).filter((row) => row.activo !== "false");
+  const kits = rows_(SHEET_NAMES.kits).filter((row) => row.activo !== "false");
+  const sales = rows_(SHEET_NAMES.sales);
   const policy = { tiers: [] };
   rows_(SHEET_NAMES.policy).forEach((row) => {
     if (row.tipo === "nivel")
@@ -137,7 +148,25 @@ function getData_() {
         .reduce((all, item) => ((all[item.periodo] = item), all), {}),
     })),
     policy,
+    prices,
+    kits,
+    sales,
   };
+}
+function saveSale_(data) {
+  require_(data, ["aliado_id", "periodo", "item_id", "cantidad"]);
+  if (!/^Q[1-4]$/.test(data.periodo)) throw new Error("El periodo debe ser Q1, Q2, Q3 o Q4.");
+  const item = rows_(SHEET_NAMES.prices).concat(rows_(SHEET_NAMES.kits)).find((row) => row.id === data.item_id && row.activo !== "false");
+  if (!item) throw new Error("El producto o kit seleccionado no existe o está inactivo.");
+  const quantity = number_(data.cantidad);
+  if (quantity <= 0) throw new Error("La cantidad debe ser mayor que cero.");
+  const unitPrice = number_(item.precio_aliado_iva);
+  return upsert_(SHEET_NAMES.sales, {
+    id: data.id || Utilities.getUuid(), aliado_id: data.aliado_id, periodo: data.periodo,
+    fecha: data.fecha || new Date().toISOString().slice(0, 10), item_id: item.id,
+    tipo: item.categoria || "kit", modelo: item.modelo || item.nombre, cantidad: quantity,
+    precio_unitario_iva: unitPrice, total_iva: quantity * unitPrice, creado_en: new Date().toISOString(),
+  });
 }
 function saveSpecialist_(data) {
   require_(data, ["nombre"]);

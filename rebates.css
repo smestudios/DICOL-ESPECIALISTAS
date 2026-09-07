@@ -93,7 +93,7 @@
 .commercial-overview__heading { display: flex; justify-content: space-between; gap: 20px; align-items: end; }
 .commercial-overview__heading h3 { margin: 4px 0 0; font-size: 22px; }
 .commercial-overview__heading > p { margin: 0; color: #c7d1ca; font-size: 13px; }
-.commercial-metrics { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin: 18px 0; }
+.commercial-metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 18px 0; }
 .commercial-metrics article { padding: 14px; border: 1px solid #335540; background: #0c1510; }
 .commercial-metrics span, .commercial-metrics small { display: block; color: #aab3ad; font-size: 11px; }
 .commercial-metrics strong { display: block; margin: 7px 0; color: var(--green); font-size: 25px; }
@@ -104,6 +104,10 @@
 .commercial-kpi i { display: block; height: 100%; background: var(--green); }
 .commercial-kpi b { display: inline-block; margin: 5px 4px 0 0; color: #fff; }
 .commercial-kpi small { color: #8e9b92; }
+.commercial-charts { display: grid; grid-template-columns: 2fr 1fr; gap: 15px; margin-top: 18px; }
+.commercial-charts section { min-height: 100px; padding: 14px; border: 1px solid #335540; background: #0c1510; }
+.commercial-charts h4 { margin: 0 0 12px; font-size: 13px; }.commercial-charts p { color: #aab3ad; font-size: 11px; }
+.model-sales > div { display: grid; grid-template-columns: 120px 1fr 35px; gap: 8px; align-items: center; margin: 7px 0; font-size: 11px; }.model-sales span { display: block; height: 9px; background: var(--green); }.model-sales small { text-align: right; }
 .summary-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -558,6 +562,7 @@ dialog textarea {
   .commercial-kpis {
     grid-template-columns: repeat(2, 1fr);
   }
+  .commercial-charts { grid-template-columns: 1fr; }
   .specialist-cards {
     grid-template-columns: repeat(2, 1fr);
   }
@@ -579,6 +584,7 @@ dialog textarea {
   .score-grid,
   .commercial-metrics,
   .commercial-kpis,
+  .commercial-charts,
   .specialist-cards,
   .indicator-grid,
   .insight-grid {

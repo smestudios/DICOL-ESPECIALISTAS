@@ -35,6 +35,12 @@ Para diligenciar una evaluación: **Resultado de ventas** es la cantidad de equi
 
 La ficha individual incluye además un **Pulso comercial** para que la conversación con cada aliado tenga en un mismo lugar la evaluación, rebates, ventas calificadas, indicadores al día y la comparación visual de cada KPI con su peso de política. No inventa valores de facturación, modelos o refacciones: esos datos solo se muestran cuando hayan sido incorporados como campos y soportados en la hoja.
 
+## Catálogo, kits y ventas
+
+`setup()` crea tres pestañas adicionales: **Precios**, **Kits** y **Ventas**. En **Precios** registre cada producto individual con su categoría (`dron` o `refaccion`), modelo, MSRP con/sin IVA, margen base, y precios al aliado. En **Kits** registre cada combinación con sus componentes y el precio pactado; así un kit se conserva como una venta distinta y no duplica las piezas que lo componen. Todos los aliados parten de un margen base de 22 %: el rebate aprobado se registra por separado, por lo que no debe sobrescribirse el margen de precio. Las sanciones o excepciones se sustentan en la justificación de la evaluación y deben reflejarse en el precio/margen específico aprobado.
+
+Desde la ficha del aliado use **Registrar venta**: selecciona un producto o kit del catálogo y el sistema toma el precio al aliado con IVA, calcula la facturación y acumula las unidades por modelo y las compras de refacciones para el trimestre. Esto es la fuente del panel comercial; no modifique a mano el total de la pestaña Ventas.
+
 El API y la interfaz validan que no existan dos aliados activos con el mismo nombre (sin importar mayúsculas, minúsculas o espacios). También se aplica la misma validación a especialistas y se bloquea el botón mientras una petición está en curso, evitando registros duplicados por doble clic.
 
 ## Operación diaria en el tablero
