@@ -1,59 +1,56 @@
 # Control de rebates DICOL
 
-## Responsables y lectura del tablero
+## Regla de negocio
 
-- **DICOL es la importadora.** Sus especialistas son responsables de acompañar a los aliados asignados, registrar el avance y hacer seguimiento de los compromisos.
-- **Los aliados son empresas.** Cada ficha individual muestra solamente sus resultados, los indicadores pendientes y una conclusión que puede usarse durante la reunión con ese aliado.
-- **DICOL** puede consultar el resumen general y las tarjetas por especialista. Estas tarjetas consolidan cuántos aliados tiene cada persona, el cumplimiento promedio y cuántos necesitan gestión.
+Cada aliado tiene sus **propias metas por trimestre** (`Q1` a `Q4`). Se administran con **Metas del aliado** y se guardan en la pestaña `Parametros` de Google Sheets junto con el identificador del aliado y el trimestre.
 
-La evaluación inicial pondera PSI/ventas 50 %, demostraciones 20 %, repuestos 10 %, pilotos certificados 10 % e información/soportes 10 %. El aliado inicia con un margen base de **22 %**. Según el boletín entregado, el nivel A inicia en 80 % y proyecta 5 %; B inicia en 60 % y proyecta 3 %; C queda por debajo de 60 % y proyecta 0 %. Los pesos y niveles son configurables desde **Política vigente**, pero se deben contrastar con el boletín de políticas vigente antes de modificar o liquidar un rebate.
+Las metas configurables son:
 
-Además de la evaluación ponderada, el tablero muestra los requisitos operativos: **3 demostraciones pequeñas y 1 demostración grande** con soportes. Se registra también la certificación DJI de al menos una persona del equipo de ventas; por ahora se muestra como recomendación y no bloquea el rebate. El botón **Descargar resumen PDF** genera una ficha descargable con avances, faltantes, compras del trimestre e información de soportes.
+1. Compra de equipos (unidades).
+2. Demostraciones pequeñas (unidades).
+3. Demostraciones grandes (unidades).
+4. Porcentaje de compra de refacciones sobre el monto de equipos (inicialmente 8 %).
+5. Pilotos certificados DJI Academy (certificados).
+6. Cartas firmadas (cartas).
 
-## Parámetros trimestrales y cálculo automático
+En la evaluación se registran los resultados reales: equipos comprados, monto de equipos en COP, monto de refacciones en COP, demostraciones, certificados y cartas. El monto de equipos es la base de cálculo para refacciones, no una meta con peso propio. Por ejemplo, con compras de equipos por `$300.200.150`, una meta de refacciones de `8 %` exige `$24.016.012` para obtener 100 % en ese indicador.
 
-Use **Metas del aliado** para ajustar las metas de cada aliado y trimestre: equipos comprados, demos pequeñas, demos grandes, porcentaje de refacciones, certificados DJI Academy y cartas firmadas. Al editar la evaluación se registra el resultado real: unidades y monto de equipos, monto de refacciones, demos, certificados y cartas. Cada indicador muestra `real/meta` y su porcentaje. El ponderado es binario: un indicador aporta todo su peso únicamente al llegar a 100 %. Las demos comparten el peso 20 % y requieren que las dos metas lleguen a 100 %; las refacciones alcanzan su 10 % cuando el monto registrado llega al porcentaje configurado —por defecto 8 %— del monto de equipos.
+Cada ficha presenta el avance como `real/meta`, su porcentaje con dos decimales y una barra de progreso. Los montos se muestran en COP; los demás indicadores se muestran en sus unidades respectivas.
 
-La edición de cumplimiento se abre en una ventana separada. Antes de guardar, muestra una simulación del cumplimiento, nivel, margen previsto, equipos/kits y relación de refacciones; la ficha principal se actualiza únicamente cuando Google Sheets confirma el guardado.
+## Cálculo del rebate
 
-> El resultado del tablero es una herramienta de seguimiento. Nunca aprueba por sí solo un pago: el rebate se revisa para el trimestre siguiente y exige validar la política, los soportes y las condiciones comerciales aplicables.
+El ponderado es **binario**: cada bloque aporta todo su peso únicamente cuando alcanza 100 %. No existe aporte proporcional al rebate.
 
-## Código de Google Apps Script
+| Bloque | Regla de cumplimiento | Peso |
+| --- | --- | ---: |
+| Meta por compra | Equipos reales / meta de equipos | 50 % |
+| Demostraciones | Las demostraciones pequeñas **y** grandes deben llegar a 100 % | 20 % |
+| Refacciones | Monto de refacciones / (`monto equipos × porcentaje configurado`) | 10 % |
+| DJI Academy | Certificados reales / meta | 10 % |
+| Cartas | Cartas reales / meta | 10 % |
 
-El archivo completo para pegar está en [`appscript/Code.gs`](../appscript/Code.gs). Para instalarlo:
+El total determina la categoría y rebate ganado:
 
-1. Cree la hoja de cálculo que será la base de datos de rebates y abra **Extensiones → Apps Script**.
-2. Reemplace el contenido por `Code.gs`, guarde y ejecute `setup()` una vez. Esto crea las pestañas **Especialistas**, **Aliados**, **Evaluaciones** y **Politica** con sus encabezados.
-3. Use **Implementar → Nueva implementación → Aplicación web**. Ejecútela como la cuenta de DICOL y limite el acceso a los usuarios autorizados por DICOL. Copie la URL terminada en `/exec`.
-4. La API recibe JSON con una propiedad `action`: `getData`, `saveSpecialist`, `savePartner`, `saveEvaluation`, `savePolicy`, `saveParameters`, `deleteParameter`, `deletePartner` o `deleteSpecialist`. Después de actualizar el script, cree una **nueva implementación** para que la URL `/exec` use estos cambios.
+- **A:** 80 % o más → **5 %** de rebate.
+- **B:** 60 % o más → **3 %** de rebate.
+- **C:** menos de 60 % → **0 %** de rebate.
 
-Si una hoja existente conserva los niveles de prueba anteriores, ejecute manualmente `restorePolicyBoletin2025()` una vez para restaurar los porcentajes del boletín 2025 sin modificar los aliados, ventas ni evaluaciones.
+El API recalcula los porcentajes, el ponderado y el rebate calculado al guardar una evaluación. Por ello Google Sheets conserva el cálculo oficial, incluso si el navegador envía valores incorrectos o desactualizados.
 
-`getPartnerSummary(partnerId, period)` también se puede ejecutar desde el editor para verificar el cálculo de una ficha. El código valida los periodos Q1–Q4, limita cada indicador entre 0 % y 100 %, evita eliminar un especialista mientras conserve aliados activos y conserva un historial lógico mediante archivo (`activo=false`).
+> El tablero es de seguimiento; no aprueba pagos. Antes de liquidar, DICOL debe validar facturas, evidencias y condiciones comerciales.
 
-## Integración del portal
+## Instalación de Apps Script
 
-El tablero usa la URL publicada de la **Aplicación web** de Apps Script (la que termina en `/exec`), no la URL de biblioteca. Al abrir `rebates.html`, consulta las pestañas de Google Sheets y no carga datos de demostración ni utiliza `localStorage`. Las acciones de crear, editar, eliminar y guardar evaluaciones se envían a esa misma aplicación web.
+1. En la hoja que será la base, abra **Extensiones → Apps Script** y reemplace el contenido con [`appscript/Code.gs`](../appscript/Code.gs).
+2. Ejecute `setup()` una vez. Crea o completa las pestañas **Especialistas**, **Aliados**, **Evaluaciones**, **Politica** y **Parametros**. También restaura la política fija A/B/C indicada arriba.
+3. Implemente el proyecto como aplicación web, ejecútelo como la cuenta de DICOL y copie la URL `/exec` en `rebates.js`.
+4. Después de cambios en Apps Script, cree una nueva implementación para publicar el código actualizado.
 
-Para verificar la conexión, ejecute `setup()` una vez en Apps Script y agregue los registros directamente en las pestañas creadas. El estado de conexión que aparece en la esquina superior derecha del tablero confirma si la lectura de Google Sheets fue exitosa. No se deben incluir credenciales en `rebates.js`.
+La API acepta `getData`, `saveSpecialist`, `savePartner`, `saveEvaluation`, `saveParameters`, `deletePartner` y `deleteSpecialist`. No contiene catálogo, precios, kits ni acciones de catálogo.
 
-## Estructura para la gestión comercial
+## Operación
 
-La pestaña **Evaluaciones** conserva los indicadores de cumplimiento y añade `resultado_ventas`, `rebate_calculado`, `rebate_aplicado` y `diferencia` para cada aliado y trimestre. Así se puede registrar el resultado comercial y contrastar el rebate calculado frente al aplicado, como en el formato de seguimiento compartido. Al ejecutar `setup()` en una hoja existente se agregan estos encabezados sin eliminar el historial previo.
-
-Para diligenciar una evaluación: **Resultado de ventas** es la cantidad de equipos/ventas que califican en el trimestre (tómela del reporte comercial y las facturas aprobadas); **rebate calculado** es el porcentaje que corresponde según el boletín de políticas, el margen y los productos que sí aplican; **rebate aplicado** es el porcentaje que fue efectivamente aprobado/aplicado después de la revisión. La nueva **Justificación y soportes** debe contener las cotizaciones, facturas, evidencias de demo, documentos pendientes o excepciones que respaldan el dato. La interfaz muestra esta misma ayuda al pasar el cursor —o enfocar con teclado— sobre cada icono `i`.
-
-La ficha individual incluye además un **Pulso comercial** para que la conversación con cada aliado tenga en un mismo lugar la evaluación, rebates, ventas calificadas, indicadores al día y la comparación visual de cada KPI con su peso de política. No inventa valores de facturación, modelos o refacciones: esos datos solo se muestran cuando hayan sido incorporados como campos y soportados en la hoja.
-
-## Registro comercial
-
-La ficha ya no usa catálogo, kits ni ventas por producto. El responsable registra los montos y unidades consolidados del trimestre en la ventana de evaluación; esto evita mezclar precios de catálogo con el cumplimiento. El margen base se mantiene en 22 % y el rebate aprobado se registra por separado con su justificación.
-
-El API y la interfaz validan que no existan dos aliados activos con el mismo nombre (sin importar mayúsculas, minúsculas o espacios). También se aplica la misma validación a especialistas y se bloquea el botón mientras una petición está en curso, evitando registros duplicados por doble clic.
-
-## Operación diaria en el tablero
-
-1. En **Gestionar especialistas**, agregue o elimine especialistas de DICOL. Para eliminar uno con aliados asignados, primero reasigne cada aliado.
-2. Use **Agregar aliado** para registrar una empresa aliada y asignarla al especialista DICOL responsable.
-3. Desde la ficha del aliado, use **Cambiar especialista** para reasignarlo sin perder su historial, notas ni evaluaciones.
-4. Ajuste los deslizadores de los indicadores y seleccione **Guardar evaluación**. La ficha recalcula de inmediato el porcentaje, nivel, rebate proyectado y los pendientes del trimestre seleccionado.
+1. Registre especialistas y aliados.
+2. Abra la ficha del aliado, elija el trimestre y use **Metas del aliado** para definir sus compromisos.
+3. Use **Editar evaluación** para registrar los resultados reales del trimestre.
+4. Revise los indicadores, categoría y rebate ganado; capture el rebate aplicado solo cuando sea aprobado.
