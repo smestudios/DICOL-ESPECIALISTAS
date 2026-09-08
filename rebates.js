@@ -8,9 +8,9 @@ const POLICY = {
   pilots: { label: "Pilotos certificados", weight: 10, target: 100 },
   information: { label: "Información y soportes", weight: 10, target: 100 },
   tiers: [
-    { name: "A", min: 80, rebate: 5 },
-    { name: "B", min: 60, rebate: 3 },
-    { name: "C", min: 0, rebate: 0 },
+    { name: "A", min: 80, rebate: 10 },
+    { name: "B", min: 60, rebate: 5 },
+    { name: "C", min: 0, rebate: 3 },
   ],
 };
 const emptyState = {

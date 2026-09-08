@@ -68,9 +68,9 @@ const DEFAULT_POLICY = [
   ["indicador", "parts", "Repuestos", 10, 100],
   ["indicador", "pilots", "Pilotos certificados", 10, 100],
   ["indicador", "information", "Información y soportes", 10, 100],
-  ["nivel", "A", "Nivel A", 5, 80],
-  ["nivel", "B", "Nivel B", 3, 60],
-  ["nivel", "C", "Nivel C", 0, 0],
+  ["nivel", "A", "Nivel A", 10, 80],
+  ["nivel", "B", "Nivel B", 5, 60],
+  ["nivel", "C", "Nivel C", 3, 0],
 ];
 
 function setup() {
@@ -83,6 +83,21 @@ function setup() {
     policySheet
       .getRange(2, 1, DEFAULT_POLICY.length, 5)
       .setValues(DEFAULT_POLICY);
+  const parameterSheet = spreadsheet.getSheetByName(SHEET_NAMES.parameters);
+  if (parameterSheet.getLastRow() === 1) {
+    const rows = ["Q1", "Q2", "Q3", "Q4"].flatMap((period) =>
+      DEFAULT_PARAMETERS.map((item) => [Utilities.getUuid(), period, ...item.slice(1), true]),
+    );
+    parameterSheet.getRange(2, 1, rows.length, HEADERS.parameters.length).setValues(rows);
+  }
+}
+// Ejecute esta función una sola vez solo si desea restaurar los valores del
+// boletín 2025 (A 5 %, B 3 %, C 0 %) en una hoja que tenía valores de prueba.
+function restorePolicyBoletin2025() {
+  const sheet = sheet_(SHEET_NAMES.policy);
+  if (sheet.getLastRow() > 1)
+    sheet.getRange(2, 1, sheet.getLastRow() - 1, HEADERS.policy.length).clearContent();
+  sheet.getRange(2, 1, DEFAULT_POLICY.length, HEADERS.policy.length).setValues(DEFAULT_POLICY);
 }
 // Ejecute esta función una sola vez solo si desea restaurar los valores del
 // boletín 2025 (A 5 %, B 3 %, C 0 %) en una hoja que tenía valores de prueba.
@@ -184,6 +199,24 @@ function archiveParameter_(id) {
   const item = byId_(SHEET_NAMES.parameters, id);
   if (!item) throw new Error("Parámetro no encontrado.");
   return upsert_(SHEET_NAMES.parameters, { ...item, activo: false });
+}
+function savePrice_(data) {
+  require_(data, ["descripcion", "categoria", "modelo"]);
+  const finalWithTax = Math.max(0, number_(data.precio_final_iva));
+  const finalWithoutTax = Math.max(0, number_(data.precio_final_sin_iva));
+  const partnerWithTax = Math.max(0, number_(data.precio_aliado_iva));
+  const partnerWithoutTax = Math.max(0, number_(data.precio_aliado_sin_iva));
+  if (!finalWithTax || !partnerWithTax)
+    throw new Error("Registre los precios con IVA para cliente final y aliado.");
+  const value = {
+    id: data.id || Utilities.getUuid(), descripcion: String(data.descripcion).trim(),
+    categoria: data.categoria, modelo: String(data.modelo).trim(),
+    precio_final_iva: finalWithTax, precio_final_sin_iva: finalWithoutTax,
+    margen_base: number_(data.margen_base) || 22, precio_aliado_iva: partnerWithTax,
+    precio_aliado_sin_iva: partnerWithoutTax, activo: true,
+  };
+  if (data.categoria === "kit") return upsert_(SHEET_NAMES.kits, { id: value.id, nombre: value.descripcion, modelo: value.modelo, componentes: String(data.componentes || ""), precio_final_iva: finalWithTax, precio_final_sin_iva: finalWithoutTax, margen_base: value.margen_base, precio_aliado_iva: partnerWithTax, precio_aliado_sin_iva: partnerWithoutTax, activo: true });
+  return upsert_(SHEET_NAMES.prices, value);
 }
 function saveSpecialist_(data) {
   require_(data, ["nombre"]);
