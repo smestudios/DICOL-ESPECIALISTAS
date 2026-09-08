@@ -2,15 +2,15 @@
 const APPS_SCRIPT_URL =
   "https://script.google.com/macros/s/AKfycbyxEKQfHQ_39AcIjS69B-5xRyleIsL4w25LJTGMmwyKMgp9uLucsNWFfHwuyWBOtUjVjQ/exec";
 const POLICY = {
-  sales: { label: "PSI / ventas", weight: 50, target: 100 },
-  demos: { label: "Demostraciones", weight: 20, target: 100 },
-  parts: { label: "Repuestos", weight: 10, target: 100 },
-  pilots: { label: "Pilotos certificados", weight: 10, target: 100 },
-  information: { label: "Información y soportes", weight: 10, target: 100 },
+  sales: { label: "Cumplimiento de la meta por compra", weight: 50, target: 100 },
+  demos: { label: "Demostraciones pequeñas y grandes", weight: 20, target: 100 },
+  parts: { label: "Compra de refacciones", weight: 10, target: 100 },
+  pilots: { label: "Certificados DJI Academy", weight: 10, target: 100 },
+  information: { label: "Cartas firmadas", weight: 10, target: 100 },
   tiers: [
-    { name: "A", min: 80, rebate: 10 },
-    { name: "B", min: 60, rebate: 5 },
-    { name: "C", min: 0, rebate: 3 },
+    { name: "A", min: 80, rebate: 5 },
+    { name: "B", min: 60, rebate: 3 },
+    { name: "C", min: 0, rebate: 0 },
   ],
 };
 const emptyState = {
@@ -156,7 +156,7 @@ function renderSummary() {
   $("#partnerCountDetail").textContent =
     `${state.specialists.length} especialista(s) DICOL`;
   $("#averageScore").textContent = `${average}%`;
-  $("#projectedRebate").textContent = `${(22 + Number(projected)).toFixed(1)}%`;
+  $("#projectedRebate").textContent = `${Number(projected).toFixed(1)}%`;
   $("#atRiskCount").textContent = results.filter((r) => r.score < 60).length;
 }
 function renderTabs() {
@@ -260,8 +260,8 @@ function renderPartnerDetail() {
       : result.score >= 60
         ? "Cumple el mínimo, pero tiene oportunidades para alcanzar el nivel A."
         : "No alcanza el mínimo trimestral; requiere un plan de acción con el especialista DICOL.";
-  $("#rebateValue").textContent = `${22 + Number(result.tier.rebate)}%`;
-  $("#gradeName").textContent = `Margen base 22% + rebate ${result.tier.rebate}% · Nivel ${result.tier.name}`;
+  $("#rebateValue").textContent = `${Number(result.tier.rebate)}%`;
+  $("#gradeName").textContent = `Categoría ${result.tier.name} · rebate ganado ${result.tier.rebate}%`;
   renderCommercialOverview(result);
   $("#policyNote").textContent = `Política activa: ${rules()
     .map((rule) => `${rule.label} ${rule.weight}%`)
@@ -282,15 +282,15 @@ function renderCommercialOverview(result) {
   const applied = Number(result.values.rebate_aplicado || 0);
   $("#commercialQuarter").textContent = q();
   $("#commercialScore").textContent = `${result.score}%`;
-  $("#commercialCalculated").textContent = `${22 + calculated}%`;
-  $("#commercialApplied").textContent = `${22 + applied}%`;
+  $("#commercialCalculated").textContent = `${calculated}%`;
+  $("#commercialApplied").textContent = `${applied}%`;
   $("#commercialSales").textContent = units;
   $("#commercialBilling").textContent = money(billing);
   $("#commercialDemos").textContent = `${Math.round(Number(result.values.demos || 0))}%`;
   $("#commercialParts").textContent = money(parts);
   $("#commercialPartsChart").textContent = money(parts);
   $("#commercialIndicators").textContent = `${met}/${indicators.length}`;
-  $("#commercialStatus").textContent = `Nivel ${result.tier.name} · Margen 22% + rebate ${calculated}% · aplicado: ${(applied - calculated).toFixed(1)}% vs. calculado`;
+  $("#commercialStatus").textContent = `Categoría ${result.tier.name} · rebate ganado ${calculated}% · aplicado: ${(applied - calculated).toFixed(1)}% vs. calculado`;
   $("#commercialKpis").innerHTML = indicators.map((rule) => {
     const value = Number(result.values[rule.key] || 0);
     return `<div class="commercial-kpi"><span>${esc(rule.label)}</span><div><i style="width:${Math.min(100, value)}%"></i></div><b>${value}%</b><small>peso ${rule.weight}%</small></div>`;
@@ -302,7 +302,26 @@ function rules() {
     .filter(([key]) => key !== "tiers")
     .map(([key, rule]) => ({ key, ...rule }));
 }
+function money(value) {
+  return new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(value || 0);
+}
+function metricDefinitions(values, partner = currentPartner(), period = q()) {
+  const target = (key, fallback) => Number(parameter(key, partner.id, period)?.meta || fallback);
+  const percent = (actual, goal) => goal ? Math.min(100, (actual / goal) * 100) : 0;
+  const partsRate = target("porcentaje_refacciones", 8);
+  const expectedParts = Number(values.equipmentTotal || 0) * partsRate / 100;
+  return [
+    { key: "sales", label: "Meta por compra", actual: Number(values.equipmentUnits || 0), target: target("ventas_equipos", 1), unit: "unidades", weight: 50 },
+    { key: "small", label: "Demostraciones pequeñas", actual: Number(values.demos_pequenas || 0), target: target("demos_pequenas", 3), unit: "demostraciones", weight: 0 },
+    { key: "large", label: "Demostraciones grandes", actual: Number(values.demos_grandes || 0), target: target("demos_grandes", 1), unit: "demostraciones", weight: 20 },
+    { key: "parts", label: "Compra de refacciones", actual: Number(values.partsTotal || 0), target: expectedParts, unit: "COP", weight: 10, note: `${partsRate}% del monto de equipos (${money(Number(values.equipmentTotal || 0))})` },
+    { key: "pilots", label: "Pilotos certificados DJI Academy", actual: Number(values.certificados_dji || 0), target: target("certificados_dji", 1), unit: "certificados", weight: 10 },
+    { key: "letters", label: "Cartas firmadas", actual: Number(values.cartas_firmadas || 0), target: target("cartas_firmadas", 1), unit: "cartas", weight: 10 },
+  ].map((item) => ({ ...item, percent: percent(item.actual, item.target) }));
+}
+function displayMetricValue(value, unit) { return unit === "COP" ? money(value) : `${Number(value).toLocaleString("es-CO")} ${unit}`; }
 function renderIndicators(result) {
+  const metrics = metricDefinitions(result.values);
   $("#salesResultInput").value = Number(result.values.resultado_ventas || 0);
   $("#calculatedRebateInput").value = Number(result.values.rebate_calculado || result.tier.rebate || 0);
   $("#appliedRebateInput").value = Number(result.values.rebate_aplicado || 0);
@@ -310,43 +329,15 @@ function renderIndicators(result) {
   $("#largeDemosInput").value = Number(result.values.demos_grandes || 0);
   $("#djiCertifiedInput").value = Number(result.values.certificados_dji || 0);
   $("#evaluationJustification").value = result.values.justificacion || "";
-  ["#salesResultInput", "#calculatedRebateInput", "#appliedRebateInput", "#smallDemosInput", "#largeDemosInput", "#djiCertifiedInput", "#evaluationJustification"].forEach((selector) => ($(selector).disabled = true));
-  $("#indicatorGrid").innerHTML = rules()
-    .map((rule) => {
-      const value = Number(result.values[rule.key] || 0);
-      return `<article class="indicator"><label>${esc(rule.label)} <span class="info-tooltip" tabindex="0">i<span>Porcentaje de cumplimiento respaldado por evidencias del trimestre. La política lo pondera con un peso de ${rule.weight}%.</span></span><output>${value}%</output></label><small>Peso ${rule.weight}% · meta ${rule.target}%</small><input type="range" min="0" max="100" value="${value}" data-indicator="${rule.key}" disabled><progress max="100" value="${value}"></progress></article>`;
-    })
-    .join("");
-  document.querySelectorAll("[data-indicator]").forEach(
-    (input) =>
-      (input.oninput = () => {
-        input.parentElement.querySelector("output").textContent =
-          `${input.value}%`;
-        input.parentElement.querySelector("progress").value = input.value;
-      }),
-  );
+  $("#indicatorGrid").innerHTML = metrics.map((metric) => `<article class="indicator"><label>${esc(metric.label)} <output>${displayMetricValue(metric.actual, metric.unit)} / ${displayMetricValue(metric.target, metric.unit)} <b>${metric.percent.toFixed(2)}%</b></output></label><small>${metric.note || (metric.key === "small" ? "Junto con las demostraciones grandes aporta" : `Aporta ${metric.weight}% al rebate cuando llega a 100%`)}</small><progress max="100" value="${metric.percent}"></progress></article>`).join("");
 }
 function renderRequirements(result) {
-  const values = result.values;
-  const config = (key, fallback, required = true) => ({ target: Number(parameter(key, currentPartner().id)?.meta || fallback), required });
-  const equipment = config("ventas_equipos", 1);
-  const small = config("demos_pequenas", 3);
-  const large = config("demos_grandes", 1);
-  const dji = config("certificados_dji", 1, false);
-  const parts = config("porcentaje_refacciones", 8);
-  const requirements = [
-    { label: "Equipos y kits", current: Number(values.equipmentUnits || 0), ...equipment },
-    { label: "Demos pequeñas", current: Number(values.demos_pequenas || 0), ...small },
-    { label: "Demo grande", current: Number(values.demos_grandes || 0), ...large },
-    { label: "Certificación DJI", current: Number(values.certificados_dji || 0), ...dji },
-    { label: "Cartas firmadas", current: Number(values.cartas_firmadas || 0), ...config("cartas_firmadas", 1) },
-    { label: "Refacciones", current: Number(values.partsRatio || 0), ...parts, suffix: "%" },
-  ];
-  $("#requirementsProgress").innerHTML = requirements.map((item) => {
-    const complete = item.current >= item.target;
-    const wording = complete ? "Cumplido" : `Faltan ${item.target - item.current}`;
-    const percentage = item.target ? Math.min(100, (item.current / item.target) * 100) : 0;
-    return `<article class="requirement ${complete ? "requirement--complete" : ""}"><span>${item.required ? "Obligatorio" : "Recomendado"}</span><b>${esc(item.label)}</b><strong>${item.current.toFixed?.(item.suffix ? 1 : 0) || item.current}${item.suffix || ""}/${item.target}${item.suffix || ""}</strong><small>${percentage.toFixed(0)}% · ${wording}${item.required ? " para postular rebate" : " · aún no obligatorio"}</small></article>`;
+  const metrics = metricDefinitions(result.values);
+  $("#requirementsProgress").innerHTML = metrics.map((item) => {
+    const complete = item.percent >= 100;
+    const deficit = Math.max(0, item.target - item.actual);
+    const wording = complete ? "Cumplido" : `Faltan ${displayMetricValue(deficit, item.unit)}`;
+    return `<article class="requirement ${complete ? "requirement--complete" : ""}"><span>${item.weight ? `Peso ${item.weight}%` : "Parte del peso demos 20%"}</span><b>${esc(item.label)}</b><strong>${item.percent.toFixed(2)}%</strong><small>${wording}</small></article>`;
   }).join("");
 }
 function renderTrend(partner) {
@@ -482,18 +473,14 @@ $("#downloadSummaryButton").onclick = () => {
   if (!partner) return;
   const result = evaluation(partner);
   const values = result.values;
-  const missing = [
-    Number(values.demos_pequenas || 0) < 3 && `faltan ${3 - Number(values.demos_pequenas || 0)} demos pequenas`,
-    Number(values.demos_grandes || 0) < 1 && "falta 1 demo grande",
-    Number(values.certificados_dji || 0) < 1 && "se recomienda certificar 1 persona DJI",
-  ].filter(Boolean);
+  const metrics = metricDefinitions(values, partner);
+  const missing = metrics.filter((item) => item.percent < 100).map((item) => `faltan ${displayMetricValue(item.target - item.actual, item.unit)} de ${item.label}`);
   const lines = [
     `DICOL | Resumen de rebate - ${partner.name}`, `Periodo: ${q()} | Especialista: ${partnerSpecialistName(partner)}`,
     `Cumplimiento ponderado: ${result.score}% | Nivel: ${result.tier.name}`,
-    `Margen base: 22% | Rebate calculado: ${Number(values.rebate_calculado || result.tier.rebate)}% | Margen proyectado: ${22 + Number(values.rebate_calculado || result.tier.rebate)}%`,
+    `Categoría: ${result.tier.name} | Rebate ganado: ${Number(values.rebate_calculado || result.tier.rebate)}% | Rebate aplicado: ${Number(values.rebate_aplicado || 0)}%`,
     `Equipos comprados: ${Number(values.equipmentUnits || 0)} | Monto equipos: ${Number(values.equipmentTotal || 0).toLocaleString("es-CO")} COP`,
-    `Demos pequenas: ${Number(values.demos_pequenas || 0)}/3 | Demos grandes: ${Number(values.demos_grandes || 0)}/1`,
-    `Certificados DJI: ${Number(values.certificados_dji || 0)}/1 (recomendado, aun no obligatorio)`,
+    ...metrics.map((item) => `${item.label}: ${displayMetricValue(item.actual, item.unit)} / ${displayMetricValue(item.target, item.unit)} (${item.percent.toFixed(2)}%)`),
     `Pendientes: ${missing.length ? missing.join("; ") : "Requisitos operativos registrados. Validar soportes."}`,
     "Indicadores de politica:", ...rules().map((rule) => `- ${rule.label}: ${Number(values[rule.key] || 0)}% (peso ${rule.weight}%)`),
     `Soportes / justificacion: ${values.justificacion || "Sin registrar"}`,
@@ -505,13 +492,7 @@ $("#downloadSummaryButton").onclick = () => {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 };
 $("#policyButton").onclick = () => {
-  const fields = `${rules()
-    .map(
-      (rule) =>
-        `<label>${esc(rule.label)} — peso (%)<input name="${rule.key}" type="number" min="0" max="100" value="${rule.weight}"></label>`,
-    )
-    .join("")}<p class="dialog-help">Rebate adicional sobre el margen base de 22 %. El margen mostrado será 22 % + el rebate del nivel.</p>${state.policy.tiers.map((tier) => `<label>Nivel ${esc(tier.name)} — rebate adicional (%)<input name="tier-${esc(tier.name)}" type="number" min="0" max="100" step="0.01" value="${tier.rebate}"></label>`).join("")}`;
-  $("#policyFields").innerHTML = fields;
+  $("#policyFields").innerHTML = `<p class="dialog-help">El rebate se determina con cumplimiento binario: un indicador aporta su peso únicamente al llegar a 100%.</p><ul class="policy-rules"><li>Meta por compra: <b>50%</b></li><li>Demostraciones pequeñas y grandes: <b>20%</b> (ambas al 100%)</li><li>Compra de refacciones: <b>10%</b></li><li>Certificados DJI Academy: <b>10%</b></li><li>Cartas firmadas: <b>10%</b></li></ul><p class="dialog-help"><b>Categoría A:</b> ≥ 80% = 5% de rebate · <b>B:</b> ≥ 60% = 3% · <b>C:</b> &lt; 60% = 0%.</p>`;
   $("#policyDialog").showModal();
 };
 $("#partnerForm").onsubmit = (event) => {
@@ -553,28 +534,6 @@ $("#specialistForm").onsubmit = (event) => {
     renderSpecialistManager();
   });
 };
-$("#policyForm").onsubmit = (event) => {
-  event.preventDefault();
-  const policy = [
-    ...rules().map((rule) => ({
-      type: "indicador",
-      key: rule.key,
-      label: rule.label,
-      value: Math.max(0, Number(event.target.elements[rule.key].value) || 0),
-      target: rule.target,
-    })),
-    ...state.policy.tiers.map((tier) => ({
-      type: "nivel",
-      key: tier.name,
-      label: `Nivel ${tier.name}`,
-      value: Math.max(0, Number(event.target.elements[`tier-${tier.name}`].value) || 0),
-      target: tier.min,
-    })),
-  ];
-  persist("savePolicy", policy).then((saved) => {
-    if (saved) $("#policyDialog").close();
-  });
-};
 $("#editEvaluationButton").onclick = () => {
   const partner = currentPartner();
   if (!partner) return;
@@ -601,8 +560,7 @@ function renderEvaluationPreview() {
   const draft = evaluationDraft();
   const result = evaluation(draft);
   const values = result.values;
-  const money = (value) => new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(value || 0);
-  $("#evaluationPreview").innerHTML = `<article><span>Cumplimiento previsto</span><strong>${result.score}%</strong><small>Nivel ${result.tier.name}</small></article><article><span>Equipos / kits</span><strong>${values.equipmentUnits || 0}</strong><small>${values.sales.toFixed(0)}% de la meta</small></article><article><span>Demostraciones</span><strong>${values.demos.toFixed(0)}%</strong><small>mínimo entre pequeñas y grandes</small></article><article><span>DJI Academy</span><strong>${values.pilots.toFixed(0)}%</strong><small>personas vs. meta</small></article><article><span>Refacciones</span><strong>${values.partsRatio.toFixed(1)}%</strong><small>${values.parts.toFixed(0)}% de cumplimiento</small></article><article><span>Margen previsto</span><strong>${22 + result.tier.rebate}%</strong><small>22% + rebate ${result.tier.rebate}%</small></article>`;
+  $("#evaluationPreview").innerHTML = `<article><span>Cumplimiento previsto</span><strong>${result.score}%</strong><small>Categoría ${result.tier.name} · rebate ${result.tier.rebate}%</small></article><article><span>Compra de equipos</span><strong>${values.equipmentUnits || 0}</strong><small>${values.sales.toFixed(0)}% de la meta</small></article><article><span>Demostraciones</span><strong>${values.demos.toFixed(0)}%</strong><small>se cumplen pequeñas y grandes</small></article><article><span>DJI Academy</span><strong>${values.pilots.toFixed(0)}%</strong><small>certificados vs. meta</small></article><article><span>Refacciones</span><strong>${money(values.partsTotal)}</strong><small>${values.parts.toFixed(0)}% de cumplimiento</small></article><article><span>Rebate ganado</span><strong>${result.tier.rebate}%</strong><small>A ≥ 80%: 5% · B ≥ 60%: 3%</small></article>`;
 }
 ["#editEquipmentUnits", "#editEquipmentAmount", "#editPartsAmount", "#editSmallDemos", "#editLargeDemos", "#editDjiCertified", "#editLetters", "#editAppliedRebate"].forEach((selector) => $(selector).oninput = renderEvaluationPreview);
 $("#evaluationForm").onsubmit = (event) => {

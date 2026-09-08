@@ -20,7 +20,7 @@
         <li><a class="is-current" href="rebates.html">Rebates</a></li>
       </ul>
       <button class="nav-button" id="policyButton" type="button">
-        Política vigente
+        Reglas de rebate
       </button>
     </nav>
     <main class="rebates-app">
@@ -67,7 +67,7 @@
           ><small>Promedio ponderado del trimestre</small>
         </article>
         <article>
-          <span>Rebate proyectado</span><strong id="projectedRebate">0%</strong
+          <span>Rebate ganado</span><strong id="projectedRebate">0%</strong
           ><small>Estimación, sujeta a validación</small>
         </article>
         <article>
@@ -155,7 +155,7 @@
                 <div class="commercial-metrics">
                   <article><span>Evaluación</span><strong id="commercialScore">0%</strong><small>cumplimiento ponderado</small></article>
                   <article><span>Facturación</span><strong id="commercialBilling">$0</strong><small>ventas registradas con IVA</small></article>
-                  <article><span>Rebate calculado</span><strong id="commercialCalculated">0%</strong><small>según política vigente</small></article>
+                  <article><span>Rebate ganado</span><strong id="commercialCalculated">0%</strong><small>según categoría del trimestre</small></article>
                   <article><span>Rebate aplicado</span><strong id="commercialApplied">0%</strong><small>aprobado / aplicado</small></article>
                   <article><span>Resultado ventas</span><strong id="commercialSales">0</strong><small>unidades o ventas calificadas</small></article>
                   <article><span>Demos totales</span><strong id="commercialDemos">0%</strong><small>cumplimiento registrado</small></article>
@@ -175,7 +175,7 @@
                   <p id="scoreExplanation"></p>
                 </article>
                 <article class="policy-card">
-                  <p>Rebate proyectado</p>
+                  <p>Rebate ganado</p>
                   <strong id="rebateValue">0%</strong
                   ><span id="gradeName">Sin clasificar</span>
                   <p>
@@ -209,12 +209,12 @@
                   <label>Demos grandes soportadas<input id="largeDemosInput" type="number" min="0" step="1" disabled /></label>
                   <label>Personas certificadas DJI<input id="djiCertifiedInput" type="number" min="0" step="1" disabled /></label>
                 </div>
-                <label class="evaluation-justification">Justificación y soportes <span class="info-tooltip" tabindex="0">i<span>Indique cotizaciones, facturas, evidencias de demostración, documentos pendientes, excepciones de margen y cualquier motivo que sustente el resultado.</span></span><textarea id="evaluationJustification" rows="4" disabled placeholder="Ej.: COT3434 · T100 · factura validada; evidencia de demo adjunta."></textarea></label>
+                <label class="evaluation-justification">Justificación y soportes <span class="info-tooltip" tabindex="0">i<span>Indique cotizaciones, facturas, evidencias de demostración, documentos pendientes y cualquier motivo que sustente el resultado.</span></span><textarea id="evaluationJustification" rows="4" disabled placeholder="Ej.: COT3434 · T100 · factura validada; evidencia de demo adjunta."></textarea></label>
                 <p id="policyNote" class="policy-note"></p>
                 <div id="indicatorGrid" class="indicator-grid"></div>
               </section>
-              <section class="requirements-card" aria-label="Requisitos operativos de rebate">
-                <div><p class="eyebrow">REQUISITOS OPERATIVOS</p><h3>Demostraciones y certificación DJI</h3><p>Para postular el rebate se deben soportar <b>3 demostraciones pequeñas y 1 grande</b>. La certificación DJI de al menos una persona por ventas se registra como recomendación; aún no bloquea el rebate.</p></div>
+              <section class="requirements-card" aria-label="Resumen de metas del aliado">
+                <div><p class="eyebrow">METAS DEL ALIADO</p><h3>Avance frente a cada compromiso</h3><p>Cada indicador muestra su avance real frente a la meta del trimestre. Para el rebate, un indicador aporta su peso solo al llegar al 100 %; las dos demostraciones deben cumplirse.</p></div>
                 <div id="requirementsProgress" class="requirements-progress"></div>
               </section>
               <section class="insight-grid">
@@ -274,7 +274,7 @@
       </form>
     </dialog>
     <dialog id="parametersDialog"><form id="parametersForm"><div class="dialog-heading"><h2>Parámetros de cumplimiento</h2><button type="button" data-close="parametersDialog">×</button></div><p class="dialog-help">Metas del aliado para este trimestre. Cada meta se compara contra el resultado registrado para calcular el indicador.</p><div id="parametersList" class="parameters-list"></div><div class="dialog-actions"><button class="rebate-button rebate-button--primary" type="submit" data-save-action="saveParameters">Guardar parámetros</button></div></form></dialog>
-    <dialog id="evaluationDialog" class="evaluation-dialog"><form id="evaluationForm"><div class="dialog-heading"><div><p class="eyebrow">EDICIÓN AISLADA · <span id="evaluationDialogQuarter"></span></p><h2 id="evaluationDialogPartner">Actualizar cumplimiento</h2></div><button type="button" data-close="evaluationDialog">×</button></div><p class="dialog-help">Revise el efecto de los datos antes de guardar. Equipos/kits y refacciones se calculan desde compras registradas; las demos y DJI se comparan automáticamente contra los parámetros vigentes del Q.</p><div id="evaluationPreview" class="evaluation-preview"></div><div class="evaluation-form-grid"><label>Equipos comprados (unidades)<input id="editEquipmentUnits" type="number" min="0" step="1" required></label><label>Monto comprado en equipos (COP)<input id="editEquipmentAmount" type="number" min="0" step="1" required></label><label>Compra de refacciones (COP)<input id="editPartsAmount" type="number" min="0" step="1" required></label><label>Demos pequeñas realizadas<input id="editSmallDemos" type="number" min="0" step="1" required></label><label>Demos grandes realizadas<input id="editLargeDemos" type="number" min="0" step="1" required></label><label>Personas certificadas DJI Academy<input id="editDjiCertified" type="number" min="0" step="1" required></label><label>Cartas firmadas<input id="editLetters" type="number" min="0" step="1" required></label><label>Rebate adicional aprobado (%)<input id="editAppliedRebate" type="number" min="0" max="100" step="0.01" list="rebateOptions" required><datalist id="rebateOptions"><option value="0"><option value="3"><option value="5"><option value="10"></datalist></label></div><label>Justificación y soportes<textarea id="editJustification" rows="4" placeholder="Facturas, evidencias de demos, DJI Academy, excepciones o pendientes."></textarea></label><div class="dialog-actions"><button class="rebate-button" type="button" data-close="evaluationDialog">Cancelar</button><button class="rebate-button rebate-button--primary" type="submit" data-save-action="saveEvaluation">Guardar cambios</button></div></form></dialog>
+    <dialog id="evaluationDialog" class="evaluation-dialog"><form id="evaluationForm"><div class="dialog-heading"><div><p class="eyebrow">EDICIÓN AISLADA · <span id="evaluationDialogQuarter"></span></p><h2 id="evaluationDialogPartner">Actualizar cumplimiento</h2></div><button type="button" data-close="evaluationDialog">×</button></div><p class="dialog-help">Registre los valores reales del trimestre. La meta de refacciones se calcula automáticamente como el porcentaje configurado del monto comprado en equipos.</p><div id="evaluationPreview" class="evaluation-preview"></div><div class="evaluation-form-grid"><label>Equipos comprados (unidades)<input id="editEquipmentUnits" type="number" min="0" step="1" required></label><label>Monto comprado en equipos (COP)<input id="editEquipmentAmount" type="number" min="0" step="1" required></label><label>Compra de refacciones (COP)<input id="editPartsAmount" type="number" min="0" step="1" required></label><label>Demos pequeñas realizadas<input id="editSmallDemos" type="number" min="0" step="1" required></label><label>Demos grandes realizadas<input id="editLargeDemos" type="number" min="0" step="1" required></label><label>Personas certificadas DJI Academy<input id="editDjiCertified" type="number" min="0" step="1" required></label><label>Cartas firmadas<input id="editLetters" type="number" min="0" step="1" required></label><label>Rebate adicional aprobado (%)<input id="editAppliedRebate" type="number" min="0" max="100" step="0.01" list="rebateOptions" required><datalist id="rebateOptions"><option value="0"><option value="3"><option value="5"><option value="10"></datalist></label></div><label>Justificación y soportes<textarea id="editJustification" rows="4" placeholder="Facturas, evidencias de demos, DJI Academy, excepciones o pendientes."></textarea></label><div class="dialog-actions"><button class="rebate-button" type="button" data-close="evaluationDialog">Cancelar</button><button class="rebate-button rebate-button--primary" type="submit" data-save-action="saveEvaluation">Guardar cambios</button></div></form></dialog>
     <dialog id="specialistDialog">
       <div class="dialog-heading">
         <h2>Especialistas DICOL</h2>
@@ -306,17 +306,10 @@
           <button type="button" data-close="policyDialog">×</button>
         </div>
         <p class="dialog-help">
-          Los valores iniciales reflejan la guía entregada. Valide el boletín
-          vigente antes de cambiarlos o de aprobar una liquidación.
+          Reglas vigentes para el cálculo del rebate del trimestre.
         </p>
         <div id="policyFields"></div>
-        <div class="dialog-actions">
-          <button class="rebate-button" type="button" data-close="policyDialog">
-            Cancelar</button
-          ><button class="rebate-button rebate-button--primary" type="submit" data-save-action="savePolicy">
-            Aplicar política
-          </button>
-        </div>
+        <div class="dialog-actions"><button class="rebate-button rebate-button--primary" type="button" data-close="policyDialog">Entendido</button></div>
       </form>
     </dialog>
     <script src="rebates.js"></script>
