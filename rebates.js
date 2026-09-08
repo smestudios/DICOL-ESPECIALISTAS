@@ -329,7 +329,7 @@ function renderIndicators(result) {
   $("#largeDemosInput").value = Number(result.values.demos_grandes || 0);
   $("#djiCertifiedInput").value = Number(result.values.certificados_dji || 0);
   $("#evaluationJustification").value = result.values.justificacion || "";
-  $("#indicatorGrid").innerHTML = metrics.map((metric) => `<article class="indicator"><label>${esc(metric.label)} <output>${displayMetricValue(metric.actual, metric.unit)} / ${displayMetricValue(metric.target, metric.unit)} <b>${metric.percent.toFixed(2)}%</b></output></label><small>${metric.note || (metric.key === "small" ? "Junto con las demostraciones grandes aporta" : `Aporta ${metric.weight}% al rebate cuando llega a 100%`)}</small><progress max="100" value="${metric.percent}"></progress></article>`).join("");
+  $("#indicatorGrid").innerHTML = metrics.map((metric) => `<article class="indicator indicator--circular"><div class="indicator-copy"><label>${esc(metric.label)}</label><output>${displayMetricValue(metric.actual, metric.unit)} / ${displayMetricValue(metric.target, metric.unit)}</output><small>${metric.note || (metric.key === "small" ? "Junto con las demostraciones grandes aporta" : `Aporta ${metric.weight}% al rebate cuando llega a 100%`)}</small></div><div class="indicator-ring" style="--progress:${metric.percent}%" aria-label="${metric.percent.toFixed(2)}% de cumplimiento"><b>${metric.percent.toFixed(2)}%</b></div></article>`).join("");
 }
 function renderRequirements(result) {
   const metrics = metricDefinitions(result.values);
@@ -456,40 +456,35 @@ $("#parametersForm").onsubmit = (event) => {
   const items = [...document.querySelectorAll(".parameter-row")].map((row) => ({ aliado_id: currentPartner().id, periodo: q(), nombre: row.querySelector('[data-field="nombre"]').value.trim(), clave: row.querySelector('[data-field="clave"]').value.trim(), meta: row.querySelector('[data-field="meta"]').value, unidad: row.querySelector('[data-field="unidad"]').value }));
   persist("saveParameters", items).then((saved) => { if (saved) $("#parametersDialog").close(); });
 };
-function makePdf(lines) {
-  const clean = (text) => String(text).normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^\x20-\x7e]/g, "?").replace(/[\\()]/g, "\\$&");
-  const text = (value, x, y, size = 10, color = "0.12 0.16 0.14") => `${color} rg BT /F1 ${size} Tf ${x} ${y} Td (${clean(value)}) Tj ET`;
-  const content = ["0.04 0.12 0.07 rg 0 760 612 82 re f", text("DICOL  |  CONTROL COMERCIAL", 42, 812, 11, "0.55 0.95 0.66"), text(lines[0], 42, 785, 20, "1 1 1"), text(lines[1], 42, 768, 9, "0.8 0.9 0.83"), "0.93 0.96 0.94 rg 32 640 548 94 re f", text(lines[2], 48, 710, 12), text(lines[3], 48, 685, 12, "0.02 0.42 0.16"), text(lines[4], 48, 660, 11), "0.06 0.14 0.09 rg 32 604 548 25 re f", text("REQUISITOS Y FALTANTES", 45, 612, 10, "1 1 1"), ...lines.slice(5).map((line, index) => text(line, 45, 580 - index * 19, index === 5 ? 11 : 9, index === 7 ? "0.72 0.35 0.12" : "0.12 0.16 0.14"))].join("\n");
-  const objects = ["<< /Type /Catalog /Pages 2 0 R >>", "<< /Type /Pages /Kids [3 0 R] /Count 1 >>", "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>", "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>", `<< /Length ${content.length} >>\nstream\n${content}\nendstream`];
-  let pdf = "%PDF-1.4\n";
-  const offsets = [0];
-  objects.forEach((object, index) => { offsets.push(pdf.length); pdf += `${index + 1} 0 obj\n${object}\nendobj\n`; });
-  const xref = pdf.length;
-  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets.slice(1).map((offset) => `${String(offset).padStart(10, "0")} 00000 n \n`).join("")}trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
-  return new Blob([pdf], { type: "application/pdf" });
+function reportCircle(percent, label) {
+  return `<div class="report-circle" style="--progress:${Math.min(100, percent)}%"><b>${percent.toFixed(0)}%</b><span>${esc(label)}</span></div>`;
+}
+function reportBarChart(metrics) {
+  return `<div class="report-bars">${metrics.map((metric) => `<div class="report-bar"><span>${esc(metric.label)}</span><div><i style="height:${Math.max(3, metric.percent)}%"></i></div><b>${metric.percent.toFixed(0)}%</b></div>`).join("")}</div>`;
+}
+function reportTrend(partner) {
+  return `<div class="report-trend">${["Q1", "Q2", "Q3", "Q4"].map((period) => { const score = evaluation(partner, period).score; return `<div><i style="height:${Math.max(5, score)}%"></i><b>${score}%</b><span>${period}</span></div>`; }).join("")}</div>`;
+}
+function reportHtml(partner, result, metrics) {
+  const values = result.values;
+  const completed = metrics.filter((item) => item.percent >= 100).length;
+  const pending = metrics.filter((item) => item.percent < 100);
+  const recommendations = pending.length ? pending.map((item) => `Completar ${item.label}: faltan ${displayMetricValue(item.target - item.actual, item.unit)}.`) : ["Todos los indicadores alcanzaron el 100 %. Conserve y valide los soportes antes de liquidar el rebate."];
+  const cards = metrics.map((item) => `<article class="metric-card"><div><h3>${esc(item.label)}</h3><strong>${displayMetricValue(item.actual, item.unit)}</strong><p>Meta: ${displayMetricValue(item.target, item.unit)}</p><small>${esc(item.note || (item.weight ? `Peso de rebate: ${item.weight}%` : "Parte del bloque de demostraciones"))}</small></div>${reportCircle(item.percent, item.percent >= 100 ? "Cumple" : "En progreso")}</article>`).join("");
+  return `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Resumen rebate ${esc(partner.name)}</title><style>
+    *{box-sizing:border-box} @page{size:A4 landscape;margin:10mm} body{margin:0;background:#edf2ee;color:#102016;font-family:Arial,Helvetica,sans-serif}.report{width:1120px;margin:24px auto;background:#fff;padding:34px 38px;box-shadow:0 12px 34px #0002}.top{display:flex;justify-content:space-between;gap:30px;padding-bottom:22px;border-bottom:3px solid #29dc75}.brand{display:flex;gap:17px;align-items:flex-start}.mark{display:grid;place-items:center;width:48px;height:48px;border-radius:12px;background:#07150c;color:#29dc75;font-size:21px;font-weight:900}.eyebrow{margin:0;color:#438255;font-size:10px;font-weight:800;letter-spacing:1.2px}.top h1{margin:4px 0;font-size:29px;letter-spacing:-.7px}.top p{margin:0;color:#617066;font-size:12px}.period{min-width:195px;padding:13px 15px;border:1px solid #dce6de;border-radius:11px;background:#f6faf7}.period b{display:block;font-size:13px}.period span{display:block;margin-top:5px;color:#617066;font-size:10px}.overview{display:grid;grid-template-columns:1.2fr repeat(3,1fr);gap:12px;margin:20px 0}.overview article{padding:15px;border:1px solid #dce6de;border-radius:12px;background:#fbfdfb}.overview span{display:block;color:#617066;font-size:10px;text-transform:uppercase;letter-spacing:.6px}.overview strong{display:block;margin:8px 0 3px;font-size:25px}.overview small{color:#438255;font-size:11px;font-weight:700}.section-title{margin:22px 0 10px;font-size:15px;letter-spacing:.2px}.metric-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:11px}.metric-card{display:flex;justify-content:space-between;gap:10px;min-height:137px;padding:14px;border:1px solid #dce6de;border-radius:12px;background:#fff}.metric-card h3{max-width:185px;margin:0 0 10px;font-size:13px}.metric-card strong{font-size:16px;color:#092d17}.metric-card p,.metric-card small{display:block;margin:5px 0;color:#617066;font-size:10px;line-height:1.35}.report-circle{--progress:0%;position:relative;display:grid;place-content:center;flex:0 0 72px;width:72px;height:72px;border-radius:50%;background:conic-gradient(#29dc75 var(--progress),#dce6de 0);text-align:center}.report-circle:before{position:absolute;inset:7px;border-radius:50%;background:#fff;content:""}.report-circle b,.report-circle span{position:relative;z-index:1}.report-circle b{font-size:14px}.report-circle span{margin-top:2px;color:#438255;font-size:8px;font-weight:700}.charts{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:18px}.chart{min-height:214px;padding:15px;border:1px solid #dce6de;border-radius:12px}.chart h3{margin:0;font-size:13px}.chart p{margin:4px 0 12px;color:#617066;font-size:10px}.report-bars{display:flex;align-items:end;height:142px;gap:10px;border-bottom:1px solid #cfdbd1}.report-bar{display:grid;grid-template-columns:1fr 28px;grid-template-rows:20px 1fr;gap:2px;flex:1;min-width:0}.report-bar span{grid-column:1/3;overflow:hidden;color:#617066;font-size:9px;text-overflow:ellipsis;white-space:nowrap}.report-bar div{position:relative;overflow:hidden;border-radius:5px 5px 0 0;background:#edf3ee}.report-bar i{position:absolute;right:0;bottom:0;left:0;border-radius:5px 5px 0 0;background:linear-gradient(#38e781,#119952)}.report-bar b{align-self:end;color:#119952;font-size:10px}.report-trend{display:flex;align-items:end;justify-content:space-around;height:142px;border-bottom:1px solid #cfdbd1}.report-trend div{display:grid;grid-template-rows:1fr auto auto;height:100%;min-width:42px;text-align:center}.report-trend i{align-self:end;display:block;border-radius:6px 6px 0 0;background:#163b23}.report-trend b{margin-top:5px;color:#163b23;font-size:10px}.report-trend span{margin-top:2px;color:#617066;font-size:9px}.recommendations{margin-top:18px;padding:17px 18px;border-radius:12px;background:#07150c;color:#fff}.recommendations h3{margin:0 0 9px;color:#79f2a8;font-size:13px}.recommendations ul{display:grid;grid-template-columns:1fr 1fr;gap:7px 22px;margin:0;padding-left:17px}.recommendations li{color:#e3eee5;font-size:10px;line-height:1.4}.footer{display:flex;justify-content:space-between;margin-top:17px;padding-top:11px;border-top:1px solid #dce6de;color:#758277;font-size:9px}@media print{body{background:#fff}.report{width:auto;margin:0;padding:0;box-shadow:none}}
+  </style></head><body><main class="report"><header class="top"><div class="brand"><div class="mark">D</div><div><p class="eyebrow">DICOL · CONTROL COMERCIAL</p><h1>Resumen de rebate</h1><p>${esc(partner.name)} · Especialista responsable: ${esc(partnerSpecialistName(partner))}</p></div></div><div class="period"><b>PERIODO ${q()}</b><span>Informe generado para seguimiento del aliado</span></div></header><section class="overview"><article><span>Cumplimiento ponderado</span><strong>${result.score}%</strong><small>${completed}/${metrics.length} indicadores al 100%</small></article><article><span>Categoría</span><strong>${esc(result.tier.name)}</strong><small>Clasificación del trimestre</small></article><article><span>Rebate ganado</span><strong>${result.tier.rebate}%</strong><small>Según cumplimiento binario</small></article><article><span>Compra de equipos</span><strong>${displayMetricValue(values.equipmentTotal, "COP")}</strong><small>${Number(values.equipmentUnits || 0)} unidades registradas</small></article></section><h2 class="section-title">Indicadores del trimestre</h2><section class="metric-grid">${cards}</section><section class="charts"><article class="chart"><h3>Cumplimiento por indicador</h3><p>Avance actual frente a la meta de cada compromiso.</p>${reportBarChart(metrics)}</article><article class="chart"><h3>Avance anual</h3><p>Cumplimiento ponderado por trimestre.</p>${reportTrend(partner)}</article></section><section class="recommendations"><h3>Próximos compromisos</h3><ul>${recommendations.map((item) => `<li>${esc(item)}</li>`).join("")}</ul></section><footer class="footer"><span>DICOL · Informe de seguimiento</span><span>Este documento no aprueba pagos; valide soportes y condiciones comerciales.</span><span>${new Date().toLocaleDateString("es-CO")}</span></footer></main></body></html>`;
 }
 $("#downloadSummaryButton").onclick = () => {
   const partner = currentPartner();
   if (!partner) return;
   const result = evaluation(partner);
-  const values = result.values;
-  const metrics = metricDefinitions(values, partner);
-  const missing = metrics.filter((item) => item.percent < 100).map((item) => `faltan ${displayMetricValue(item.target - item.actual, item.unit)} de ${item.label}`);
-  const lines = [
-    `DICOL | Resumen de rebate - ${partner.name}`, `Periodo: ${q()} | Especialista: ${partnerSpecialistName(partner)}`,
-    `Cumplimiento ponderado: ${result.score}% | Nivel: ${result.tier.name}`,
-    `Categoría: ${result.tier.name} | Rebate ganado: ${Number(values.rebate_calculado || result.tier.rebate)}% | Rebate aplicado: ${Number(values.rebate_aplicado || 0)}%`,
-    `Equipos comprados: ${Number(values.equipmentUnits || 0)} | Monto equipos: ${Number(values.equipmentTotal || 0).toLocaleString("es-CO")} COP`,
-    ...metrics.map((item) => `${item.label}: ${displayMetricValue(item.actual, item.unit)} / ${displayMetricValue(item.target, item.unit)} (${item.percent.toFixed(2)}%)`),
-    `Pendientes: ${missing.length ? missing.join("; ") : "Requisitos operativos registrados. Validar soportes."}`,
-    "Indicadores de politica:", ...rules().map((rule) => `- ${rule.label}: ${Number(values[rule.key] || 0)}% (peso ${rule.weight}%)`),
-    `Soportes / justificacion: ${values.justificacion || "Sin registrar"}`,
-    "Este resumen es de seguimiento; no autoriza pagos. Validar politica vigente, facturas y evidencias antes de liquidar.",
-  ];
-  const url = URL.createObjectURL(makePdf(lines));
-  const link = Object.assign(document.createElement("a"), { href: url, download: `resumen-rebate-${partner.name.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-${q()}.pdf` });
-  link.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  const report = window.open("", "_blank");
+  if (!report) return alert("Permita las ventanas emergentes para generar el PDF.");
+  report.document.open();
+  report.document.write(reportHtml(partner, result, metricDefinitions(result.values, partner)));
+  report.document.close();
+  report.onload = () => { report.focus(); report.print(); };
 };
 $("#policyButton").onclick = () => {
   $("#policyFields").innerHTML = `<p class="dialog-help">El rebate se determina con cumplimiento binario: un indicador aporta su peso únicamente al llegar a 100%.</p><ul class="policy-rules"><li>Meta por compra: <b>50%</b></li><li>Demostraciones pequeñas y grandes: <b>20%</b> (ambas al 100%)</li><li>Compra de refacciones: <b>10%</b></li><li>Certificados DJI Academy: <b>10%</b></li><li>Cartas firmadas: <b>10%</b></li></ul><p class="dialog-help"><b>Categoría A:</b> ≥ 80% = 5% de rebate · <b>B:</b> ≥ 60% = 3% · <b>C:</b> &lt; 60% = 0%.</p>`;
