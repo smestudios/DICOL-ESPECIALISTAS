@@ -12,7 +12,7 @@ Además de la evaluación ponderada, el tablero muestra los requisitos operativo
 
 ## Parámetros trimestrales y cálculo automático
 
-Use **Parámetros del Q** para crear, editar o archivar las metas de cada trimestre. La configuración inicial incluye ventas de equipos/kits, demostraciones pequeñas y grandes, certificaciones DJI Academy y el porcentaje de refacciones. Cada indicador compara la cantidad real contra su meta: por ejemplo, 3 demos pequeñas frente a una meta de 3 equivale a 100 %. Para el bloque de demostraciones (peso 20 %) deben llegar al 100 % tanto las pequeñas como las grandes; el sistema toma el menor de ambos avances, evitando que uno compense al otro. El tablero calcula las ventas desde las compras registradas: los artículos `dron` y `kit` cuentan como equipos; los artículos `refaccion` se comparan contra el valor de equipos. La meta inicial exige que las refacciones representen al menos **8 %** de las compras de equipos; ese 8 % en dinero equivale al 100 % del indicador. No registre estos porcentajes manualmente: se recalculan con el catálogo y las ventas del aliado.
+Use **Metas del aliado** para ajustar las metas de cada aliado y trimestre: equipos comprados, demos pequeñas, demos grandes, porcentaje de refacciones, certificados DJI Academy y cartas firmadas. Al editar la evaluación se registra el resultado real: unidades y monto de equipos, monto de refacciones, demos, certificados y cartas. Cada indicador muestra `real/meta` y su porcentaje. El ponderado es binario: un indicador aporta todo su peso únicamente al llegar a 100 %. Las demos comparten el peso 20 % y requieren que las dos metas lleguen a 100 %; las refacciones alcanzan su 10 % cuando el monto registrado llega al porcentaje configurado —por defecto 8 %— del monto de equipos.
 
 La edición de cumplimiento se abre en una ventana separada. Antes de guardar, muestra una simulación del cumplimiento, nivel, margen previsto, equipos/kits y relación de refacciones; la ficha principal se actualiza únicamente cuando Google Sheets confirma el guardado.
 
@@ -25,7 +25,7 @@ El archivo completo para pegar está en [`appscript/Code.gs`](../appscript/Code.
 1. Cree la hoja de cálculo que será la base de datos de rebates y abra **Extensiones → Apps Script**.
 2. Reemplace el contenido por `Code.gs`, guarde y ejecute `setup()` una vez. Esto crea las pestañas **Especialistas**, **Aliados**, **Evaluaciones** y **Politica** con sus encabezados.
 3. Use **Implementar → Nueva implementación → Aplicación web**. Ejecútela como la cuenta de DICOL y limite el acceso a los usuarios autorizados por DICOL. Copie la URL terminada en `/exec`.
-4. La API recibe JSON con una propiedad `action`: `getData`, `saveSpecialist`, `savePartner`, `saveEvaluation`, `savePolicy`, `savePrice`, `saveSale`, `deletePartner` o `deleteSpecialist`. Después de actualizar el script, cree una **nueva implementación** para que la URL `/exec` use estos cambios.
+4. La API recibe JSON con una propiedad `action`: `getData`, `saveSpecialist`, `savePartner`, `saveEvaluation`, `savePolicy`, `saveParameters`, `deleteParameter`, `deletePartner` o `deleteSpecialist`. Después de actualizar el script, cree una **nueva implementación** para que la URL `/exec` use estos cambios.
 
 Si una hoja existente conserva los niveles de prueba anteriores, ejecute manualmente `restorePolicyBoletin2025()` una vez para restaurar los porcentajes del boletín 2025 sin modificar los aliados, ventas ni evaluaciones.
 
@@ -45,11 +45,9 @@ Para diligenciar una evaluación: **Resultado de ventas** es la cantidad de equi
 
 La ficha individual incluye además un **Pulso comercial** para que la conversación con cada aliado tenga en un mismo lugar la evaluación, rebates, ventas calificadas, indicadores al día y la comparación visual de cada KPI con su peso de política. No inventa valores de facturación, modelos o refacciones: esos datos solo se muestran cuando hayan sido incorporados como campos y soportados en la hoja.
 
-## Catálogo, kits y ventas
+## Registro comercial
 
-`setup()` crea tres pestañas adicionales: **Precios**, **Kits** y **Ventas**. En **Catálogo y precios** registre cada producto individual con su categoría (`dron` o `refaccion`), modelo, precio para cliente final con/sin IVA, precio para aliado con/sin IVA y margen base. En **Kits** registre cada combinación con sus componentes y el precio pactado; así un kit se conserva como una venta distinta y no duplica las piezas que lo componen. Todos los aliados parten de un margen base de 22 %: el rebate aprobado se registra por separado, por lo que no debe sobrescribirse el margen de precio. Las sanciones o excepciones se sustentan en la justificación de la evaluación y deben reflejarse en el precio/margen específico aprobado.
-
-Desde la ficha del aliado use **Registrar venta**: selecciona un producto o kit del catálogo y el sistema toma el precio al aliado con IVA, calcula la facturación y acumula las unidades por modelo y las compras de refacciones para el trimestre. Esto es la fuente del panel comercial; no modifique a mano el total de la pestaña Ventas.
+La ficha ya no usa catálogo, kits ni ventas por producto. El responsable registra los montos y unidades consolidados del trimestre en la ventana de evaluación; esto evita mezclar precios de catálogo con el cumplimiento. El margen base se mantiene en 22 % y el rebate aprobado se registra por separado con su justificación.
 
 El API y la interfaz validan que no existan dos aliados activos con el mismo nombre (sin importar mayúsculas, minúsculas o espacios). También se aplica la misma validación a especialistas y se bloquea el botón mientras una petición está en curso, evitando registros duplicados por doble clic.
 

@@ -50,9 +50,6 @@ function normalizeData(data) {
       quarters: partner.quarters || {},
       createdAt: partner.creado_en,
     })),
-    prices: data.prices || [],
-    kits: data.kits || [],
-    sales: data.sales || [],
     parameters: data.parameters || [],
   };
 }
@@ -106,7 +103,7 @@ function evaluation(partner, period = q()) {
       .filter(([key]) => key !== "tiers")
       .reduce(
         (sum, [key, rule]) =>
-          sum + (Math.min(100, Number(values[key] || 0)) / 100) * rule.weight,
+          sum + (Number(values[key] || 0) >= 100 ? rule.weight : 0),
         0,
       ),
   );
@@ -118,20 +115,18 @@ function evaluation(partner, period = q()) {
       state.policy.tiers.at(-1),
   };
 }
-function parametersFor(period = q()) { return state.parameters.filter((item) => item.periodo === period); }
-function parameter(key, period = q()) { return parametersFor(period).find((item) => item.clave === key); }
+function parametersFor(partnerId, period = q()) { return state.parameters.filter((item) => item.aliado_id === partnerId && item.periodo === period); }
+function parameter(key, partnerId = currentPartner()?.id, period = q()) { return parametersFor(partnerId, period).find((item) => item.clave === key); }
 function calculatedCompliance(partner, period = q()) {
   const raw = partner.quarters[period] || {};
-  const rows = state.sales.filter((sale) => sale.aliado_id === partner.id && sale.periodo === period);
-  const equipment = rows.filter((sale) => sale.tipo === "dron" || sale.tipo === "equipo" || sale.tipo === "kit");
-  const parts = rows.filter((sale) => sale.tipo === "refaccion");
-  const equipmentTotal = equipment.reduce((sum, sale) => sum + Number(sale.total_iva || 0), 0);
-  const partsTotal = parts.reduce((sum, sale) => sum + Number(sale.total_iva || 0), 0);
-  const equipmentUnits = equipment.reduce((sum, sale) => sum + Number(sale.cantidad || 0), 0);
+  const equipmentTotal = Number(raw.monto_equipos || 0);
+  const partsTotal = Number(raw.monto_refacciones || 0);
+  const equipmentUnits = Number(raw.resultado_ventas || 0);
   const ratio = equipmentTotal ? (partsTotal / equipmentTotal) * 100 : 0;
-  const percent = (actual, key) => { const target = Number(parameter(key, period)?.meta || 0); return target ? Math.min(100, (actual / target) * 100) : Number(raw[key] || 0); };
+  const defaults = { ventas_equipos: 1, demos_pequenas: 3, demos_grandes: 1, porcentaje_refacciones: 8, certificados_dji: 1, cartas_firmadas: 1 };
+  const percent = (actual, key) => { const target = Number(parameter(key, partner.id, period)?.meta || defaults[key] || 0); return target ? Math.min(100, (actual / target) * 100) : 0; };
   const demos = Math.min(percent(Number(raw.demos_pequenas || 0), "demos_pequenas"), percent(Number(raw.demos_grandes || 0), "demos_grandes"));
-  return { sales: percent(equipmentUnits, "ventas_equipos"), demos, parts: percent(ratio, "porcentaje_refacciones"), pilots: percent(Number(raw.certificados_dji || 0), "certificados_dji"), equipmentUnits, equipmentTotal, partsTotal, partsRatio: ratio };
+  return { sales: percent(equipmentUnits, "ventas_equipos"), demos, parts: percent(ratio, "porcentaje_refacciones"), pilots: percent(Number(raw.certificados_dji || 0), "certificados_dji"), information: percent(Number(raw.cartas_firmadas || 0), "cartas_firmadas"), equipmentUnits, equipmentTotal, partsTotal, partsRatio: ratio };
 }
 function allEvaluations() {
   return state.partners.map((partner) => ({ partner, ...evaluation(partner) }));
@@ -277,11 +272,10 @@ function renderPartnerDetail() {
   renderInsights(result);
 }
 function renderCommercialOverview(result) {
-  const partnerSales = state.sales.filter((sale) => sale.aliado_id === currentPartner().id && sale.periodo === q());
   const money = (value) => new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(value || 0);
-  const billing = partnerSales.reduce((sum, sale) => sum + Number(sale.total_iva || 0), 0);
-  const units = partnerSales.filter((sale) => sale.tipo !== "refaccion").reduce((sum, sale) => sum + Number(sale.cantidad || 0), 0);
-  const parts = partnerSales.filter((sale) => sale.tipo === "refaccion").reduce((sum, sale) => sum + Number(sale.total_iva || 0), 0);
+  const billing = Number(result.values.equipmentTotal || 0);
+  const units = Number(result.values.equipmentUnits || 0);
+  const parts = Number(result.values.partsTotal || 0);
   const indicators = rules();
   const met = indicators.filter((rule) => Number(result.values[rule.key] || 0) >= rule.target).length;
   const calculated = Number(result.values.rebate_calculado || result.tier.rebate || 0);
@@ -301,8 +295,7 @@ function renderCommercialOverview(result) {
     const value = Number(result.values[rule.key] || 0);
     return `<div class="commercial-kpi"><span>${esc(rule.label)}</span><div><i style="width:${Math.min(100, value)}%"></i></div><b>${value}%</b><small>peso ${rule.weight}%</small></div>`;
   }).join("");
-  const models = partnerSales.filter((sale) => sale.tipo !== "refaccion").reduce((all, sale) => ((all[sale.modelo] = (all[sale.modelo] || 0) + Number(sale.cantidad || 0)), all), {});
-  $("#modelSales").innerHTML = Object.entries(models).map(([model, quantity]) => `<div><b>${esc(model)}</b><span style="width:${Math.min(100, quantity * 12)}%"></span><small>${quantity} u</small></div>`).join("") || '<p class="empty-state">Registre ventas para ver unidades por modelo.</p>';
+  $("#modelSales").innerHTML = `<div><b>Equipos comprados</b><span style="width:${Math.min(100, Number(result.values.sales || 0))}%"></span><small>${units} u</small></div>`;
 }
 function rules() {
   return Object.entries(state.policy)
@@ -335,7 +328,7 @@ function renderIndicators(result) {
 }
 function renderRequirements(result) {
   const values = result.values;
-  const config = (key, fallback, required = true) => ({ target: Number(parameter(key)?.meta || fallback), required: String(parameter(key)?.obligatorio ?? required) !== "false" });
+  const config = (key, fallback, required = true) => ({ target: Number(parameter(key, currentPartner().id)?.meta || fallback), required });
   const equipment = config("ventas_equipos", 1);
   const small = config("demos_pequenas", 3);
   const large = config("demos_grandes", 1);
@@ -346,6 +339,7 @@ function renderRequirements(result) {
     { label: "Demos pequeñas", current: Number(values.demos_pequenas || 0), ...small },
     { label: "Demo grande", current: Number(values.demos_grandes || 0), ...large },
     { label: "Certificación DJI", current: Number(values.certificados_dji || 0), ...dji },
+    { label: "Cartas firmadas", current: Number(values.cartas_firmadas || 0), ...config("cartas_firmadas", 1) },
     { label: "Refacciones", current: Number(values.partsRatio || 0), ...parts, suffix: "%" },
   ];
   $("#requirementsProgress").innerHTML = requirements.map((item) => {
@@ -453,49 +447,22 @@ $("#specialistButton").onclick = () => {
   renderSpecialistManager();
   $("#specialistDialog").showModal();
 };
-function renderCatalog() {
-  const money = (value) => new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(value || 0);
-  $("#catalogList").innerHTML = state.prices.length
-    ? state.prices.map((item) => `<div class="catalog-row"><div><b>${esc(item.descripcion)}</b><small>${esc(item.modelo)} · ${esc(item.categoria)}</small></div><span>Final: ${money(item.precio_final_iva)}<br>Aliado: ${money(item.precio_aliado_iva)}</span></div>`).join("")
-    : '<p class="dialog-help">Aún no hay productos. Agregue el primero a continuación.</p>';
-}
-$("#catalogButton").onclick = () => {
-  $("#catalogForm").reset();
-  $("#catalogId").value = "";
-  $("#catalogMargin").value = 22;
-  renderCatalog();
-  $("#catalogDialog").showModal();
-};
-$("#catalogForm").onsubmit = (event) => {
-  event.preventDefault();
-  persist("savePrice", {
-    id: $("#catalogId").value || `pr-${Date.now()}`,
-    descripcion: $("#catalogDescription").value.trim(), modelo: $("#catalogModel").value.trim(),
-    categoria: $("#catalogCategory").value, precio_final_iva: $("#catalogFinalIva").value,
-    precio_final_sin_iva: $("#catalogFinalNoIva").value, precio_aliado_iva: $("#catalogPartnerIva").value,
-    precio_aliado_sin_iva: $("#catalogPartnerNoIva").value, margen_base: $("#catalogMargin").value,
-  }).then((saved) => {
-    if (!saved) return;
-    event.target.reset();
-    $("#catalogMargin").value = 22;
-    renderCatalog();
-  });
-};
 function parameterRow(item = {}) {
-  return `<div class="parameter-row" data-parameter-id="${esc(item.id || "")}"><input data-field="nombre" value="${esc(item.nombre || "Nuevo parámetro")}" required><input data-field="clave" value="${esc(item.clave || "nueva_meta")}" required><input data-field="meta" type="number" min="0" step="0.01" value="${esc(item.meta || 0)}" required><select data-field="unidad"><option ${item.unidad === "unidades" ? "selected" : ""}>unidades</option><option ${item.unidad === "eventos" ? "selected" : ""}>eventos</option><option ${item.unidad === "personas" ? "selected" : ""}>personas</option><option ${item.unidad === "%" ? "selected" : ""}>%</option></select><label><input data-field="obligatorio" type="checkbox" ${String(item.obligatorio) !== "false" ? "checked" : ""}> Obligatorio</label><button class="text-danger" data-delete-parameter="${esc(item.id || "")}" type="button">Eliminar</button></div>`;
+  return `<div class="parameter-row"><input data-field="nombre" value="${esc(item.nombre)}" readonly><input data-field="clave" value="${esc(item.clave)}" readonly><input data-field="meta" type="number" min="0" step="0.01" value="${esc(item.meta)}" required><input data-field="unidad" value="${esc(item.unidad)}" readonly></div>`;
 }
 function renderParameters() {
-  $("#parametersList").innerHTML = parametersFor().map(parameterRow).join("") || parameterRow();
-  document.querySelectorAll("[data-delete-parameter]").forEach((button) => button.onclick = () => {
-    if (!button.dataset.deleteParameter) return button.closest(".parameter-row").remove();
-    persist("deleteParameter", undefined, button.dataset.deleteParameter).then((saved) => saved && renderParameters());
-  });
+  const partner = currentPartner();
+  if (!partner) return alert("Seleccione primero un aliado.");
+  const defaults = [
+    ["ventas_equipos", "Meta de compra de equipos", 1, "unidades"], ["demos_pequenas", "Demostraciones pequeñas", 3, "unidades"], ["demos_grandes", "Demostraciones grandes", 1, "unidades"], ["porcentaje_refacciones", "Refacciones sobre monto equipos", 8, "%"], ["certificados_dji", "Pilotos certificados DJI Academy", 1, "certificados"], ["cartas_firmadas", "Cartas firmadas", 1, "cartas"],
+  ];
+  const items = defaults.map(([clave, nombre, meta, unidad]) => parameter(clave, partner.id) || ({ clave, nombre, meta, unidad }));
+  $("#parametersList").innerHTML = items.map(parameterRow).join("");
 }
-$("#parametersButton").onclick = () => { renderParameters(); $("#parametersDialog").showModal(); };
-$("#addParameterButton").onclick = () => $("#parametersList").insertAdjacentHTML("beforeend", parameterRow());
+$("#parametersButton").onclick = () => { if (currentPartner()) { renderParameters(); $("#parametersDialog").showModal(); } else alert("Abra la ficha de un aliado para configurar sus metas."); };
 $("#parametersForm").onsubmit = (event) => {
   event.preventDefault();
-  const items = [...document.querySelectorAll(".parameter-row")].map((row) => ({ id: row.dataset.parameterId, periodo: q(), nombre: row.querySelector('[data-field="nombre"]').value.trim(), clave: row.querySelector('[data-field="clave"]').value.trim(), meta: row.querySelector('[data-field="meta"]').value, unidad: row.querySelector('[data-field="unidad"]').value, obligatorio: row.querySelector('[data-field="obligatorio"]').checked }));
+  const items = [...document.querySelectorAll(".parameter-row")].map((row) => ({ aliado_id: currentPartner().id, periodo: q(), nombre: row.querySelector('[data-field="nombre"]').value.trim(), clave: row.querySelector('[data-field="clave"]').value.trim(), meta: row.querySelector('[data-field="meta"]').value, unidad: row.querySelector('[data-field="unidad"]').value }));
   persist("saveParameters", items).then((saved) => { if (saved) $("#parametersDialog").close(); });
 };
 function makePdf(lines) {
@@ -524,7 +491,7 @@ $("#downloadSummaryButton").onclick = () => {
     `DICOL | Resumen de rebate - ${partner.name}`, `Periodo: ${q()} | Especialista: ${partnerSpecialistName(partner)}`,
     `Cumplimiento ponderado: ${result.score}% | Nivel: ${result.tier.name}`,
     `Margen base: 22% | Rebate calculado: ${Number(values.rebate_calculado || result.tier.rebate)}% | Margen proyectado: ${22 + Number(values.rebate_calculado || result.tier.rebate)}%`,
-    `Ventas calificadas: ${Number(values.resultado_ventas || 0)} | Facturacion registrada: ${state.sales.filter((sale) => sale.aliado_id === partner.id && sale.periodo === q()).reduce((sum, sale) => sum + Number(sale.total_iva || 0), 0).toLocaleString("es-CO")} COP`,
+    `Equipos comprados: ${Number(values.equipmentUnits || 0)} | Monto equipos: ${Number(values.equipmentTotal || 0).toLocaleString("es-CO")} COP`,
     `Demos pequenas: ${Number(values.demos_pequenas || 0)}/3 | Demos grandes: ${Number(values.demos_grandes || 0)}/1`,
     `Certificados DJI: ${Number(values.certificados_dji || 0)}/1 (recomendado, aun no obligatorio)`,
     `Pendientes: ${missing.length ? missing.join("; ") : "Requisitos operativos registrados. Validar soportes."}`,
@@ -617,7 +584,10 @@ $("#editEvaluationButton").onclick = () => {
   $("#editSmallDemos").value = Number(values.demos_pequenas || 0);
   $("#editLargeDemos").value = Number(values.demos_grandes || 0);
   $("#editDjiCertified").value = Number(values.certificados_dji || 0);
-  $("#editInformation").value = Number(values.information || 0);
+  $("#editEquipmentUnits").value = Number(values.resultado_ventas || 0);
+  $("#editEquipmentAmount").value = Number(values.monto_equipos || 0);
+  $("#editPartsAmount").value = Number(values.monto_refacciones || 0);
+  $("#editLetters").value = Number(values.cartas_firmadas || 0);
   $("#editAppliedRebate").value = Number(values.rebate_aplicado || 0);
   $("#editJustification").value = values.justificacion || "";
   renderEvaluationPreview();
@@ -625,7 +595,7 @@ $("#editEvaluationButton").onclick = () => {
 };
 function evaluationDraft() {
   const partner = currentPartner();
-  return { ...partner, quarters: { ...partner.quarters, [q()]: { ...(partner.quarters[q()] || {}), demos_pequenas: Number($("#editSmallDemos").value || 0), demos_grandes: Number($("#editLargeDemos").value || 0), certificados_dji: Number($("#editDjiCertified").value || 0), information: Number($("#editInformation").value || 0), rebate_aplicado: Number($("#editAppliedRebate").value || 0), justificacion: $("#editJustification").value.trim() } } };
+  return { ...partner, quarters: { ...partner.quarters, [q()]: { ...(partner.quarters[q()] || {}), resultado_ventas: Number($("#editEquipmentUnits").value || 0), monto_equipos: Number($("#editEquipmentAmount").value || 0), monto_refacciones: Number($("#editPartsAmount").value || 0), demos_pequenas: Number($("#editSmallDemos").value || 0), demos_grandes: Number($("#editLargeDemos").value || 0), certificados_dji: Number($("#editDjiCertified").value || 0), cartas_firmadas: Number($("#editLetters").value || 0), rebate_aplicado: Number($("#editAppliedRebate").value || 0), justificacion: $("#editJustification").value.trim() } } };
 }
 function renderEvaluationPreview() {
   const draft = evaluationDraft();
@@ -634,7 +604,7 @@ function renderEvaluationPreview() {
   const money = (value) => new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(value || 0);
   $("#evaluationPreview").innerHTML = `<article><span>Cumplimiento previsto</span><strong>${result.score}%</strong><small>Nivel ${result.tier.name}</small></article><article><span>Equipos / kits</span><strong>${values.equipmentUnits || 0}</strong><small>${values.sales.toFixed(0)}% de la meta</small></article><article><span>Demostraciones</span><strong>${values.demos.toFixed(0)}%</strong><small>mínimo entre pequeñas y grandes</small></article><article><span>DJI Academy</span><strong>${values.pilots.toFixed(0)}%</strong><small>personas vs. meta</small></article><article><span>Refacciones</span><strong>${values.partsRatio.toFixed(1)}%</strong><small>${values.parts.toFixed(0)}% de cumplimiento</small></article><article><span>Margen previsto</span><strong>${22 + result.tier.rebate}%</strong><small>22% + rebate ${result.tier.rebate}%</small></article>`;
 }
-["#editSmallDemos", "#editLargeDemos", "#editDjiCertified", "#editInformation", "#editAppliedRebate"].forEach((selector) => $(selector).oninput = renderEvaluationPreview);
+["#editEquipmentUnits", "#editEquipmentAmount", "#editPartsAmount", "#editSmallDemos", "#editLargeDemos", "#editDjiCertified", "#editLetters", "#editAppliedRebate"].forEach((selector) => $(selector).oninput = renderEvaluationPreview);
 $("#evaluationForm").onsubmit = (event) => {
   event.preventDefault();
   const partner = currentPartner();
@@ -643,15 +613,17 @@ $("#evaluationForm").onsubmit = (event) => {
   persist("saveEvaluation", {
     aliado_id: partner.id,
     periodo: q(),
-    resultado_ventas: result.values.equipmentUnits,
+    resultado_ventas: $("#editEquipmentUnits").value,
+    monto_equipos: $("#editEquipmentAmount").value,
+    monto_refacciones: $("#editPartsAmount").value,
     rebate_calculado: result.tier.rebate,
     rebate_aplicado: $("#editAppliedRebate").value,
     demos_pequenas: $("#editSmallDemos").value,
     demos_grandes: $("#editLargeDemos").value,
     certificados_dji: $("#editDjiCertified").value,
     certificacion_dji_obligatoria: false,
-    justificacion: $("#editJustification").value.trim(), information: $("#editInformation").value,
-    sales: result.values.sales, demos: result.values.demos, parts: result.values.parts, pilots: result.values.pilots,
+    justificacion: $("#editJustification").value.trim(), cartas_firmadas: $("#editLetters").value,
+    sales: result.values.sales, demos: result.values.demos, parts: result.values.parts, pilots: result.values.pilots, information: result.values.information,
   }).then((saved) => {
     if (!saved) return;
     $("#evaluationDialog").close();
@@ -662,20 +634,6 @@ $("#deletePartnerButton").onclick = () => {
   if (partner && confirm(`¿Eliminar el aliado ${partner.name}?`)) {
     persist("deletePartner", undefined, partner.id);
   }
-};
-$("#newSaleButton").onclick = () => {
-  const items = [...state.prices, ...state.kits];
-  if (!items.length) return alert("Primero agregue el catálogo en las hojas Precios o Kits.");
-  $("#saleItem").innerHTML = items.map((item) => `<option value="${esc(item.id)}">${esc(item.descripcion || item.nombre)} · ${esc(item.modelo || "sin modelo")}</option>`).join("");
-  $("#saleDate").value = new Date().toISOString().slice(0, 10);
-  $("#saleQuantity").value = 1;
-  $("#saleDialog").showModal();
-};
-$("#saleForm").onsubmit = (event) => {
-  event.preventDefault();
-  const partner = currentPartner();
-  if (!partner) return;
-  persist("saveSale", { aliado_id: partner.id, periodo: q(), item_id: $("#saleItem").value, fecha: $("#saleDate").value, cantidad: $("#saleQuantity").value }).then((saved) => { if (saved) $("#saleDialog").close(); });
 };
 $("#partnerSearch").oninput = () => renderPartnerList();
 document.querySelectorAll("[data-view]").forEach(
