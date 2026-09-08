@@ -16,9 +16,7 @@ const SHEET_NAMES = {
   partners: "Aliados",
   evaluations: "Evaluaciones",
   policy: "Politica",
-  prices: "Precios",
-  kits: "Kits",
-  sales: "Ventas",
+  parameters: "Parametros",
 };
 const HEADERS = {
   specialists: ["id", "nombre", "zona", "activo", "creado_en"],
@@ -44,13 +42,26 @@ const HEADERS = {
     "parts",
     "pilots",
     "information",
+    "demos_pequenas",
+    "demos_grandes",
+    "certificados_dji",
+    "certificacion_dji_obligatoria",
+    "monto_equipos",
+    "monto_refacciones",
+    "cartas_firmadas",
     "actualizado_en",
   ],
   policy: ["tipo", "clave", "nombre", "valor", "meta"],
-  prices: ["id", "descripcion", "categoria", "modelo", "msrp_iva", "msrp_sin_iva", "margen_base", "precio_aliado_iva", "precio_aliado_sin_iva", "activo"],
-  kits: ["id", "nombre", "modelo", "componentes", "margen_base", "precio_aliado_iva", "precio_aliado_sin_iva", "activo"],
-  sales: ["id", "aliado_id", "periodo", "fecha", "item_id", "tipo", "modelo", "cantidad", "precio_unitario_iva", "total_iva", "creado_en"],
+  parameters: ["id", "aliado_id", "periodo", "clave", "nombre", "meta", "unidad", "activo"],
 };
+const DEFAULT_PARAMETERS = [
+  ["ventas_equipos", "Meta de compra de equipos", 1, "unidades"],
+  ["demos_pequenas", "Demostraciones pequeñas", 3, "unidades"],
+  ["demos_grandes", "Demostraciones grandes", 1, "unidades"],
+  ["porcentaje_refacciones", "Refacciones sobre monto de equipos", 8, "%"],
+  ["certificados_dji", "Pilotos certificados DJI Academy", 1, "certificados"],
+  ["cartas_firmadas", "Cartas firmadas", 1, "cartas"],
+];
 const DEFAULT_POLICY = [
   ["indicador", "sales", "PSI / ventas", 50, 100],
   ["indicador", "demos", "Demostraciones", 20, 100],
@@ -72,6 +83,14 @@ function setup() {
     policySheet
       .getRange(2, 1, DEFAULT_POLICY.length, 5)
       .setValues(DEFAULT_POLICY);
+}
+// Ejecute esta función una sola vez solo si desea restaurar los valores del
+// boletín 2025 (A 5 %, B 3 %, C 0 %) en una hoja que tenía valores de prueba.
+function restorePolicyBoletin2025() {
+  const sheet = sheet_(SHEET_NAMES.policy);
+  if (sheet.getLastRow() > 1)
+    sheet.getRange(2, 1, sheet.getLastRow() - 1, HEADERS.policy.length).clearContent();
+  sheet.getRange(2, 1, DEFAULT_POLICY.length, HEADERS.policy.length).setValues(DEFAULT_POLICY);
 }
 function doGet(event) {
   return response_({ ok: true, data: getData_() }, event);
@@ -102,8 +121,10 @@ function dispatch_(request) {
       return saveEvaluation_(data);
     case "savePolicy":
       return savePolicy_(data);
-    case "saveSale":
-      return saveSale_(data);
+    case "saveParameters":
+      return saveParameters_(data);
+    case "deleteParameter":
+      return archiveParameter_(request.id);
     case "deletePartner":
       return archivePartner_(request.id);
     case "deleteSpecialist":
@@ -120,9 +141,7 @@ function getData_() {
     (row) => row.activo !== "false",
   );
   const evaluations = rows_(SHEET_NAMES.evaluations);
-  const prices = rows_(SHEET_NAMES.prices).filter((row) => row.activo !== "false");
-  const kits = rows_(SHEET_NAMES.kits).filter((row) => row.activo !== "false");
-  const sales = rows_(SHEET_NAMES.sales);
+  const parameters = rows_(SHEET_NAMES.parameters).filter((row) => row.activo !== "false");
   const policy = { tiers: [] };
   rows_(SHEET_NAMES.policy).forEach((row) => {
     if (row.tipo === "nivel")
@@ -148,25 +167,23 @@ function getData_() {
         .reduce((all, item) => ((all[item.periodo] = item), all), {}),
     })),
     policy,
-    prices,
-    kits,
-    sales,
+    parameters,
   };
 }
-function saveSale_(data) {
-  require_(data, ["aliado_id", "periodo", "item_id", "cantidad"]);
-  if (!/^Q[1-4]$/.test(data.periodo)) throw new Error("El periodo debe ser Q1, Q2, Q3 o Q4.");
-  const item = rows_(SHEET_NAMES.prices).concat(rows_(SHEET_NAMES.kits)).find((row) => row.id === data.item_id && row.activo !== "false");
-  if (!item) throw new Error("El producto o kit seleccionado no existe o está inactivo.");
-  const quantity = number_(data.cantidad);
-  if (quantity <= 0) throw new Error("La cantidad debe ser mayor que cero.");
-  const unitPrice = number_(item.precio_aliado_iva);
-  return upsert_(SHEET_NAMES.sales, {
-    id: data.id || Utilities.getUuid(), aliado_id: data.aliado_id, periodo: data.periodo,
-    fecha: data.fecha || new Date().toISOString().slice(0, 10), item_id: item.id,
-    tipo: item.categoria || "kit", modelo: item.modelo || item.nombre, cantidad: quantity,
-    precio_unitario_iva: unitPrice, total_iva: quantity * unitPrice, creado_en: new Date().toISOString(),
-  });
+function saveParameters_(items) {
+  if (!Array.isArray(items) || !items.length) throw new Error("Agregue al menos un parámetro.");
+  return withLock_(function () { return items.map((item) => {
+    require_(item, ["aliado_id", "periodo", "clave", "nombre", "meta"]);
+    if (!/^Q[1-4]$/.test(item.periodo)) throw new Error("El periodo debe ser Q1, Q2, Q3 o Q4.");
+    const key = String(item.clave).trim();
+    const current = rows_(SHEET_NAMES.parameters).find((row) => row.aliado_id === item.aliado_id && row.periodo === item.periodo && row.clave === key && row.activo !== "false");
+    return upsert_(SHEET_NAMES.parameters, { id: current ? current.id : Utilities.getUuid(), aliado_id: item.aliado_id, periodo: item.periodo, clave: key, nombre: item.nombre, meta: Math.max(0, number_(item.meta)), unidad: item.unidad || "unidades", activo: true });
+  }); });
+}
+function archiveParameter_(id) {
+  const item = byId_(SHEET_NAMES.parameters, id);
+  if (!item) throw new Error("Parámetro no encontrado.");
+  return upsert_(SHEET_NAMES.parameters, { ...item, activo: false });
 }
 function saveSpecialist_(data) {
   require_(data, ["nombre"]);
@@ -206,6 +223,13 @@ function saveEvaluation_(data) {
   ["sales", "demos", "parts", "pilots", "information"].forEach(
     (key) => (values[key] = Math.max(0, Math.min(100, number_(data[key])))),
   );
+  values.demos_pequenas = Math.max(0, number_(data.demos_pequenas));
+  values.demos_grandes = Math.max(0, number_(data.demos_grandes));
+  values.certificados_dji = Math.max(0, number_(data.certificados_dji));
+  values.certificacion_dji_obligatoria = String(data.certificacion_dji_obligatoria) === "true";
+  values.monto_equipos = Math.max(0, number_(data.monto_equipos));
+  values.monto_refacciones = Math.max(0, number_(data.monto_refacciones));
+  values.cartas_firmadas = Math.max(0, number_(data.cartas_firmadas));
   return upsert_(SHEET_NAMES.evaluations, values, ["aliado_id", "periodo"]);
 }
 function savePolicy_(items) {
