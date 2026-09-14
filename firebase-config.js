@@ -1,13 +1,13 @@
-// Configuración pública de Firebase para la aplicación DICOL.
-// Reemplaza estos valores por los de tu aplicación web de Firebase.
-// Firebase Web API keys no son contraseñas; la seguridad real debe estar
-// en Authentication y en las reglas de Firestore/Storage.
+// Configuración de Firebase para DICOL Especialistas.
+// Esta configuración web puede estar en el frontend. La protección real
+// se realiza mediante Firebase Authentication y las reglas de Firestore/Storage.
 
 export const firebaseConfig = {
-  apiKey: "REEMPLAZAR_API_KEY",
-  authDomain: "REEMPLAZAR_PROJECT_ID.firebaseapp.com",
-  projectId: "REEMPLAZAR_PROJECT_ID",
-  storageBucket: "REEMPLAZAR_PROJECT_ID.firebasestorage.app",
-  messagingSenderId: "REEMPLAZAR_SENDER_ID",
-  appId: "REEMPLAZAR_APP_ID"
+  apiKey: "AIzaSyA11mYL6SCHlrevDuBG-uAU0WRL_vx6YuQ",
+  authDomain: "dicol-especialistas.firebaseapp.com",
+  projectId: "dicol-especialistas",
+  storageBucket: "dicol-especialistas.firebasestorage.app",
+  messagingSenderId: "1019315349652",
+  appId: "1:1019315349652:web:51003b45761a20f8236c81",
+  measurementId: "G-2QXYVY1QBC"
 };
