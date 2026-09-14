@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#000000" />
+    <title>DICOL | Iniciar sesión</title>
+    <link rel="stylesheet" href="login.css" />
+  </head>
+  <body>
+    <main class="login-page">
+      <div class="login-glow login-glow--one"></div>
+      <div class="login-glow login-glow--two"></div>
+      <div class="login-ring"></div>
+
+      <section class="login-shell" aria-label="Acceso al portal DICOL">
+        <div class="brand-panel">
+          <a class="brand" href="index.html" aria-label="DICOL">
+            <img src="Drone_Innovation_COL.webp" alt="Drone Innovation COL" />
+            <span>DICOL</span>
+          </a>
+
+          <div class="brand-copy">
+            <p class="eyebrow">DICOL · PORTAL ADMINISTRATIVO</p>
+            <h1>Todo tu trabajo.<br /><span>En un solo lugar.</span></h1>
+            <p class="brand-description">
+              Accede a las herramientas internas para especialistas, gestión
+              de gastos y seguimiento comercial.
+            </p>
+          </div>
+
+          <div class="brand-footer">
+            <span class="status-dot"></span>
+            <span>Acceso seguro · DICOL</span>
+          </div>
+        </div>
+
+        <div class="form-panel">
+          <div class="mobile-brand">
+            <img src="Drone_Innovation_COL.webp" alt="DICOL" />
+            <span>DICOL</span>
+          </div>
+
+          <div class="form-heading">
+            <p class="eyebrow">BIENVENIDO</p>
+            <h2>Inicia sesión.</h2>
+            <p>Ingresa tus credenciales para continuar al portal.</p>
+          </div>
+
+          <form id="loginForm" novalidate>
+            <label class="field">
+              <span>Correo electrónico</span>
+              <div class="input-wrap">
+                <svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
+                  <path d="M4 6.5h16v11H4z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                  <path d="m5 8 7 5 7-5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                <input id="email" name="email" type="email" autocomplete="email" placeholder="nombre@dicol.com" required />
+              </div>
+            </label>
+
+            <label class="field">
+              <span>Contraseña</span>
+              <div class="input-wrap">
+                <svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
+                  <rect x="5" y="10" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.7"/>
+                  <path d="M8 10V7.5a4 4 0 0 1 8 0V10" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                </svg>
+                <input id="password" name="password" type="password" autocomplete="current-password" placeholder="••••••••" required minlength="6" />
+                <button id="togglePassword" class="password-toggle" type="button" aria-label="Mostrar contraseña" aria-pressed="false">
+                  <svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
+                    <path d="M2.8 12s3.2-5 9.2-5 9.2 5 9.2 5-3.2 5-9.2 5-9.2-5-9.2-5Z" stroke="currentColor" stroke-width="1.7"/>
+                    <circle cx="12" cy="12" r="2.3" stroke="currentColor" stroke-width="1.7"/>
+                  </svg>
+                </button>
+              </div>
+            </label>
+
+            <div class="form-options">
+              <label class="remember">
+                <input id="remember" type="checkbox" />
+                <span>Recordarme</span>
+              </label>
+              <button id="forgotPassword" class="text-button" type="button">¿Olvidaste tu contraseña?</button>
+            </div>
+
+            <button id="loginButton" class="login-button" type="submit">
+              <span>Iniciar sesión</span>
+              <svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
+                <path d="M5 12h13M13 6l6 6-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+
+            <div id="authMessage" class="auth-message" role="alert" aria-live="polite"></div>
+          </form>
+
+          <p class="security-note">
+            <span>●</span> Tu sesión se gestiona mediante autenticación segura de Firebase.
+          </p>
+        </div>
+      </section>
+
+      <footer>© 2026 DICOL — Portal administrativo.</footer>
+    </main>
+
+    <script type="module" src="login.js"></script>
+  </body>
+</html>
