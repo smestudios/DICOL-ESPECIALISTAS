@@ -4,7 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>DICOL | Legalización de Gastos</title>
-    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="assets/styles/site.css" />
+    <script type="module" src="assets/scripts/auth/auth-guard.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="https://unpkg.com/docx@9.5.1/dist/index.iife.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
@@ -12,13 +13,13 @@
   <body class="app-body expense-window-body">
     <nav class="navbar" aria-label="Navegación principal">
       <a class="logo" href="index.html#inicio" aria-label="Volver al inicio">
-        <img src="Drone_Innovation_COL.webp" alt="Logo DICOL" />
+        <img src="assets/images/dicol-logo.webp" alt="Logo DICOL" />
         <span>DICOL</span>
       </a>
 
       <ul class="nav-links">
         <li><a href="index.html#inicio">Inicio</a></li>
-        <li><a href="index.html#tramites">Trámites</a></li>
+        <li><a href="index.html#herramientas">Herramientas</a></li>
         <li><a href="#salidas">Salidas</a></li>
         <li><a href="#documento">Facturas</a></li>
         <li><a href="rebates.html">Rebates</a></li>
@@ -26,7 +27,7 @@
 
       <a
         class="nav-button"
-        href="plantillas/S-CON-FO-02.6%20LEGALIZACION%20DE%20GASTOS.%20v%202.0.xlsx"
+        href="assets/templates/S-CON-FO-02.6%20LEGALIZACION%20DE%20GASTOS.%20v%202.0.xlsx"
         download
         >Formato base</a
       >
@@ -360,6 +361,6 @@
 
     <section class="print-sheet" id="printSheet" aria-hidden="true"></section>
 
-    <script src="legalizacion-gastos.js"></script>
+    <script src="assets/scripts/modules/legalizacion-gastos.js"></script>
   </body>
 </html>
