@@ -1,6 +1,34 @@
-# DICOL-FACTURAS
+# Portal interno DICOL
 
-Aplicación web para administrar salidas y registrar facturas de legalización.
+Aplicación web estática para acceder a las herramientas internas de DICOL: legalización de gastos, solicitud de viáticos y control de rebates.
+
+## Estructura del proyecto
+
+La estructura separa los recursos por responsabilidad para que sea fácil localizar, actualizar y desplegar cada pieza:
+
+```text
+.
+├── index.html                    # Portada y accesos a las herramientas
+├── login.html                    # Inicio de sesión
+├── legalizacion-gastos.html      # Módulo de legalización
+├── rebates.html                  # Módulo de rebates
+├── assets/
+│   ├── images/                   # Recursos visuales de marca
+│   ├── templates/                # Formatos institucionales descargables
+│   ├── styles/                   # Estilos compartidos y específicos por módulo
+│   └── scripts/
+│       ├── auth/                 # Configuración y flujo de autenticación
+│       └── modules/              # Lógica de cada herramienta
+├── appscript/                    # Integración de Google Apps Script
+└── docs/                         # Guías operativas y documentación técnica
+```
+
+### Criterios de mantenimiento
+
+- Mantén las páginas HTML en la raíz para preservar enlaces simples y compatibilidad con hosting estático.
+- Agrega imágenes en `assets/images/`, formatos oficiales en `assets/templates/` y no los mezcles con el código.
+- Añade estilos y scripts del módulo correspondiente en `assets/styles/` y `assets/scripts/modules/`; reutiliza `site.css` solamente para elementos compartidos.
+- Toda página interna debe cargar `assets/scripts/auth/auth-guard.js` para conservar la protección de acceso.
 
 ## Alcance actual del lector QR
 
@@ -35,6 +63,6 @@ Para extracción, el navegador prioriza el texto contenido en PDF y XML. Las fot
 
 ## Organización de plantillas y rebates
 
-Los formatos oficiales descargables se encuentran en `plantillas/`: `S-CON-FO-02.6 LEGALIZACION DE GASTOS. v 2.0.xlsx` y `SOLICITUD DE  VIATICOS.XLSX`. La página de inicio y el módulo de legalización los enlazan desde esa carpeta.
+Los formatos oficiales descargables se encuentran en `assets/templates/`: `S-CON-FO-02.6 LEGALIZACION DE GASTOS. v 2.0.xlsx` y `SOLICITUD DE  VIATICOS.XLSX`. La página de inicio y el módulo de legalización los enlazan desde esa carpeta.
 
 El nuevo tablero `rebates.html` ofrece seguimiento por aliado y trimestre, gestión local de aliados/especialistas y una lectura de indicadores. La guía de operación y la base para Google Apps Script están en [`docs/REBATES.md`](docs/REBATES.md) y [`appscript/Code.gs`](appscript/Code.gs).
