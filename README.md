@@ -32,7 +32,7 @@ La estructura separa los recursos por responsabilidad para que sea fácil locali
 
 ## Perfiles de acceso
 
-La administración local de perfiles `admin` y `specialist`, las reglas de Firestore y la integración segura con Google Sheets se documentan en [Acceso y perfiles](docs/ACCESO_Y_PERFILES.md). Las credenciales administrativas no se guardan ni se usan desde el navegador.
+La administración local de perfiles `admin` y `specialist` (con Python o Node.js), las reglas de Firestore y la integración segura con Google Sheets se documentan en [Acceso y perfiles](docs/ACCESO_Y_PERFILES.md). Las credenciales administrativas no se guardan ni se usan desde el navegador.
 
 ## Alcance actual del lector QR
 

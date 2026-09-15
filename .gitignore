@@ -1,4 +1,6 @@
 node_modules/
+__pycache__/
+.venv/
 .env
 secrets/
 service-account*.json

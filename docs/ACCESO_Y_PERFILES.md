@@ -15,13 +15,45 @@ El rol se duplica como un **custom claim** de Firebase Authentication. Esto perm
 
 ## Configuración local en Visual Studio Code
 
-1. Instale [Node.js 20 o superior](https://nodejs.org/), abra esta carpeta en VS Code y ejecute `npm install` en la terminal integrada.
+1. Abra esta carpeta en VS Code. Para la herramienta en Python instale Python 3.10 o superior y ejecute `python -m pip install -r requirements-admin.txt` en la terminal integrada. La alternativa de Node sigue disponible con `npm install`.
 2. En Firebase Console abra **Project settings → Service accounts**, genere una clave privada y guárdela fuera del repositorio, por ejemplo en `secrets/firebase-service-account.json`.
 3. Copie `.env.example` a `.env` y establezca `FIREBASE_SERVICE_ACCOUNT_PATH` con la ruta del archivo descargado. `.env` y `secrets/` ya están ignorados por Git.
 4. Despliegue las reglas: `npx firebase-tools deploy --only firestore:rules --project dicol-especialistas`.
 5. Cree primero el registro del especialista en la hoja de Google Sheets. Copie su columna `id`: ese valor será el `specialistId` del perfil Firebase.
 
 ## Crear perfiles
+
+### Python (recomendado)
+
+Use la cuenta de servicio privada únicamente desde su equipo. Puede indicar la ruta en cada comando o definir la variable de entorno `FIREBASE_SERVICE_ACCOUNT_PATH`.
+
+```bash
+# Windows PowerShell
+$env:FIREBASE_SERVICE_ACCOUNT_PATH = ".\\secrets\\firebase-service-account.json"
+
+# macOS / Linux
+export FIREBASE_SERVICE_ACCOUNT_PATH="./secrets/firebase-service-account.json"
+```
+
+Crear o actualizar un administrador:
+
+```bash
+python tools/manage_users.py upsert --email admin@dicol.com --name "Nombre Admin" --role admin --password "CambiaEstaClave123!"
+```
+
+Crear o actualizar un especialista; el valor de `--specialist-id` debe coincidir exactamente con el `id` de la pestaña **Especialistas** de Google Sheets:
+
+```bash
+python tools/manage_users.py upsert --email especialista@dicol.com --name "Nombre Especialista" --role specialist --specialist-id "UUID-DE-LA-HOJA" --password "CambiaEstaClave123!"
+```
+
+Desactivar un usuario:
+
+```bash
+python tools/manage_users.py disable --email especialista@dicol.com
+```
+
+### Node.js (alternativa)
 
 Para crear o actualizar un administrador:
 
