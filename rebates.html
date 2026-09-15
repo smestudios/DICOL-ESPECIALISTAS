@@ -4,13 +4,14 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>DICOL | Control de rebates</title>
-    <link rel="stylesheet" href="styles.css" />
-    <link rel="stylesheet" href="rebates.css" />
+    <link rel="stylesheet" href="assets/styles/site.css" />
+    <link rel="stylesheet" href="assets/styles/rebates.css" />
+    <script type="module" src="assets/scripts/auth/auth-guard.js"></script>
   </head>
   <body class="rebates-body">
     <nav class="navbar" aria-label="Navegación principal">
       <a class="logo" href="index.html#inicio"
-        ><img src="Drone_Innovation_COL.webp" alt="Logo DICOL" /><span
+        ><img src="assets/images/dicol-logo.webp" alt="Logo DICOL" /><span
           >DICOL</span
         ></a
       >
@@ -48,7 +49,7 @@
           >
             + Agregar aliado</button
           ><button class="rebate-button" id="specialistButton">
-            Gestionar especialistas
+            Gestionar usuarios
           </button><button class="rebate-button" id="parametersButton">
             Metas del aliado
           </button>
@@ -77,7 +78,7 @@
       </section>
       <section class="view-tabs" role="tablist">
         <button class="active" data-view="general">Resumen DICOL</button
-        ><button data-view="specialists">Por especialista</button
+        ><button data-view="specialists">Por usuario</button
         ><button data-view="partner">Ficha del aliado</button>
       </section>
       <section id="generalView" class="dashboard-view">
@@ -97,10 +98,10 @@
         <div class="section-heading">
           <div>
             <p class="eyebrow">RESPONSABILIDAD DICOL</p>
-            <h2>Indicadores por especialista</h2>
+            <h2>Indicadores por usuario</h2>
           </div>
           <p>
-            Cada especialista visualiza el estado consolidado de los aliados a
+            Cada usuario responsable visualiza el estado consolidado de los aliados a
             su cargo.
           </p>
         </div>
@@ -132,7 +133,7 @@
                   <button class="rebate-button" id="editPartnerButton">
                     Editar aliado</button
                   ><button class="rebate-button" id="reassignPartnerButton">
-                    Cambiar especialista</button
+                    Cambiar usuario responsable</button
                   ><button class="text-danger" id="deletePartnerButton">
                     Eliminar aliado
                   </button>
@@ -242,7 +243,7 @@
             required
             placeholder="Nombre de la empresa" /></label
         ><label
-          >Especialista DICOL responsable <span class="info-tooltip" tabindex="0">i<span>Persona DICOL que administra el seguimiento y los soportes del aliado.</span></span><select
+          >Usuario responsable DICOL <span class="info-tooltip" tabindex="0">i<span>Persona DICOL que administra el seguimiento y los soportes del aliado.</span></span><select
             id="partnerSpecialist"
             required
           ></select></label
@@ -274,12 +275,13 @@
     <dialog id="evaluationDialog" class="evaluation-dialog"><form id="evaluationForm"><div class="dialog-heading"><div><p class="eyebrow">EDICIÓN AISLADA · <span id="evaluationDialogQuarter"></span></p><h2 id="evaluationDialogPartner">Actualizar cumplimiento</h2></div><button type="button" data-close="evaluationDialog">×</button></div><p class="dialog-help">Registre los valores reales del trimestre. La meta de refacciones se calcula automáticamente como el porcentaje configurado del monto comprado en equipos.</p><div id="evaluationPreview" class="evaluation-preview"></div><div class="evaluation-form-grid"><label>Equipos comprados (unidades)<input id="editEquipmentUnits" type="number" min="0" step="1" required></label><label>Monto comprado en equipos (COP)<input id="editEquipmentAmount" type="number" min="0" step="1" required></label><label>Compra de refacciones (COP)<input id="editPartsAmount" type="number" min="0" step="1" required></label><label>Demos pequeñas realizadas<input id="editSmallDemos" type="number" min="0" step="1" required></label><label>Demos grandes realizadas<input id="editLargeDemos" type="number" min="0" step="1" required></label><label>Personas certificadas DJI Academy<input id="editDjiCertified" type="number" min="0" step="1" required></label><label>Cartas firmadas<input id="editLetters" type="number" min="0" step="1" required></label><label>Rebate adicional aprobado (%)<input id="editAppliedRebate" type="number" min="0" max="100" step="0.01" list="rebateOptions" required><datalist id="rebateOptions"><option value="0"><option value="3"><option value="5"><option value="10"></datalist></label></div><label>Justificación y soportes<textarea id="editJustification" rows="4" placeholder="Facturas, evidencias de demos, DJI Academy, excepciones o pendientes."></textarea></label><div class="dialog-actions"><button class="rebate-button" type="button" data-close="evaluationDialog">Cancelar</button><button class="rebate-button rebate-button--primary" type="submit" data-save-action="saveEvaluation">Guardar cambios</button></div></form></dialog>
     <dialog id="specialistDialog">
       <div class="dialog-heading">
-        <h2>Especialistas DICOL</h2>
+        <h2>Usuarios DICOL</h2>
         <button type="button" data-close="specialistDialog">×</button>
       </div>
       <p class="dialog-help">
-        Los especialistas son personal de DICOL y responden por el seguimiento
-        de los aliados asignados.
+        Cada usuario responsable se relaciona con Firebase mediante el ID
+        mostrado abajo. Internamente, el rol <code>specialist</code> conserva
+        el vínculo con los aliados asignados.
       </p>
       <div id="specialistManager"></div>
       <form id="specialistForm" class="inline-form">
@@ -309,6 +311,6 @@
         <div class="dialog-actions"><button class="rebate-button rebate-button--primary" type="button" data-close="policyDialog">Entendido</button></div>
       </form>
     </dialog>
-    <script src="rebates.js"></script>
+    <script type="module" src="assets/scripts/modules/rebates.js"></script>
   </body>
 </html>

@@ -1,0 +1,28 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function isAdmin() { return signedIn() && request.auth.token.role == 'admin'; }
+
+    function isOwnProfile(userId) { return signedIn() && request.auth.uid == userId; }
+
+    match /users/{userId} {
+      // El administrador puede gestionar todos los perfiles.
+      allow read, create, update, delete: if isAdmin();
+
+      // Un especialista sólo puede actualizar datos personales. El rol, UID,
+      // estado y vínculo con su cartera permanecen protegidos.
+      allow read: if isOwnProfile(userId);
+      allow update: if isOwnProfile(userId)
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.email == resource.data.email
+        && request.resource.data.role == 'specialist'
+        && request.resource.data.role == resource.data.role
+        && request.resource.data.specialistId == resource.data.specialistId
+        && request.resource.data.active == resource.data.active
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['displayName', 'country', 'updatedAt']);
+      allow create, delete: if false;
+    }
+  }
+}

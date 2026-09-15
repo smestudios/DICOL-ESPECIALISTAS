@@ -1,3 +1,7 @@
+import { getApp, getApps, initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
+import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
+import { firebaseConfig } from "../auth/firebase-config.js";
+
 /* La información se consulta y actualiza únicamente en Google Sheets mediante Apps Script. */
 const APPS_SCRIPT_URL =
   "https://script.google.com/macros/s/AKfycbyxEKQfHQ_39AcIjS69B-5xRyleIsL4w25LJTGMmwyKMgp9uLucsNWFfHwuyWBOtUjVjQ/exec";
@@ -21,7 +25,10 @@ const emptyState = {
 let state = emptyState;
 let selectedPartnerId;
 let activeView = "general";
+let userRole = "";
 const pendingActions = new Set();
+const firebaseApp = getApps().length ? getApp() : initializeApp(firebaseConfig);
+const auth = getAuth(firebaseApp);
 const $ = (selector) => document.querySelector(selector);
 const q = () => $("#quarterFilter").value;
 const currentPartner = () =>
@@ -54,10 +61,13 @@ function normalizeData(data) {
   };
 }
 async function api(action, data, id) {
+  const user = auth.currentUser;
+  if (!user) throw new Error("Tu sesión expiró. Ingresa nuevamente al portal.");
+  const idToken = await user.getIdToken();
   const response = await fetch(APPS_SCRIPT_URL, {
-    method: action === "getData" ? "GET" : "POST",
-    headers: action === "getData" ? undefined : { "Content-Type": "text/plain;charset=utf-8" },
-    body: action === "getData" ? undefined : JSON.stringify({ action, data, id }),
+    method: "POST",
+    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    body: JSON.stringify({ action, data, id, idToken }),
   });
   if (!response.ok) throw new Error(`No fue posible conectar con Google Sheets (${response.status}).`);
   const payload = await response.json();
@@ -67,6 +77,9 @@ async function api(action, data, id) {
 async function loadData() {
   setConnectionStatus("Conectando con Google Sheets…");
   try {
+    const token = await auth.currentUser?.getIdTokenResult();
+    userRole = token?.claims?.role || "";
+    applyRoleUi();
     state = normalizeData(await api("getData"));
     selectedPartnerId = state.partners.some((partner) => partner.id === selectedPartnerId)
       ? selectedPartnerId
@@ -78,6 +91,15 @@ async function loadData() {
     setConnectionStatus(error.message, true);
   }
   render();
+}
+function applyRoleUi() {
+  const isAdmin = userRole === "admin";
+  ["#newPartnerButton", "#specialistButton", "#parametersButton", "#editPartnerButton", "#reassignPartnerButton", "#deletePartnerButton"].forEach((selector) => {
+    const control = $(selector);
+    if (control) control.hidden = !isAdmin;
+  });
+  const appliedRebate = $("#editAppliedRebate");
+  if (appliedRebate) appliedRebate.disabled = !isAdmin;
 }
 async function persist(action, data, id) {
   if (pendingActions.has(action)) return false;
@@ -154,7 +176,7 @@ function renderSummary() {
     : 0;
   $("#partnerCount").textContent = results.length;
   $("#partnerCountDetail").textContent =
-    `${state.specialists.length} especialista(s) DICOL`;
+    `${state.specialists.length} usuario(s) responsable(s) DICOL`;
   $("#averageScore").textContent = `${average}%`;
   $("#projectedRebate").textContent = `${Number(projected).toFixed(1)}%`;
   $("#atRiskCount").textContent = results.filter((r) => r.score < 60).length;
@@ -172,7 +194,7 @@ function renderTabs() {
 function renderGeneral() {
   const rows = allEvaluations().sort((a, b) => a.score - b.score);
   $("#generalTable").innerHTML =
-    `<table class="rebate-table"><thead><tr><th>Aliado</th><th>Especialista DICOL</th><th>Zona</th><th>Cumplimiento ${q()}</th><th>Nivel</th><th>Rebate proyectado</th><th></th></tr></thead><tbody>${rows.map(({ partner, score, tier }) => `<tr><td><b>${esc(partner.name)}</b></td><td>${esc(partnerSpecialistName(partner))}</td><td>${esc(partner.zone || "—")}</td><td>${score}%</td><td><span class="status-pill status-${tier.name.toLowerCase()}">${tier.name}</span></td><td>${tier.rebate}%</td><td><button data-open-partner="${partner.id}">Ver ficha</button></td></tr>`).join("") || '<tr><td colspan="7">Aún no hay aliados registrados.</td></tr>'}</tbody></table>`;
+    `<table class="rebate-table"><thead><tr><th>Aliado</th><th>Usuario responsable</th><th>Zona</th><th>Cumplimiento ${q()}</th><th>Nivel</th><th>Rebate proyectado</th><th></th></tr></thead><tbody>${rows.map(({ partner, score, tier }) => `<tr><td><b>${esc(partner.name)}</b></td><td>${esc(partnerSpecialistName(partner))}</td><td>${esc(partner.zone || "—")}</td><td>${score}%</td><td><span class="status-pill status-${tier.name.toLowerCase()}">${tier.name}</span></td><td>${tier.rebate}%</td><td><button data-open-partner="${partner.id}">Ver ficha</button></td></tr>`).join("") || '<tr><td colspan="7">Aún no hay aliados registrados.</td></tr>'}</tbody></table>`;
   document.querySelectorAll("[data-open-partner]").forEach(
     (button) =>
       (button.onclick = () => {
@@ -195,10 +217,10 @@ function renderSpecialists() {
             )
           : 0;
         const atRisk = results.filter((x) => x.score < 60).length;
-        return `<article class="specialist-card"><p class="eyebrow">ESPECIALISTA DICOL · ${esc(person.zone || "SIN ZONA")}</p><h3>${esc(person.name)}</h3><p>${results.length} aliado(s) asignado(s) · ${atRisk} requieren gestión.</p><strong>${average}%</strong><small>cumplimiento promedio de su cartera</small><div class="mini-progress"><span style="width:${average}%"></span></div><button class="rebate-button" data-filter-specialist="${person.id}">Ver sus aliados</button></article>`;
+        return `<article class="specialist-card"><p class="eyebrow">USUARIO DICOL · ${esc(person.zone || "SIN ZONA")}</p><h3>${esc(person.name)}</h3><p>${results.length} aliado(s) asignado(s) · ${atRisk} requieren gestión.</p><strong>${average}%</strong><small>cumplimiento promedio de su cartera</small><div class="mini-progress"><span style="width:${average}%"></span></div><button class="rebate-button" data-filter-specialist="${person.id}">Ver sus aliados</button></article>`;
       })
       .join("") ||
-    '<p class="empty-state">Agregue el primer especialista de DICOL.</p>';
+    '<p class="empty-state">Agregue el primer usuario responsable de DICOL.</p>';
   $("#specialistCards").innerHTML = cards;
   document.querySelectorAll("[data-filter-specialist]").forEach(
     (button) =>
@@ -408,10 +430,10 @@ function renderSpecialistManager() {
         const assigned = state.partners.filter(
           (partner) => partner.specialistId === person.id,
         ).length;
-        return `<div class="manager-row"><div><b>${esc(person.name)}</b><span>${esc(person.zone || "Sin zona")} · ${assigned} aliado(s)</span></div><button class="text-danger" data-delete-specialist="${person.id}" ${assigned ? 'disabled title="Reasigne los aliados antes de eliminar"' : ""}>Eliminar</button></div>`;
+        return `<div class="manager-row"><div><b>${esc(person.name)}</b><span>${esc(person.zone || "Sin zona")} · ${assigned} aliado(s) · ID Firebase/Sheets: <code>${esc(person.id)}</code></span></div><button class="text-danger" data-delete-specialist="${person.id}" ${assigned ? 'disabled title="Reasigne los aliados antes de eliminar"' : ""}>Eliminar</button></div>`;
       })
       .join("") ||
-    '<p class="dialog-help">No hay especialistas registrados.</p>';
+    '<p class="dialog-help">No hay usuarios responsables registrados.</p>';
   document.querySelectorAll("[data-delete-specialist]").forEach(
     (button) =>
       (button.onclick = () => {
@@ -522,7 +544,7 @@ $("#specialistForm").onsubmit = (event) => {
   event.preventDefault();
   const name = $("#specialistName").value.trim();
   if (!name) return;
-  if (state.specialists.some((person) => person.name.trim().toUpperCase() === name.toUpperCase())) return alert("Ya existe un especialista activo con ese nombre.");
+  if (state.specialists.some((person) => person.name.trim().toUpperCase() === name.toUpperCase())) return alert("Ya existe un usuario responsable activo con ese nombre.");
   const specialistData = {
     id: `sp-${Date.now()}`,
     nombre: name,
@@ -609,4 +631,7 @@ document
   .forEach(
     (button) => (button.onclick = () => $(`#${button.dataset.close}`).close()),
   );
-loadData();
+// Espera a que Firebase recupere la sesión antes de enviar el token a Apps Script.
+onAuthStateChanged(auth, (user) => {
+  if (user) loadData();
+});
