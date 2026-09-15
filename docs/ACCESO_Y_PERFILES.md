@@ -41,10 +41,22 @@ Crear o actualizar un administrador:
 python tools/manage_users.py upsert --email admin@dicol.com --name "Nombre Admin" --role admin --password "CambiaEstaClave123!"
 ```
 
-Crear o actualizar un especialista; el valor de `--specialist-id` debe coincidir exactamente con el `id` de la pestaña **Especialistas** de Google Sheets:
+Crear o actualizar a Sebastian Rengifo como especialista de Colombia. Primero, desde **Rebates → Gestionar usuarios**, cree el usuario responsable “Sebastian Rengifo” con zona “Colombia” y copie el valor **ID Firebase/Sheets** que muestra la ventana. Ese valor debe ir exactamente en `--specialist-id`:
 
 ```bash
 python tools/manage_users.py upsert --email especialista@dicol.com --name "Nombre Especialista" --role specialist --specialist-id "UUID-DE-LA-HOJA" --password "CambiaEstaClave123!"
+```
+
+Para Sebastian, sustituya únicamente `ID-DE-SEBASTIAN` y la contraseña temporal por valores reales:
+
+```bash
+python tools/manage_users.py upsert --email "Sebastianrengifo05@gmail.com" --name "Sebastian Rengifo" --country "Colombia" --role specialist --specialist-id "ID-DE-SEBASTIAN" --password "CONTRASENA-TEMPORAL-SEGURA"
+```
+
+Para Andrés Gonzaga, cuando tenga su correo, use el mismo comando sin `--specialist-id`:
+
+```bash
+python tools/manage_users.py upsert --email "CORREO-DE-ANDRES" --name "Andres Gonzaga" --country "Colombia" --role admin --password "CONTRASENA-TEMPORAL-SEGURA"
 ```
 
 Desactivar un usuario:
@@ -83,3 +95,7 @@ npm run disable:user -- --email especialista@dicol.com
 4. Cree los perfiles con la herramienta local. Apps Script validará el ID token en cada llamada y aplicará el rol y el `specialistId` incluidos en los custom claims.
 
 El Apps Script ya no entrega datos por `GET` ni acepta acciones sin sesión Firebase válida. La autorización se aplica en el servidor: ocultar botones en el navegador no es el mecanismo de seguridad.
+
+## Reglas de Firestore
+
+El archivo [`firebase/firestore.rules`](../firebase/firestore.rules) permite a un administrador leer y modificar todos los perfiles. Un especialista sólo puede leer su propio perfil y cambiar `displayName` o `country`; no puede alterar su rol, estado, correo ni `specialistId`. Los aliados y las evaluaciones se protegen en Apps Script, que filtra la cartera usando el custom claim firmado `specialistId`.

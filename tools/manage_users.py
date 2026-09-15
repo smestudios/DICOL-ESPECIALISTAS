@@ -69,6 +69,7 @@ def upsert_user(args):
         "uid": user.uid,
         "email": email,
         "displayName": display_name,
+        "country": args.country.strip(),
         "role": args.role,
         "specialistId": args.specialist_id.strip() if args.role == "specialist" else None,
         "active": True,
@@ -103,6 +104,7 @@ def build_parser():
     upsert.add_argument("--email", required=True)
     upsert.add_argument("--name", required=True)
     upsert.add_argument("--role", required=True, choices=("admin", "specialist"))
+    upsert.add_argument("--country", default="Colombia", help="País mostrado en el perfil (por defecto: Colombia).")
     upsert.add_argument("--specialist-id", help="ID del especialista en Google Sheets; obligatorio para role specialist.")
     upsert.add_argument("--password", help="Obligatoria al crear una cuenta; opcional al actualizarla.")
     upsert.set_defaults(handler=upsert_user)
