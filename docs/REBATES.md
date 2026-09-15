@@ -43,10 +43,11 @@ El API recalcula los porcentajes, el ponderado y el rebate calculado al guardar 
 
 1. En la hoja que será la base, abra **Extensiones → Apps Script** y reemplace el contenido con [`appscript/Code.gs`](../appscript/Code.gs).
 2. Ejecute `setup()` una vez. Crea o completa las pestañas **Especialistas**, **Aliados**, **Evaluaciones**, **Politica** y **Parametros**. También restaura la política fija A/B/C indicada arriba.
-3. Implemente el proyecto como aplicación web, ejecútelo como la cuenta de DICOL y copie la URL `/exec` en `rebates.js`.
-4. Después de cambios en Apps Script, cree una nueva implementación para publicar el código actualizado.
+3. Ejecute una vez `configureFirebaseApiKey('TU_API_KEY_WEB')` en Apps Script. La key web está en `assets/scripts/auth/firebase-config.js`; esta configuración permite validar los ID tokens, pero no entrega permisos administrativos.
+4. Implemente el proyecto como aplicación web, ejecútelo como la cuenta de DICOL y copie la URL `/exec` en `assets/scripts/modules/rebates.js`.
+5. Después de cambios en Apps Script, cree una nueva implementación para publicar el código actualizado.
 
-La API acepta `getData`, `saveSpecialist`, `savePartner`, `saveEvaluation`, `saveParameters`, `deletePartner` y `deleteSpecialist`. No contiene catálogo, precios, kits ni acciones de catálogo.
+La API acepta `getData`, `saveSpecialist`, `savePartner`, `saveEvaluation`, `saveParameters`, `deletePartner` y `deleteSpecialist`. Todas las solicitudes usan `POST` e incluyen un ID token de Firebase. Los administradores pueden ejecutar todas las acciones; cada especialista sólo recibe su cartera y puede guardar evaluaciones de sus aliados asignados. No contiene catálogo, precios, kits ni acciones de catálogo.
 
 ## Operación
 

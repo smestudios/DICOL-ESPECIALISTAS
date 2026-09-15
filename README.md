@@ -30,6 +30,10 @@ La estructura separa los recursos por responsabilidad para que sea fácil locali
 - Añade estilos y scripts del módulo correspondiente en `assets/styles/` y `assets/scripts/modules/`; reutiliza `site.css` solamente para elementos compartidos.
 - Toda página interna debe cargar `assets/scripts/auth/auth-guard.js` para conservar la protección de acceso.
 
+## Perfiles de acceso
+
+La administración local de perfiles `admin` y `specialist`, las reglas de Firestore y la integración segura con Google Sheets se documentan en [Acceso y perfiles](docs/ACCESO_Y_PERFILES.md). Las credenciales administrativas no se guardan ni se usan desde el navegador.
+
 ## Alcance actual del lector QR
 
 El lector QR tiene una sola responsabilidad: identificar el **CUFE** de la factura. Cuando el código también contiene una URL segura del dominio `dian.gov.co`, se habilita el botón **Consultar en DIAN**, que abre esa URL en una pestaña nueva.

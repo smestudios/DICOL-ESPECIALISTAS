@@ -3,6 +3,10 @@
  *
  * Ejecute setup() una vez. Las metas se configuran por aliado y trimestre
  * desde la pantalla "Metas del aliado"; setup no crea metas sin aliado.
+ *
+ * Seguridad: configure FIREBASE_WEB_API_KEY en las propiedades del script con
+ * configureFirebaseApiKey('...'). Los roles llegan como custom claims firmados
+ * por Firebase; nunca se aceptan desde el navegador.
  */
 const SHEET_NAMES = {
   specialists: "Especialistas",
@@ -56,41 +60,72 @@ function restorePolicyBoletin2025() {
   sheet.getRange(2, 1, DEFAULT_POLICY.length, HEADERS.policy.length).setValues(DEFAULT_POLICY);
 }
 
-function doGet(event) { return response_({ ok: true, data: getData_() }, event); }
+function doGet(event) { return response_({ ok: false, error: "Use POST autenticado." }, event); }
 function doPost(event) {
   try { return response_({ ok: true, data: dispatch_(JSON.parse(event.postData.contents || "{}")) }, event); }
   catch (error) { return response_({ ok: false, error: error.message }, event); }
 }
+function configureFirebaseApiKey(apiKey) {
+  if (!apiKey) throw new Error("Indique la API key web de Firebase.");
+  PropertiesService.getScriptProperties().setProperty("FIREBASE_WEB_API_KEY", String(apiKey));
+}
 function dispatch_(request) {
   const data = request.data || {};
+  const session = firebaseSession_(request.idToken);
   switch (request.action) {
-    case "getData": return getData_();
-    case "saveSpecialist": return saveSpecialist_(data);
-    case "savePartner": return savePartner_(data);
-    case "saveEvaluation": return saveEvaluation_(data);
-    case "saveParameters": return saveParameters_(data);
-    case "deletePartner": return archivePartner_(request.id);
-    case "deleteSpecialist": return archiveSpecialist_(request.id);
+    case "getData": return getData_(session);
+    case "saveSpecialist": requireAdmin_(session); return saveSpecialist_(data);
+    case "savePartner": requireAdmin_(session); return savePartner_(data);
+    case "saveParameters": requireAdmin_(session); return saveParameters_(data);
+    case "deletePartner": requireAdmin_(session); return archivePartner_(request.id);
+    case "deleteSpecialist": requireAdmin_(session); return archiveSpecialist_(request.id);
+    case "saveEvaluation": authorizeEvaluation_(session, data.aliado_id); return saveEvaluation_(data, session);
     default: throw new Error("Acción no permitida.");
   }
 }
-function getData_() {
-  const specialists = rows_(SHEET_NAMES.specialists).filter((row) => row.activo !== "false");
-  const partners = rows_(SHEET_NAMES.partners).filter((row) => row.activo !== "false");
-  const evaluations = rows_(SHEET_NAMES.evaluations);
-  const parameters = rows_(SHEET_NAMES.parameters).filter((row) => row.activo !== "false");
-  const policy = { tiers: [] };
-  rows_(SHEET_NAMES.policy).forEach((row) => {
-    if (row.tipo === "nivel") policy.tiers.push({ name: row.clave, rebate: number_(row.valor), min: number_(row.meta) });
-    if (row.tipo === "indicador") policy[row.clave] = { label: row.nombre, weight: number_(row.valor), target: number_(row.meta) };
+function firebaseSession_(idToken) {
+  if (!idToken) throw new Error("Sesión de Firebase requerida.");
+  const apiKey = PropertiesService.getScriptProperties().getProperty("FIREBASE_WEB_API_KEY");
+  if (!apiKey) throw new Error("Falta configurar FIREBASE_WEB_API_KEY en Apps Script.");
+  const response = UrlFetchApp.fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(apiKey)}`, {
+    method: "post", contentType: "application/json", payload: JSON.stringify({ idToken }), muteHttpExceptions: true,
   });
-  policy.tiers.sort((a, b) => b.min - a.min);
+  if (response.getResponseCode() !== 200) throw new Error("No fue posible validar la sesión de Firebase.");
+  const user = JSON.parse(response.getContentText()).users && JSON.parse(response.getContentText()).users[0];
+  if (!user || user.disabled) throw new Error("La cuenta no está disponible.");
+  const claims = user.customAttributes ? JSON.parse(user.customAttributes) : {};
+  if (!["admin", "specialist"].includes(claims.role)) throw new Error("Tu cuenta no tiene un rol autorizado.");
+  return { uid: user.localId, email: user.email || "", role: claims.role, specialistId: claims.specialistId || "" };
+}
+function requireAdmin_(session) { if (session.role !== "admin") throw new Error("Esta acción requiere un perfil administrador."); }
+function authorizeEvaluation_(session, partnerId) {
+  if (session.role === "admin") return;
+  const partner = byId_(SHEET_NAMES.partners, partnerId);
+  if (!partner || partner.especialista_id !== session.specialistId) throw new Error("No puedes modificar la evaluación de este aliado.");
+}
+function getData_(session) {
+  const allSpecialists = rows_(SHEET_NAMES.specialists).filter((row) => row.activo !== "false");
+  const allPartners = rows_(SHEET_NAMES.partners).filter((row) => row.activo !== "false");
+  const specialists = session.role === "admin" ? allSpecialists : allSpecialists.filter((row) => row.id === session.specialistId);
+  const partners = session.role === "admin" ? allPartners : allPartners.filter((row) => row.especialista_id === session.specialistId);
+  const evaluations = rows_(SHEET_NAMES.evaluations);
+  const parameters = rows_(SHEET_NAMES.parameters).filter((row) => row.activo !== "false" && partners.some((partner) => partner.id === row.aliado_id));
+  const policy = policy_();
   return {
     specialists,
     partners: partners.map((partner) => ({ ...partner, quarters: evaluations.filter((item) => item.aliado_id === partner.id).reduce((all, item) => ((all[item.periodo] = item), all), {}) })),
     policy,
     parameters,
   };
+}
+function policy_() {
+  const policy = { tiers: [] };
+  rows_(SHEET_NAMES.policy).forEach((row) => {
+    if (row.tipo === "nivel") policy.tiers.push({ name: row.clave, rebate: number_(row.valor), min: number_(row.meta) });
+    if (row.tipo === "indicador") policy[row.clave] = { label: row.nombre, weight: number_(row.valor), target: number_(row.meta) };
+  });
+  policy.tiers.sort((a, b) => b.min - a.min);
+  return policy;
 }
 function saveParameters_(items) {
   if (!Array.isArray(items) || !items.length) throw new Error("Agregue las metas del aliado.");
@@ -120,15 +155,16 @@ function savePartner_(data) {
     return upsert_(SHEET_NAMES.partners, { id: data.id || Utilities.getUuid(), nombre: String(data.nombre).trim(), especialista_id: data.especialista_id, zona: data.zona || "", notas: data.notas || "", activo: true, creado_en: data.creado_en || new Date().toISOString() });
   });
 }
-function saveEvaluation_(data) {
+function saveEvaluation_(data, session) {
   require_(data, ["aliado_id", "periodo"]);
   if (!/^Q[1-4]$/.test(data.periodo)) throw new Error("El periodo debe ser Q1, Q2, Q3 o Q4.");
+  const previous = rows_(SHEET_NAMES.evaluations).find((row) => row.aliado_id === data.aliado_id && row.periodo === data.periodo) || {};
   const values = {
     aliado_id: data.aliado_id, periodo: data.periodo,
     resultado_ventas: nonNegative_(data.resultado_ventas), demos_pequenas: nonNegative_(data.demos_pequenas),
     demos_grandes: nonNegative_(data.demos_grandes), certificados_dji: nonNegative_(data.certificados_dji),
     monto_equipos: nonNegative_(data.monto_equipos), monto_refacciones: nonNegative_(data.monto_refacciones),
-    cartas_firmadas: nonNegative_(data.cartas_firmadas), rebate_aplicado: nonNegative_(data.rebate_aplicado),
+    cartas_firmadas: nonNegative_(data.cartas_firmadas), rebate_aplicado: session.role === "admin" ? nonNegative_(data.rebate_aplicado) : nonNegative_(previous.rebate_aplicado),
     justificacion: String(data.justificacion || "").trim(), certificacion_dji_obligatoria: false,
     actualizado_en: new Date().toISOString(),
   };
@@ -149,7 +185,7 @@ function calculateCompliance_(values) {
   const parts = percent(values.monto_refacciones, expectedParts);
   const pilots = percent(values.certificados_dji, target("certificados_dji"));
   const information = percent(values.cartas_firmadas, target("cartas_firmadas"));
-  const policy = getData_().policy;
+  const policy = policy_();
   const score = ["sales", "demos", "parts", "pilots", "information"].reduce((sum, key) => sum + ((key === "demos" ? Math.min(small, large) : { sales, parts, pilots, information }[key]) >= 100 ? number_(policy[key].weight) : 0), 0);
   const tier = policy.tiers.find((item) => score >= item.min) || policy.tiers[policy.tiers.length - 1] || { name: "C", rebate: 0 };
   return { sales, demos: Math.min(small, large), parts, pilots, information, score, tier };
@@ -163,10 +199,12 @@ function archiveSpecialist_(id) {
   const person = byId_(SHEET_NAMES.specialists, id); if (!person) throw new Error("Especialista no encontrado."); return upsert_(SHEET_NAMES.specialists, { ...person, activo: false });
 }
 function getPartnerSummary(partnerId, period) {
-  const data = getData_(); const partner = data.partners.find((item) => item.id === partnerId);
+  const partner = byId_(SHEET_NAMES.partners, partnerId);
   if (!partner) throw new Error("Aliado no encontrado.");
-  const compliance = calculateCompliance_({ aliado_id: partnerId, periodo: period, ...(partner.quarters[period] || {}) });
-  return { partner, period, score: compliance.score, tier: compliance.tier, indicators: ["sales", "demos", "parts", "pilots", "information"].map((key) => ({ key, ...data.policy[key], value: compliance[key] })) };
+  const saved = rows_(SHEET_NAMES.evaluations).find((item) => item.aliado_id === partnerId && item.periodo === period) || {};
+  const compliance = calculateCompliance_({ aliado_id: partnerId, periodo: period, ...saved });
+  const policy = policy_();
+  return { partner, period, score: compliance.score, tier: compliance.tier, indicators: ["sales", "demos", "parts", "pilots", "information"].map((key) => ({ key, ...policy[key], value: compliance[key] })) };
 }
 function ensureSheet_(spreadsheet, name, headers) { const sheet = spreadsheet.getSheetByName(name) || spreadsheet.insertSheet(name); if (sheet.getLastRow() === 0) { sheet.appendRow(headers); sheet.setFrozenRows(1); } ensureHeaders_(sheet, headers); sheet.getRange(1, 1, 1, sheet.getLastColumn()).setFontWeight("bold"); return sheet; }
 function ensureHeaders_(sheet, headers) { const current = sheet.getRange(1, 1, 1, Math.max(1, sheet.getLastColumn())).getValues()[0]; const missing = headers.filter((header) => current.indexOf(header) === -1); if (missing.length) sheet.getRange(1, current.length + 1, 1, missing.length).setValues([missing]); }
