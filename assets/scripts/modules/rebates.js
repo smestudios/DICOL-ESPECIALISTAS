@@ -1,3 +1,7 @@
+import { getApp, getApps, initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
+import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
+import { firebaseConfig } from "../auth/firebase-config.js";
+
 /* La información se consulta y actualiza únicamente en Google Sheets mediante Apps Script. */
 const APPS_SCRIPT_URL =
   "https://script.google.com/macros/s/AKfycbyxEKQfHQ_39AcIjS69B-5xRyleIsL4w25LJTGMmwyKMgp9uLucsNWFfHwuyWBOtUjVjQ/exec";
@@ -21,7 +25,10 @@ const emptyState = {
 let state = emptyState;
 let selectedPartnerId;
 let activeView = "general";
+let userRole = "";
 const pendingActions = new Set();
+const firebaseApp = getApps().length ? getApp() : initializeApp(firebaseConfig);
+const auth = getAuth(firebaseApp);
 const $ = (selector) => document.querySelector(selector);
 const q = () => $("#quarterFilter").value;
 const currentPartner = () =>
@@ -54,10 +61,13 @@ function normalizeData(data) {
   };
 }
 async function api(action, data, id) {
+  const user = auth.currentUser;
+  if (!user) throw new Error("Tu sesión expiró. Ingresa nuevamente al portal.");
+  const idToken = await user.getIdToken();
   const response = await fetch(APPS_SCRIPT_URL, {
-    method: action === "getData" ? "GET" : "POST",
-    headers: action === "getData" ? undefined : { "Content-Type": "text/plain;charset=utf-8" },
-    body: action === "getData" ? undefined : JSON.stringify({ action, data, id }),
+    method: "POST",
+    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    body: JSON.stringify({ action, data, id, idToken }),
   });
   if (!response.ok) throw new Error(`No fue posible conectar con Google Sheets (${response.status}).`);
   const payload = await response.json();
@@ -67,6 +77,9 @@ async function api(action, data, id) {
 async function loadData() {
   setConnectionStatus("Conectando con Google Sheets…");
   try {
+    const token = await auth.currentUser?.getIdTokenResult();
+    userRole = token?.claims?.role || "";
+    applyRoleUi();
     state = normalizeData(await api("getData"));
     selectedPartnerId = state.partners.some((partner) => partner.id === selectedPartnerId)
       ? selectedPartnerId
@@ -78,6 +91,15 @@ async function loadData() {
     setConnectionStatus(error.message, true);
   }
   render();
+}
+function applyRoleUi() {
+  const isAdmin = userRole === "admin";
+  ["#newPartnerButton", "#specialistButton", "#parametersButton", "#editPartnerButton", "#reassignPartnerButton", "#deletePartnerButton"].forEach((selector) => {
+    const control = $(selector);
+    if (control) control.hidden = !isAdmin;
+  });
+  const appliedRebate = $("#editAppliedRebate");
+  if (appliedRebate) appliedRebate.disabled = !isAdmin;
 }
 async function persist(action, data, id) {
   if (pendingActions.has(action)) return false;
@@ -609,4 +631,7 @@ document
   .forEach(
     (button) => (button.onclick = () => $(`#${button.dataset.close}`).close()),
   );
-loadData();
+// Espera a que Firebase recupere la sesión antes de enviar el token a Apps Script.
+onAuthStateChanged(auth, (user) => {
+  if (user) loadData();
+});

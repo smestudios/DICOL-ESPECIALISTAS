@@ -454,6 +454,110 @@ footer a:focus-visible {
   font-size: 12px;
 }
 
+/* Página de inicio: portada breve y accesos directos. */
+.hero--portal {
+  min-height: min(700px, 82vh);
+}
+
+.hero--portal .hero-content {
+  max-width: 680px;
+}
+
+.hero--portal .hero-summary {
+  max-width: 480px;
+  font-size: clamp(17px, 2vw, 20px);
+}
+
+.tools {
+  padding: 96px 8% 112px;
+  background: #f4f4f4;
+  color: var(--black);
+}
+
+.tools__heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  margin-bottom: 42px;
+}
+
+.tools__heading .eyebrow {
+  margin-bottom: 14px;
+  color: var(--green-dark);
+}
+
+.tools__heading h2 {
+  max-width: 620px;
+  font-size: clamp(38px, 5vw, 64px);
+  line-height: 0.98;
+  letter-spacing: -3px;
+}
+
+.tool-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+.tool-card {
+  display: flex;
+  min-height: 280px;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 32px;
+  border: 1px solid #dcdcdc;
+  background: var(--white);
+}
+
+.tool-card__number {
+  color: var(--green-dark);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+}
+
+.tool-card h3 {
+  max-width: 260px;
+  font-size: clamp(25px, 2.5vw, 34px);
+  line-height: 1;
+  letter-spacing: -1.5px;
+}
+
+.tool-card__link {
+  width: fit-content;
+  color: var(--black);
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.tool-card__link span {
+  margin-left: 6px;
+  color: var(--green-dark);
+  font-size: 18px;
+}
+
+.tool-card__link:hover,
+.tool-card__link:focus-visible {
+  color: var(--green-dark);
+  outline: none;
+}
+
+.tool-card--accent {
+  border-color: var(--green);
+  background: var(--green);
+}
+
+.tool-card--accent .tool-card__number,
+.tool-card--accent .tool-card__link span {
+  color: #075125;
+}
+
+footer h2 {
+  margin-bottom: 20px;
+  font-size: 16px;
+}
+
 @media (max-width: 900px) {
   .nav-links {
     display: none;
@@ -461,7 +565,8 @@ footer a:focus-visible {
 
   .stats,
   .cards,
-  .process-grid {
+  .process-grid,
+  .tool-grid {
     grid-template-columns: 1fr;
   }
 
@@ -501,6 +606,14 @@ footer a:focus-visible {
   }
 
   .section-header {
+    display: block;
+  }
+
+  .tools {
+    padding: 75px 6%;
+  }
+
+  .tools__heading {
     display: block;
   }
 
