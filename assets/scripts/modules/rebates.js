@@ -21,6 +21,8 @@ const emptyState = {
   policy: POLICY,
   specialists: [],
   partners: [],
+  parameters: [],
+  rebateCredits: [],
 };
 let state = emptyState;
 let selectedPartnerId;
@@ -58,6 +60,7 @@ function normalizeData(data) {
       createdAt: partner.creado_en,
     })),
     parameters: data.parameters || [],
+    rebateCredits: data.rebateCredits || [],
   };
 }
 async function api(action, data, id) {
@@ -94,10 +97,11 @@ async function loadData() {
 }
 function applyRoleUi() {
   const isAdmin = userRole === "admin";
-  ["#newPartnerButton", "#specialistButton", "#parametersButton", "#editPartnerButton", "#reassignPartnerButton", "#deletePartnerButton"].forEach((selector) => {
-    const control = $(selector);
-    if (control) control.hidden = !isAdmin;
-  });
+  const specialistControls = ["#newPartnerButton", "#parametersButton", "#editPartnerButton", "#deletePartnerButton"];
+  specialistControls.forEach((selector) => { const control = $(selector); if (control) control.hidden = !["admin", "specialist"].includes(userRole); });
+  ["#specialistButton", "#reassignPartnerButton"].forEach((selector) => { const control = $(selector); if (control) control.hidden = !isAdmin; });
+  const partnerSelect = $("#partnerSpecialist");
+  if (partnerSelect) partnerSelect.disabled = !isAdmin;
   const appliedRebate = $("#editAppliedRebate");
   if (appliedRebate) appliedRebate.disabled = !isAdmin;
 }
@@ -284,6 +288,7 @@ function renderPartnerDetail() {
   $("#rebateValue").textContent = `${Number(result.tier.rebate)}%`;
   $("#gradeName").textContent = `Categoría ${result.tier.name} · rebate ganado ${result.tier.rebate}%`;
   renderCommercialOverview(result);
+  renderRebateBank(partner);
   $("#policyNote").textContent = `Política activa: ${rules()
     .map((rule) => `${rule.label} ${rule.weight}%`)
     .join(" · ")}. Los valores son porcentajes de cumplimiento contra la meta.`;
@@ -317,6 +322,21 @@ function renderCommercialOverview(result) {
     return `<div class="commercial-kpi"><span>${esc(rule.label)}</span><div><i style="width:${Math.min(100, value)}%"></i></div><b>${value}%</b><small>peso ${rule.weight}%</small></div>`;
   }).join("");
   $("#modelSales").innerHTML = `<div><b>Equipos comprados</b><span style="width:${Math.min(100, Number(result.values.sales || 0))}%"></span><small>${units} u</small></div>`;
+}
+function rebateCreditSummary(partnerId = currentPartner()?.id) {
+  const credits = state.rebateCredits.filter((credit) => credit.aliado_id === partnerId && !credit.periodo_aplicacion);
+  const available = credits.reduce((sum, credit) => sum + Number(credit.saldo_equipos || 0), 0);
+  return { credits, available };
+}
+function renderRebateBank(partner) {
+  const { credits, available } = rebateCreditSummary(partner.id);
+  $("#rebateCreditBalance").textContent = `${available} equipo(s)`;
+  const balances = credits.filter((credit) => Number(credit.saldo_equipos || 0) > 0);
+  const applications = state.rebateCredits.filter((credit) => credit.aliado_id === partner.id && credit.periodo_aplicacion === q());
+  const availableDetail = balances.map((credit) => `${credit.periodo_origen}: ${credit.saldo_equipos} equipo(s) al ${credit.rebate_pct}%`).join(" · ");
+  const appliedDetail = applications.length ? `Aplicado en ${q()}: ${applications.reduce((sum, credit) => sum + Number(credit.equipos_aplicados || 0), 0)} equipo(s).` : "";
+  $("#rebateCreditDetail").textContent = [availableDetail || "Aún no hay rebates acumulados.", appliedDetail].filter(Boolean).join(" ");
+  $("#applyRebateButton").disabled = available <= 0 || q() === "Q1";
 }
 function rules() {
   return Object.entries(state.policy)
@@ -415,10 +435,11 @@ function openPartnerDialog(partner) {
   $("#partnerName").value = partner?.name || "";
   $("#partnerZone").value = partner?.zone || "";
   $("#partnerNotes").value = partner?.notes || "";
+  $("#partnerSpecialist").disabled = userRole !== "admin";
   $("#partnerSpecialist").innerHTML = state.specialists
     .map(
       (person) =>
-        `<option value="${person.id}" ${partner?.specialistId === person.id ? "selected" : ""}>${esc(person.name)}${person.zone ? ` — ${esc(person.zone)}` : ""}</option>`,
+        `<option value="${person.id}" ${(partner?.specialistId || (userRole === "specialist" ? person.id : "")) === person.id ? "selected" : ""}>${esc(person.name)}${person.zone ? ` — ${esc(person.zone)}` : ""}</option>`,
     )
     .join("");
   $("#partnerDialog").showModal();
@@ -454,6 +475,14 @@ function esc(value) {
 }
 $("#newPartnerButton").onclick = () => openPartnerDialog();
 $("#editPartnerButton").onclick = () => openPartnerDialog(currentPartner());
+$("#applyRebateButton").onclick = () => {
+  const partner = currentPartner();
+  const { available } = rebateCreditSummary(partner?.id);
+  if (!partner || !available) return;
+  const requested = Number(prompt(`Saldo disponible: ${available} equipo(s). ¿Cuántos equipos desea aplicar en ${q()}?`, "1"));
+  if (!Number.isInteger(requested) || requested <= 0) return;
+  persist("applyRebateCredits", { aliado_id: partner.id, periodo: q(), equipos: requested });
+};
 $("#reassignPartnerButton").onclick = () => openPartnerDialog(currentPartner());
 $("#specialistButton").onclick = () => {
   renderSpecialistManager();
