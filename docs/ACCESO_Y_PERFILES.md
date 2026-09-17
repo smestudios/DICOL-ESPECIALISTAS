@@ -65,6 +65,17 @@ Desactivar un usuario:
 python tools/manage_users.py disable --email especialista@dicol.com
 ```
 
+### Recrear los perfiles iniciales
+
+Si se eliminan los perfiles de Firebase pero se conserva la hoja, **no genere un UUID nuevo** para el especialista. Copie primero el valor de `id` de la fila activa de Mailer Roa en **Especialistas** y úselo para recrear ambos perfiles:
+
+```bash
+export FIREBASE_SERVICE_ACCOUNT_PATH="./secrets/firebase-service-account.json"
+python tools/bootstrap_users.py --mailer-specialist-id "ID-EXACTO-DE-MAILER-EN-ESPECIALISTAS"
+```
+
+El script crea o reactiva a Sebastian Rengifo como `admin` y a Mailer Roa como `specialist`, guarda el mismo identificador en el custom claim y en `users/{uid}.specialistId`, y solicita contraseñas sólo para cuentas nuevas. Si Mailer no tiene una fila activa en **Especialistas**, créela primero y use su `id`; Apps Script rechazará el acceso si el vínculo no existe.
+
 ### Node.js (alternativa)
 
 Para crear o actualizar un administrador:
