@@ -4,12 +4,12 @@
 
 Firebase Authentication identifica a la persona. El perfil canónico se guarda en Firestore como `users/{uid}` y contiene `displayName`, `email`, `role`, `specialistId` y `active`.
 
-El rol se duplica como un **custom claim** de Firebase Authentication. Esto permite que Apps Script reciba un token firmado y decida qué puede consultar o editar sin confiar en datos enviados por el navegador.
+El rol se duplica como un **custom claim** de Firebase Authentication. Para un especialista, el claim `specialistId` debe coincidir exactamente con la columna `id` de la pestaña **Especialistas** en Google Sheets. Apps Script valida ese vínculo activo en cada solicitud y con él decide qué puede consultar o editar; nunca confía en un especialista enviado por el navegador.
 
 | Rol | Firestore | Rebates / Google Sheets |
 | --- | --- | --- |
 | `admin` | Puede leer todos los perfiles. | Administra especialistas, aliados, metas y evaluaciones. |
-| `specialist` | Puede leer sólo su perfil. | Consulta su cartera y sólo registra evaluaciones de aliados asignados a su `specialistId`; no puede aprobar rebate adicional. |
+| `specialist` | Puede leer sólo su perfil. | Consulta y gestiona únicamente su cartera: puede crear, modificar y eliminar sus aliados, metas, evaluaciones y créditos de rebate; no puede reasignar aliados ni administrar usuarios. |
 
 > La `apiKey` web de Firebase sirve para identificar el proyecto en el navegador; no otorga privilegios de administrador. Nunca use esa key para crear roles desde el cliente. La cuenta de servicio utilizada por la herramienta local no debe subirse al repositorio.
 
@@ -65,6 +65,17 @@ Desactivar un usuario:
 python tools/manage_users.py disable --email especialista@dicol.com
 ```
 
+### Recrear los perfiles iniciales
+
+Si se eliminan los perfiles de Firebase pero se conserva la hoja, **no genere un UUID nuevo** para el especialista. Copie primero el valor de `id` de la fila activa de Mailer Roa en **Especialistas** y úselo para recrear ambos perfiles:
+
+```bash
+export FIREBASE_SERVICE_ACCOUNT_PATH="./secrets/firebase-service-account.json"
+python tools/bootstrap_users.py --mailer-specialist-id "ID-EXACTO-DE-MAILER-EN-ESPECIALISTAS"
+```
+
+El script crea o reactiva a Sebastian Rengifo como `admin` y a Mailer Roa como `specialist`, guarda el mismo identificador en el custom claim y en `users/{uid}.specialistId`, y solicita contraseñas sólo para cuentas nuevas. Si Mailer no tiene una fila activa en **Especialistas**, créela primero y use su `id`; Apps Script rechazará el acceso si el vínculo no existe.
+
 ### Node.js (alternativa)
 
 Para crear o actualizar un administrador:
@@ -98,4 +109,4 @@ El Apps Script ya no entrega datos por `GET` ni acepta acciones sin sesión Fire
 
 ## Reglas de Firestore
 
-El archivo [`firebase/firestore.rules`](../firebase/firestore.rules) permite a un administrador leer y modificar todos los perfiles. Un especialista sólo puede leer su propio perfil y cambiar `displayName` o `country`; no puede alterar su rol, estado, correo ni `specialistId`. Los aliados y las evaluaciones se protegen en Apps Script, que filtra la cartera usando el custom claim firmado `specialistId`.
+El archivo [`firebase/firestore.rules`](../firebase/firestore.rules) permite a un administrador leer y modificar todos los perfiles. Un especialista sólo puede leer su propio perfil y cambiar `displayName` o `country`; no puede alterar su rol, estado, correo ni `specialistId`. Los aliados, metas, evaluaciones y créditos de rebate se protegen en Apps Script, que filtra la cartera usando el custom claim firmado `specialistId`.

@@ -1063,3 +1063,6 @@ footer h2 {
 .invoice-promo { display: flex; align-items: end; justify-content: space-between; gap: 30px; border-top: 1px solid var(--line); }
 .invoice-promo .section-header { margin: 0; }.invoice-promo .btn-primary { margin-bottom: 10px; white-space: nowrap; }
 @media (max-width: 700px) { .invoice-promo { align-items: flex-start; flex-direction: column; } }
+.nav-actions { display:flex; align-items:center; gap:8px; }
+.nav-button--logout { border-color:#a34848; color:#ffd0d0; }
+.nav-button--logout:hover, .nav-button--logout:focus-visible { border-color:#f27171; background:#401a1a; }
