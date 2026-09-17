@@ -306,39 +306,53 @@ function renderCommercialOverview(result) {
   const indicators = rules();
   const met = indicators.filter((rule) => Number(result.values[rule.key] || 0) >= rule.target).length;
   const calculated = Number(result.values.rebate_calculado || result.tier.rebate || 0);
-  const applied = Number(result.values.rebate_aplicado || 0);
+  const applied = state.rebateCredits.filter((credit) => credit.aliado_id === currentPartner()?.id && credit.periodo_aplicacion === q()).reduce((sum, credit) => sum + Number(credit.equipos_aplicados || 0), 0);
   $("#commercialQuarter").textContent = q();
   $("#commercialScore").textContent = `${result.score}%`;
   $("#commercialCalculated").textContent = `${calculated}%`;
-  $("#commercialApplied").textContent = `${applied}%`;
+  $("#commercialApplied").textContent = `${applied} equipo(s)`;
   $("#commercialSales").textContent = units;
   $("#commercialBilling").textContent = money(billing);
   $("#commercialDemos").textContent = `${Math.round(Number(result.values.demos || 0))}%`;
   $("#commercialParts").textContent = money(parts);
   $("#commercialPartsChart").textContent = money(parts);
   $("#commercialIndicators").textContent = `${met}/${indicators.length}`;
-  $("#commercialStatus").textContent = `Categoría ${result.tier.name} · rebate ganado ${calculated}% · aplicado: ${(applied - calculated).toFixed(1)}% vs. calculado`;
+  $("#commercialStatus").textContent = `Categoría ${result.tier.name} · rebate ganado ${calculated}% · rebates aplicados en ${q()}: ${applied} equipo(s)`;
   $("#commercialKpis").innerHTML = indicators.map((rule) => {
     const value = Number(result.values[rule.key] || 0);
     return `<div class="commercial-kpi"><span>${esc(rule.label)}</span><div><i style="width:${Math.min(100, value)}%"></i></div><b>${value}%</b><small>peso ${rule.weight}%</small></div>`;
   }).join("");
   $("#modelSales").innerHTML = `<div><b>Equipos comprados</b><span style="width:${Math.min(100, Number(result.values.sales || 0))}%"></span><small>${units} u</small></div>`;
 }
-function rebateCreditSummary(partnerId = currentPartner()?.id) {
-  const credits = state.rebateCredits.filter((credit) => credit.aliado_id === partnerId && !credit.periodo_aplicacion);
-  const available = credits.reduce((sum, credit) => sum + Number(credit.saldo_equipos || 0), 0);
-  return { credits, available };
+function quarterNumber(period) { return Number(String(period || "").replace("Q", "")) || 0; }
+function rebateCreditSummary(partnerId = currentPartner()?.id, period = q()) {
+  const credits = state.rebateCredits.filter((credit) => credit.aliado_id === partnerId && !credit.periodo_aplicacion && quarterNumber(credit.periodo_origen) < quarterNumber(period) && Number(credit.saldo_equipos || 0) > 0);
+  const byRate = credits.reduce((all, credit) => {
+    const rate = Number(credit.rebate_pct || 0);
+    all[rate] = (all[rate] || 0) + Number(credit.saldo_equipos || 0);
+    return all;
+  }, {});
+  return { credits, byRate, available: Object.values(byRate).reduce((sum, units) => sum + units, 0) };
 }
 function renderRebateBank(partner) {
-  const { credits, available } = rebateCreditSummary(partner.id);
-  $("#rebateCreditBalance").textContent = `${available} equipo(s)`;
-  const balances = credits.filter((credit) => Number(credit.saldo_equipos || 0) > 0);
+  const { byRate, available } = rebateCreditSummary(partner.id);
   const applications = state.rebateCredits.filter((credit) => credit.aliado_id === partner.id && credit.periodo_aplicacion === q());
-  const availableDetail = balances.map((credit) => `${credit.periodo_origen}: ${credit.saldo_equipos} equipo(s) al ${credit.rebate_pct}%`).join(" · ");
-  const appliedDetail = applications.length ? `Aplicado en ${q()}: ${applications.reduce((sum, credit) => sum + Number(credit.equipos_aplicados || 0), 0)} equipo(s).` : "";
-  $("#rebateCreditDetail").textContent = [availableDetail || "Aún no hay rebates acumulados.", appliedDetail].filter(Boolean).join(" ");
-  $("#applyRebateButton").disabled = available <= 0 || q() === "Q1";
+  const availableDetail = Object.entries(byRate).sort(([a], [b]) => Number(b) - Number(a)).map(([rate, units]) => `${units} rebate(s) al ${rate}%`).join(" · ");
+  const appliedByRate = applications.reduce((all, credit) => { const rate = Number(credit.rebate_pct || 0); all[rate] = (all[rate] || 0) + Number(credit.equipos_aplicados || 0); return all; }, {});
+  const appliedDetail = Object.keys(appliedByRate).length ? `Aplicado en ${q()}: ${Object.entries(appliedByRate).map(([rate, units]) => `${units} al ${rate}%`).join(" · ")}.` : "";
+  $("#rebateCreditBalance").textContent = `${available} rebate(s) disponibles`;
+  $("#rebateCreditDetail").textContent = [availableDetail || "No hay rebates acumulados disponibles para este trimestre.", appliedDetail].filter(Boolean).join(" ");
+  $("#applyRebateButton").disabled = available <= 0;
 }
+function openRebateApplyDialog() {
+  const partner = currentPartner();
+  const { byRate, available } = rebateCreditSummary(partner?.id);
+  if (!partner || !available) return;
+  $("#rebateApplyQuarter").textContent = q();
+  $("#rebateApplyList").innerHTML = Object.entries(byRate).sort(([a], [b]) => Number(b) - Number(a)).map(([rate, units]) => `<label class="rebate-apply-row"><span><b>Rebate ${rate}%</b><small>${units} equipo(s) acumulado(s) disponibles</small></span><input data-rebate-rate="${rate}" type="number" min="0" max="${units}" step="1" value="0" required><em>equipos</em></label>`).join("");
+  $("#rebateApplyDialog").showModal();
+}
+
 function rules() {
   return Object.entries(state.policy)
     .filter(([key]) => key !== "tiers")
@@ -476,13 +490,16 @@ function esc(value) {
 }
 $("#newPartnerButton").onclick = () => openPartnerDialog();
 $("#editPartnerButton").onclick = () => openPartnerDialog(currentPartner());
-$("#applyRebateButton").onclick = () => {
-  const partner = currentPartner();
-  const { available } = rebateCreditSummary(partner?.id);
-  if (!partner || !available) return;
-  const requested = Number(prompt(`Saldo disponible: ${available} equipo(s). ¿Cuántos equipos desea aplicar en ${q()}?`, "1"));
-  if (!Number.isInteger(requested) || requested <= 0) return;
-  persist("applyRebateCredits", { aliado_id: partner.id, periodo: q(), equipos: requested });
+$("#applyRebateButton").onclick = openRebateApplyDialog;
+$("#rebateApplyForm").onsubmit = (event) => {
+  event.preventDefault();
+  const applications = [...document.querySelectorAll("[data-rebate-rate]")]
+    .map((input) => ({ rebate_pct: input.dataset.rebateRate, equipos: input.value }))
+    .filter((item) => Number(item.equipos) > 0);
+  if (!applications.length) return alert("Indique al menos un rebate para aplicar.");
+  persist("applyRebateCredits", { aliado_id: currentPartner().id, periodo: q(), aplicaciones: applications }).then((saved) => {
+    if (saved) $("#rebateApplyDialog").close();
+  });
 };
 $("#reassignPartnerButton").onclick = () => openPartnerDialog(currentPartner());
 $("#specialistButton").onclick = () => {

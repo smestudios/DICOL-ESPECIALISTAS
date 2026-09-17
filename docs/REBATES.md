@@ -42,7 +42,8 @@ El API recalcula los porcentajes, el ponderado y el rebate calculado al guardar 
 Un rebate ganado se convierte en un **crédito de equipos**, siempre asociado al aliado que lo generó. Por ejemplo, si en `Q1` un aliado alcanza categoría A (5 %) y registra 3 equipos, se acumulan **3 equipos al 5 %**. En `Q2` se pueden aplicar esos tres equipos; el sistema los descuenta de la bolsa y conserva el trimestre de origen, el porcentaje y el trimestre donde se aplicaron.
 
 - La bolsa se calcula en el servidor al guardar cada evaluación; no depende de un porcentaje enviado por el navegador.
-- Al aplicar, se consumen primero los créditos más antiguos del mismo aliado y nunca más equipos de los que quedan disponibles.
+- La bolsa muestra el saldo agrupado por porcentaje: por ejemplo, `3 rebates al 5 %` y `4 rebates al 3 %`. Cada rebate representa un equipo al que se puede aplicar ese porcentaje.
+- Al aplicar, el usuario elige cuántos rebates usar de cada porcentaje disponible; dentro de cada porcentaje, el sistema consume primero los créditos más antiguos del mismo aliado y nunca más equipos de los que quedan disponibles.
 - Si se corrige una evaluación de origen, no se puede dejar por debajo de los equipos que ya fueron aplicados.
 - El saldo se mantiene por aliado. El selector actual trabaja con `Q1`–`Q4` del mismo ciclo anual: para conservar créditos entre años, la siguiente mejora debe incorporar el año al periodo antes de iniciar un nuevo ciclo.
 
@@ -65,4 +66,4 @@ La API acepta `getData`, `saveSpecialist`, `savePartner`, `saveEvaluation`, `sav
 1. Registre especialistas y aliados.
 2. Abra la ficha del aliado, elija el trimestre y use **Metas del aliado** para definir sus compromisos.
 3. Use **Editar evaluación** para registrar los resultados reales del trimestre.
-4. Revise los indicadores, categoría y rebate ganado. En el trimestre posterior, use **Aplicar rebate acumulado** e indique el número de equipos; la bolsa descuenta automáticamente el saldo más antiguo.
+4. Revise los indicadores, categoría y rebate ganado. En el trimestre posterior, use **Aplicar rebate acumulado**, indique cuántos rebates de 3 % y/o 5 % desea usar y confirme. Puede aplicar sólo una parte de cada saldo; la bolsa descuenta los equipos seleccionados.

@@ -216,24 +216,40 @@ function syncEarnedCredit_(values) {
   });
 }
 function applyRebateCredits_(data) {
-  require_(data, ["aliado_id", "periodo", "equipos"]);
+  require_(data, ["aliado_id", "periodo", "aplicaciones"]);
   if (!/^Q[1-4]$/.test(data.periodo)) throw new Error("El periodo debe ser Q1, Q2, Q3 o Q4.");
-  let remaining = nonNegative_(data.equipos);
-  if (!remaining) throw new Error("Indique al menos un equipo para aplicar el rebate.");
+  if (!Array.isArray(data.aplicaciones) || !data.aplicaciones.length) throw new Error("Seleccione al menos un rebate acumulado para aplicar.");
+  const requestedByRate = data.aplicaciones.reduce((all, item) => {
+    const rate = number_(item.rebate_pct);
+    const units = nonNegative_(item.equipos);
+    if (units && !Number.isInteger(units)) throw new Error("Los rebates se aplican en equipos completos.");
+    if (units) all[rate] = (all[rate] || 0) + units;
+    return all;
+  }, {});
+  if (!Object.keys(requestedByRate).length) throw new Error("Indique cuántos rebates desea aplicar.");
   const order = { Q1: 1, Q2: 2, Q3: 3, Q4: 4 };
   return withLock_(function () {
-    // La lectura y el descuento ocurren bajo el mismo lock para no gastar un saldo dos veces.
     const credits = rows_(SHEET_NAMES.rebateCredits).filter((row) => row.aliado_id === data.aliado_id && !row.periodo_aplicacion && number_(row.saldo_equipos) > 0 && order[row.periodo_origen] < order[data.periodo]).sort((a, b) => order[a.periodo_origen] - order[b.periodo_origen]);
-    const available = credits.reduce((sum, row) => sum + number_(row.saldo_equipos), 0);
-    if (remaining > available) throw new Error(`Sólo hay ${available} equipo(s) con rebate acumulado disponible para aplicar.`);
+    const availableByRate = credits.reduce((all, credit) => {
+      const rate = number_(credit.rebate_pct);
+      all[rate] = (all[rate] || 0) + number_(credit.saldo_equipos);
+      return all;
+    }, {});
+    Object.keys(requestedByRate).forEach((rate) => {
+      if (requestedByRate[rate] > (availableByRate[rate] || 0)) throw new Error(`Sólo hay ${availableByRate[rate] || 0} rebate(s) acumulado(s) al ${rate}% disponibles.`);
+    });
     const applications = [];
-    credits.forEach((credit) => {
-      if (!remaining) return;
-      const applied = Math.min(remaining, number_(credit.saldo_equipos));
-      const usage = { id: Utilities.getUuid(), aliado_id: credit.aliado_id, periodo_origen: credit.periodo_origen, rebate_pct: credit.rebate_pct, equipos_ganados: 0, equipos_aplicados: applied, saldo_equipos: 0, periodo_aplicacion: data.periodo, creado_en: new Date().toISOString(), actualizado_en: new Date().toISOString() };
-      upsert_(SHEET_NAMES.rebateCredits, usage);
-      upsert_(SHEET_NAMES.rebateCredits, { ...credit, equipos_aplicados: number_(credit.equipos_aplicados) + applied, saldo_equipos: number_(credit.saldo_equipos) - applied, actualizado_en: new Date().toISOString() });
-      applications.push(usage); remaining -= applied;
+    Object.keys(requestedByRate).forEach((rate) => {
+      let remaining = requestedByRate[rate];
+      credits.filter((credit) => number_(credit.rebate_pct) === number_(rate)).forEach((credit) => {
+        if (!remaining) return;
+        const applied = Math.min(remaining, number_(credit.saldo_equipos));
+        const usage = { id: Utilities.getUuid(), aliado_id: credit.aliado_id, periodo_origen: credit.periodo_origen, rebate_pct: credit.rebate_pct, equipos_ganados: 0, equipos_aplicados: applied, saldo_equipos: 0, periodo_aplicacion: data.periodo, creado_en: new Date().toISOString(), actualizado_en: new Date().toISOString() };
+        upsert_(SHEET_NAMES.rebateCredits, usage);
+        upsert_(SHEET_NAMES.rebateCredits, { ...credit, equipos_aplicados: number_(credit.equipos_aplicados) + applied, saldo_equipos: number_(credit.saldo_equipos) - applied, actualizado_en: new Date().toISOString() });
+        applications.push(usage);
+        remaining -= applied;
+      });
     });
     return applications;
   });
