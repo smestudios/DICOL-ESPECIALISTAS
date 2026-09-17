@@ -4,7 +4,7 @@
 
 Firebase Authentication identifica a la persona. El perfil canónico se guarda en Firestore como `users/{uid}` y contiene `displayName`, `email`, `role`, `specialistId` y `active`.
 
-El rol se duplica como un **custom claim** de Firebase Authentication. Esto permite que Apps Script reciba un token firmado y decida qué puede consultar o editar sin confiar en datos enviados por el navegador.
+El rol se duplica como un **custom claim** de Firebase Authentication. Para un especialista, el claim `specialistId` debe coincidir exactamente con la columna `id` de la pestaña **Especialistas** en Google Sheets. Apps Script valida ese vínculo activo en cada solicitud y con él decide qué puede consultar o editar; nunca confía en un especialista enviado por el navegador.
 
 | Rol | Firestore | Rebates / Google Sheets |
 | --- | --- | --- |

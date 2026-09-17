@@ -84,6 +84,7 @@ async function loadData() {
     userRole = token?.claims?.role || "";
     applyRoleUi();
     state = normalizeData(await api("getData"));
+    // Apps Script filtra con el specialistId firmado del usuario Firebase.
     selectedPartnerId = state.partners.some((partner) => partner.id === selectedPartnerId)
       ? selectedPartnerId
       : state.partners[0]?.id;

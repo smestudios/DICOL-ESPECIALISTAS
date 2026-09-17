@@ -74,6 +74,7 @@ function configureFirebaseApiKey(apiKey) {
 function dispatch_(request) {
   const data = request.data || {};
   const session = firebaseSession_(request.idToken);
+  assertSpecialistLink_(session);
   switch (request.action) {
     case "getData": return getData_(session);
     case "saveSpecialist": requireAdmin_(session); return saveSpecialist_(data);
@@ -101,6 +102,13 @@ function firebaseSession_(idToken) {
   return { uid: user.localId, email: user.email || "", role: claims.role, specialistId: claims.specialistId || "" };
 }
 function requireAdmin_(session) { if (session.role !== "admin") throw new Error("Esta acción requiere un perfil administrador."); }
+// La cartera depende de este vínculo firmado: nunca se toma el especialista desde el navegador.
+function assertSpecialistLink_(session) {
+  if (session.role !== "specialist") return;
+  if (!session.specialistId) throw new Error("Tu usuario Firebase no está vinculado a un especialista de Google Sheets.");
+  const linked = rows_(SHEET_NAMES.specialists).find((row) => row.id === session.specialistId && row.activo !== "false");
+  if (!linked) throw new Error("El ID de especialista de tu usuario Firebase no existe o está inactivo en Google Sheets.");
+}
 function authorizePartner_(session, partnerId) {
   if (session.role === "admin") return;
   const partner = byId_(SHEET_NAMES.partners, partnerId);
