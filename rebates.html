@@ -20,9 +20,7 @@
         <li><a href="legalizacion-gastos.html">Legalización</a></li>
         <li><a class="is-current" href="rebates.html">Rebates</a></li>
       </ul>
-      <button class="nav-button" id="policyButton" type="button">
-        Reglas de rebate
-      </button>
+      <div class="nav-actions"><button class="nav-button" id="policyButton" type="button">Reglas de rebate</button><button class="nav-button nav-button--logout" data-logout type="button">Cerrar sesión</button></div>
     </nav>
     <main class="rebates-app">
       <section class="rebates-hero">
@@ -142,6 +140,10 @@
                   </button>
                 </div>
               </div>
+              <section class="rebate-credit-card" aria-label="Saldo acumulado de rebates">
+                <div><p class="eyebrow">BOLSA DE REBATES</p><h3 id="rebateCreditBalance">0 equipo(s)</h3><p id="rebateCreditDetail">Aún no hay rebates acumulados.</p></div>
+                <button class="rebate-button rebate-button--primary" id="applyRebateButton" type="button">Aplicar rebate acumulado</button>
+              </section>
               <section class="commercial-overview" aria-label="Resumen comercial del aliado">
                 <div class="commercial-overview__heading">
                   <div>
@@ -272,7 +274,7 @@
       </form>
     </dialog>
     <dialog id="parametersDialog"><form id="parametersForm"><div class="dialog-heading"><h2>Parámetros de cumplimiento</h2><button type="button" data-close="parametersDialog">×</button></div><p class="dialog-help">Metas del aliado para este trimestre. Cada meta se compara contra el resultado registrado para calcular el indicador.</p><div id="parametersList" class="parameters-list"></div><div class="dialog-actions"><button class="rebate-button rebate-button--primary" type="submit" data-save-action="saveParameters">Guardar parámetros</button></div></form></dialog>
-    <dialog id="evaluationDialog" class="evaluation-dialog"><form id="evaluationForm"><div class="dialog-heading"><div><p class="eyebrow">EDICIÓN AISLADA · <span id="evaluationDialogQuarter"></span></p><h2 id="evaluationDialogPartner">Actualizar cumplimiento</h2></div><button type="button" data-close="evaluationDialog">×</button></div><p class="dialog-help">Registre los valores reales del trimestre. La meta de refacciones se calcula automáticamente como el porcentaje configurado del monto comprado en equipos.</p><div id="evaluationPreview" class="evaluation-preview"></div><div class="evaluation-form-grid"><label>Equipos comprados (unidades)<input id="editEquipmentUnits" type="number" min="0" step="1" required></label><label>Monto comprado en equipos (COP)<input id="editEquipmentAmount" type="number" min="0" step="1" required></label><label>Compra de refacciones (COP)<input id="editPartsAmount" type="number" min="0" step="1" required></label><label>Demos pequeñas realizadas<input id="editSmallDemos" type="number" min="0" step="1" required></label><label>Demos grandes realizadas<input id="editLargeDemos" type="number" min="0" step="1" required></label><label>Personas certificadas DJI Academy<input id="editDjiCertified" type="number" min="0" step="1" required></label><label>Cartas firmadas<input id="editLetters" type="number" min="0" step="1" required></label><label>Rebate adicional aprobado (%)<input id="editAppliedRebate" type="number" min="0" max="100" step="0.01" list="rebateOptions" required><datalist id="rebateOptions"><option value="0"><option value="3"><option value="5"><option value="10"></datalist></label></div><label>Justificación y soportes<textarea id="editJustification" rows="4" placeholder="Facturas, evidencias de demos, DJI Academy, excepciones o pendientes."></textarea></label><div class="dialog-actions"><button class="rebate-button" type="button" data-close="evaluationDialog">Cancelar</button><button class="rebate-button rebate-button--primary" type="submit" data-save-action="saveEvaluation">Guardar cambios</button></div></form></dialog>
+    <dialog id="evaluationDialog" class="evaluation-dialog"><form id="evaluationForm"><div class="dialog-heading"><div><p class="eyebrow">EDICIÓN AISLADA · <span id="evaluationDialogQuarter"></span></p><h2 id="evaluationDialogPartner">Actualizar cumplimiento</h2></div><button type="button" data-close="evaluationDialog">×</button></div><p class="dialog-help">Registre los valores reales del trimestre. La meta de refacciones se calcula automáticamente como el porcentaje configurado del monto comprado en equipos.</p><div id="evaluationPreview" class="evaluation-preview"></div><div class="evaluation-form-grid"><label>Equipos comprados (unidades)<input id="editEquipmentUnits" type="number" min="0" step="1" required></label><label>Monto comprado en equipos (COP)<input id="editEquipmentAmount" type="number" min="0" step="1" required></label><label>Compra de refacciones (COP)<input id="editPartsAmount" type="number" min="0" step="1" required></label><label>Demos pequeñas realizadas<input id="editSmallDemos" type="number" min="0" step="1" required></label><label>Demos grandes realizadas<input id="editLargeDemos" type="number" min="0" step="1" required></label><label>Personas certificadas DJI Academy<input id="editDjiCertified" type="number" min="0" step="1" required></label><label>Cartas firmadas<input id="editLetters" type="number" min="0" step="1" required></label><label>Rebate aplicado histórico (%)<input id="editAppliedRebate" type="number" min="0" max="100" step="0.01" required><small>Se conserva para registros anteriores. Los nuevos rebates se aplican desde la bolsa acumulada.</small></label></div><label>Justificación y soportes<textarea id="editJustification" rows="4" placeholder="Facturas, evidencias de demos, DJI Academy, excepciones o pendientes."></textarea></label><div class="dialog-actions"><button class="rebate-button" type="button" data-close="evaluationDialog">Cancelar</button><button class="rebate-button rebate-button--primary" type="submit" data-save-action="saveEvaluation">Guardar cambios</button></div></form></dialog>
     <dialog id="specialistDialog">
       <div class="dialog-heading">
         <h2>Usuarios DICOL</h2>
@@ -311,6 +313,7 @@
         <div class="dialog-actions"><button class="rebate-button rebate-button--primary" type="button" data-close="policyDialog">Entendido</button></div>
       </form>
     </dialog>
+    <script type="module" src="assets/scripts/auth/logout.js"></script>
     <script type="module" src="assets/scripts/modules/rebates.js"></script>
   </body>
 </html>
