@@ -14,6 +14,7 @@ const SHEET_NAMES = {
   evaluations: "Evaluaciones",
   policy: "Politica",
   parameters: "Parametros",
+  rebateCredits: "RebateCreditos",
 };
 const HEADERS = {
   specialists: ["id", "nombre", "zona", "activo", "creado_en"],
@@ -27,6 +28,7 @@ const HEADERS = {
   ],
   policy: ["tipo", "clave", "nombre", "valor", "meta"],
   parameters: ["id", "aliado_id", "periodo", "clave", "nombre", "meta", "unidad", "activo"],
+  rebateCredits: ["id", "aliado_id", "periodo_origen", "rebate_pct", "equipos_ganados", "equipos_aplicados", "saldo_equipos", "periodo_aplicacion", "creado_en", "actualizado_en"],
 };
 const DEFAULT_PARAMETERS = [
   ["ventas_equipos", "Meta de compra de equipos", 1, "unidades"],
@@ -72,12 +74,14 @@ function configureFirebaseApiKey(apiKey) {
 function dispatch_(request) {
   const data = request.data || {};
   const session = firebaseSession_(request.idToken);
+  assertSpecialistLink_(session);
   switch (request.action) {
     case "getData": return getData_(session);
     case "saveSpecialist": requireAdmin_(session); return saveSpecialist_(data);
-    case "savePartner": requireAdmin_(session); return savePartner_(data);
-    case "saveParameters": requireAdmin_(session); return saveParameters_(data);
-    case "deletePartner": requireAdmin_(session); return archivePartner_(request.id);
+    case "savePartner": return savePartnerAuthorized_(data, session);
+    case "saveParameters": return saveParametersAuthorized_(data, session);
+    case "deletePartner": authorizePartner_(session, request.id); return archivePartner_(request.id);
+    case "applyRebateCredits": authorizePartner_(session, data.aliado_id); return applyRebateCredits_(data);
     case "deleteSpecialist": requireAdmin_(session); return archiveSpecialist_(request.id);
     case "saveEvaluation": authorizeEvaluation_(session, data.aliado_id); return saveEvaluation_(data, session);
     default: throw new Error("Acción no permitida.");
@@ -98,10 +102,29 @@ function firebaseSession_(idToken) {
   return { uid: user.localId, email: user.email || "", role: claims.role, specialistId: claims.specialistId || "" };
 }
 function requireAdmin_(session) { if (session.role !== "admin") throw new Error("Esta acción requiere un perfil administrador."); }
-function authorizeEvaluation_(session, partnerId) {
+// La cartera depende de este vínculo firmado: nunca se toma el especialista desde el navegador.
+function assertSpecialistLink_(session) {
+  if (session.role !== "specialist") return;
+  if (!session.specialistId) throw new Error("Tu usuario Firebase no está vinculado a un especialista de Google Sheets.");
+  const linked = rows_(SHEET_NAMES.specialists).find((row) => row.id === session.specialistId && row.activo !== "false");
+  if (!linked) throw new Error("El ID de especialista de tu usuario Firebase no existe o está inactivo en Google Sheets.");
+}
+function authorizePartner_(session, partnerId) {
   if (session.role === "admin") return;
   const partner = byId_(SHEET_NAMES.partners, partnerId);
-  if (!partner || partner.especialista_id !== session.specialistId) throw new Error("No puedes modificar la evaluación de este aliado.");
+  if (!partner || partner.activo === "false" || partner.especialista_id !== session.specialistId) throw new Error("No puedes gestionar este aliado.");
+}
+function authorizeEvaluation_(session, partnerId) { authorizePartner_(session, partnerId); }
+function savePartnerAuthorized_(data, session) {
+  if (session.role === "admin") return savePartner_(data);
+  if (data.id) authorizePartner_(session, data.id);
+  // El especialista sólo puede crear aliados dentro de su propia cartera.
+  return savePartner_({ ...data, especialista_id: session.specialistId });
+}
+function saveParametersAuthorized_(items, session) {
+  if (!Array.isArray(items) || !items.length) throw new Error("Agregue las metas del aliado.");
+  items.forEach((item) => authorizePartner_(session, item.aliado_id));
+  return saveParameters_(items);
 }
 function getData_(session) {
   const allSpecialists = rows_(SHEET_NAMES.specialists).filter((row) => row.activo !== "false");
@@ -111,11 +134,13 @@ function getData_(session) {
   const evaluations = rows_(SHEET_NAMES.evaluations);
   const parameters = rows_(SHEET_NAMES.parameters).filter((row) => row.activo !== "false" && partners.some((partner) => partner.id === row.aliado_id));
   const policy = policy_();
+  const rebateCredits = rows_(SHEET_NAMES.rebateCredits).filter((row) => partners.some((partner) => partner.id === row.aliado_id));
   return {
     specialists,
     partners: partners.map((partner) => ({ ...partner, quarters: evaluations.filter((item) => item.aliado_id === partner.id).reduce((all, item) => ((all[item.periodo] = item), all), {}) })),
     policy,
     parameters,
+    rebateCredits,
   };
 }
 function policy_() {
@@ -158,21 +183,76 @@ function savePartner_(data) {
 function saveEvaluation_(data, session) {
   require_(data, ["aliado_id", "periodo"]);
   if (!/^Q[1-4]$/.test(data.periodo)) throw new Error("El periodo debe ser Q1, Q2, Q3 o Q4.");
-  const previous = rows_(SHEET_NAMES.evaluations).find((row) => row.aliado_id === data.aliado_id && row.periodo === data.periodo) || {};
-  const values = {
-    aliado_id: data.aliado_id, periodo: data.periodo,
-    resultado_ventas: nonNegative_(data.resultado_ventas), demos_pequenas: nonNegative_(data.demos_pequenas),
-    demos_grandes: nonNegative_(data.demos_grandes), certificados_dji: nonNegative_(data.certificados_dji),
-    monto_equipos: nonNegative_(data.monto_equipos), monto_refacciones: nonNegative_(data.monto_refacciones),
-    cartas_firmadas: nonNegative_(data.cartas_firmadas), rebate_aplicado: session.role === "admin" ? nonNegative_(data.rebate_aplicado) : nonNegative_(previous.rebate_aplicado),
-    justificacion: String(data.justificacion || "").trim(), certificacion_dji_obligatoria: false,
-    actualizado_en: new Date().toISOString(),
-  };
-  const compliance = calculateCompliance_(values);
-  ["sales", "demos", "parts", "pilots", "information"].forEach((key) => values[key] = compliance[key]);
-  values.rebate_calculado = compliance.tier.rebate;
-  values.diferencia = values.rebate_aplicado - values.rebate_calculado;
-  return upsert_(SHEET_NAMES.evaluations, values, ["aliado_id", "periodo"]);
+  return withLock_(function () {
+    const previous = rows_(SHEET_NAMES.evaluations).find((row) => row.aliado_id === data.aliado_id && row.periodo === data.periodo) || {};
+    const values = {
+      aliado_id: data.aliado_id, periodo: data.periodo,
+      resultado_ventas: nonNegative_(data.resultado_ventas), demos_pequenas: nonNegative_(data.demos_pequenas),
+      demos_grandes: nonNegative_(data.demos_grandes), certificados_dji: nonNegative_(data.certificados_dji),
+      monto_equipos: nonNegative_(data.monto_equipos), monto_refacciones: nonNegative_(data.monto_refacciones),
+      cartas_firmadas: nonNegative_(data.cartas_firmadas), rebate_aplicado: session.role === "admin" ? nonNegative_(data.rebate_aplicado) : nonNegative_(previous.rebate_aplicado),
+      justificacion: String(data.justificacion || "").trim(), certificacion_dji_obligatoria: false,
+      actualizado_en: new Date().toISOString(),
+    };
+    const compliance = calculateCompliance_(values);
+    ["sales", "demos", "parts", "pilots", "information"].forEach((key) => values[key] = compliance[key]);
+    values.rebate_calculado = compliance.tier.rebate;
+    values.diferencia = values.rebate_aplicado - values.rebate_calculado;
+    // Valide primero que el crédito ya utilizado sigue cubierto antes de escribir la evaluación.
+    syncEarnedCredit_(values);
+    return upsert_(SHEET_NAMES.evaluations, values, ["aliado_id", "periodo"]);
+  });
+}
+function syncEarnedCredit_(values) {
+  const earnedUnits = values.rebate_calculado > 0 ? nonNegative_(values.resultado_ventas) : 0;
+  const existing = rows_(SHEET_NAMES.rebateCredits).find((row) => row.aliado_id === values.aliado_id && row.periodo_origen === values.periodo && !row.periodo_aplicacion);
+  const applied = existing ? nonNegative_(existing.equipos_aplicados) : 0;
+  if (earnedUnits < applied) throw new Error("No puede reducir los equipos ganados: ya hay rebate aplicado de este trimestre.");
+  return upsert_(SHEET_NAMES.rebateCredits, {
+    id: existing ? existing.id : Utilities.getUuid(), aliado_id: values.aliado_id,
+    periodo_origen: values.periodo, rebate_pct: values.rebate_calculado,
+    equipos_ganados: earnedUnits, equipos_aplicados: applied, saldo_equipos: earnedUnits - applied,
+    periodo_aplicacion: "", creado_en: existing ? existing.creado_en : new Date().toISOString(), actualizado_en: new Date().toISOString(),
+  });
+}
+function applyRebateCredits_(data) {
+  require_(data, ["aliado_id", "periodo", "aplicaciones"]);
+  if (!/^Q[1-4]$/.test(data.periodo)) throw new Error("El periodo debe ser Q1, Q2, Q3 o Q4.");
+  if (!Array.isArray(data.aplicaciones) || !data.aplicaciones.length) throw new Error("Seleccione al menos un rebate acumulado para aplicar.");
+  const requestedByRate = data.aplicaciones.reduce((all, item) => {
+    const rate = number_(item.rebate_pct);
+    const units = nonNegative_(item.equipos);
+    if (units && !Number.isInteger(units)) throw new Error("Los rebates se aplican en equipos completos.");
+    if (units) all[rate] = (all[rate] || 0) + units;
+    return all;
+  }, {});
+  if (!Object.keys(requestedByRate).length) throw new Error("Indique cuántos rebates desea aplicar.");
+  const order = { Q1: 1, Q2: 2, Q3: 3, Q4: 4 };
+  return withLock_(function () {
+    const credits = rows_(SHEET_NAMES.rebateCredits).filter((row) => row.aliado_id === data.aliado_id && !row.periodo_aplicacion && number_(row.saldo_equipos) > 0 && order[row.periodo_origen] < order[data.periodo]).sort((a, b) => order[a.periodo_origen] - order[b.periodo_origen]);
+    const availableByRate = credits.reduce((all, credit) => {
+      const rate = number_(credit.rebate_pct);
+      all[rate] = (all[rate] || 0) + number_(credit.saldo_equipos);
+      return all;
+    }, {});
+    Object.keys(requestedByRate).forEach((rate) => {
+      if (requestedByRate[rate] > (availableByRate[rate] || 0)) throw new Error(`Sólo hay ${availableByRate[rate] || 0} rebate(s) acumulado(s) al ${rate}% disponibles.`);
+    });
+    const applications = [];
+    Object.keys(requestedByRate).forEach((rate) => {
+      let remaining = requestedByRate[rate];
+      credits.filter((credit) => number_(credit.rebate_pct) === number_(rate)).forEach((credit) => {
+        if (!remaining) return;
+        const applied = Math.min(remaining, number_(credit.saldo_equipos));
+        const usage = { id: Utilities.getUuid(), aliado_id: credit.aliado_id, periodo_origen: credit.periodo_origen, rebate_pct: credit.rebate_pct, equipos_ganados: 0, equipos_aplicados: applied, saldo_equipos: 0, periodo_aplicacion: data.periodo, creado_en: new Date().toISOString(), actualizado_en: new Date().toISOString() };
+        upsert_(SHEET_NAMES.rebateCredits, usage);
+        upsert_(SHEET_NAMES.rebateCredits, { ...credit, equipos_aplicados: number_(credit.equipos_aplicados) + applied, saldo_equipos: number_(credit.saldo_equipos) - applied, actualizado_en: new Date().toISOString() });
+        applications.push(usage);
+        remaining -= applied;
+      });
+    });
+    return applications;
+  });
 }
 function calculateCompliance_(values) {
   const metas = parameterMap_(values.aliado_id, values.periodo);
