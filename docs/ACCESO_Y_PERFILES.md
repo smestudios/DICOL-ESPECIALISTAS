@@ -9,7 +9,7 @@ El rol se duplica como un **custom claim** de Firebase Authentication. Esto perm
 | Rol | Firestore | Rebates / Google Sheets |
 | --- | --- | --- |
 | `admin` | Puede leer todos los perfiles. | Administra especialistas, aliados, metas y evaluaciones. |
-| `specialist` | Puede leer sólo su perfil. | Consulta su cartera y sólo registra evaluaciones de aliados asignados a su `specialistId`; no puede aprobar rebate adicional. |
+| `specialist` | Puede leer sólo su perfil. | Consulta y gestiona únicamente su cartera: puede crear, modificar y eliminar sus aliados, metas, evaluaciones y créditos de rebate; no puede reasignar aliados ni administrar usuarios. |
 
 > La `apiKey` web de Firebase sirve para identificar el proyecto en el navegador; no otorga privilegios de administrador. Nunca use esa key para crear roles desde el cliente. La cuenta de servicio utilizada por la herramienta local no debe subirse al repositorio.
 
@@ -98,4 +98,4 @@ El Apps Script ya no entrega datos por `GET` ni acepta acciones sin sesión Fire
 
 ## Reglas de Firestore
 
-El archivo [`firebase/firestore.rules`](../firebase/firestore.rules) permite a un administrador leer y modificar todos los perfiles. Un especialista sólo puede leer su propio perfil y cambiar `displayName` o `country`; no puede alterar su rol, estado, correo ni `specialistId`. Los aliados y las evaluaciones se protegen en Apps Script, que filtra la cartera usando el custom claim firmado `specialistId`.
+El archivo [`firebase/firestore.rules`](../firebase/firestore.rules) permite a un administrador leer y modificar todos los perfiles. Un especialista sólo puede leer su propio perfil y cambiar `displayName` o `country`; no puede alterar su rol, estado, correo ni `specialistId`. Los aliados, metas, evaluaciones y créditos de rebate se protegen en Apps Script, que filtra la cartera usando el custom claim firmado `specialistId`.
