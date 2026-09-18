@@ -1,6 +1,11 @@
+// Legalización es un flujo independiente de rebates. Este almacenamiento sólo
+// mantiene el borrador local hasta finalizar y descargar su Excel institucional.
 const STORAGE_KEY = 'dicol.legalizacion.salidas';
 const PDF_JS_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.min.mjs';
 const PDF_WORKER_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.worker.min.mjs';
+const MAX_SUPPORT_BYTES = 10 * 1024 * 1024;
+const MAX_PDF_PAGES = 25;
+const MAX_INVOICES_PER_EXPENSE = 33;
 
 const state = {
   expenses: [],
@@ -263,6 +268,10 @@ function addInvoice() {
     elements.saveStatus.textContent = 'Toma una foto o adjunta el PDF de la factura antes de agregarla.';
     return;
   }
+  if (expense.invoices.length >= MAX_INVOICES_PER_EXPENSE) {
+    elements.saveStatus.textContent = `El formato institucional admite máximo ${MAX_INVOICES_PER_EXPENSE} facturas por salida.`;
+    return;
+  }
   const invoice = {
     id: createId('FAC'),
     cufe,
@@ -348,6 +357,7 @@ async function scanPhoto(file) {
 
 async function handlePhoto(file) {
   if (!file) return;
+  if (!validateSupportFile(file, ['image'])) return;
   clearPendingSupport();
   elements.supportStatus.textContent = 'Aplicando filtro de documento a la foto…';
   elements.supportPreview.hidden = false;
@@ -455,6 +465,7 @@ async function pdfText(file) {
   const pdfjs = await pdfLibrary();
   const pdf = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
   try {
+    if (pdf.numPages > MAX_PDF_PAGES) throw new Error(`El PDF supera el límite de ${MAX_PDF_PAGES} páginas.`);
     const pages = [];
     for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
       const content = await (await pdf.getPage(pageNumber)).getTextContent();
@@ -471,6 +482,7 @@ async function handleDianFile(file) {
   const isPdf = file.type.includes('pdf') || file.name.toLowerCase().endsWith('.pdf');
   const isXml = /xml/i.test(file.type) || file.name.toLowerCase().endsWith('.xml');
   if (!isPdf && !isXml) { elements.saveStatus.textContent = 'Selecciona un PDF o XML válido.'; return; }
+  if (!validateSupportFile(file, isPdf ? ['pdf'] : ['xml'])) return;
   showPendingSupport(file, `${isXml ? 'XML' : 'PDF'} adjunto: ${file.name}. Leyendo los datos de la factura…`);
   try {
     const text = isXml ? await file.text() : await pdfText(file);
@@ -482,6 +494,21 @@ async function handleDianFile(file) {
     elements.supportStatus.textContent = `${isXml ? 'XML' : 'PDF'} adjunto: ${file.name}. No se pudieron leer los datos automáticamente; completa los campos manualmente.`;
     console.warn('No se pudo extraer información del soporte:', error);
   }
+}
+function validateSupportFile(file, acceptedTypes) {
+  if (file.size > MAX_SUPPORT_BYTES) {
+    elements.saveStatus.textContent = 'El soporte supera el límite de 10 MB.';
+    return false;
+  }
+  const name = file.name.toLowerCase();
+  const validType = acceptedTypes.some((type) => (type === 'image' && file.type.startsWith('image/'))
+    || (type === 'pdf' && (file.type.includes('pdf') || name.endsWith('.pdf')))
+    || (type === 'xml' && (file.type.includes('xml') || name.endsWith('.xml'))));
+  if (!validType) {
+    elements.saveStatus.textContent = 'El tipo de archivo seleccionado no es válido.';
+    return false;
+  }
+  return true;
 }
 function removeInvoice(invoiceId) {
   const expense = activeExpense();
@@ -505,9 +532,9 @@ function categoryTotals(invoices) {
   return totals;
 }
 
-async function exportExcel() {
+async function exportExcel(finalize = false) {
   const expense = activeExpense();
-  if (!expense || !window.XLSX) return;
+  if (!expense || !window.XLSX) return false;
   const button = document.querySelector('[data-action="download-excel"]');
   button.disabled = true;
   try {
@@ -531,10 +558,31 @@ async function exportExcel() {
     set('I45', totals['Peajes y Parqueadero'], '#,##0'); set('I46', totals.Hotel, '#,##0'); set('I47', totals.Alimentación, '#,##0'); set('I48', totals.Otros, '#,##0');
     const total = totalExpense({ invoices }); set('I49', total, '#,##0'); set('I50', Number(expense.advance) || 0, '#,##0'); set('I52', total, '#,##0'); set('I53', (Number(expense.advance) || 0) - total, '#,##0');
     XLSX.writeFile(workbook, `Legalizacion_${expense.name.replace(/[^a-z0-9]/gi, '_')}.xlsx`);
-    elements.saveStatus.textContent = expense.invoices.length > 33 ? 'Excel descargado: solo se incluyeron las primeras 33 facturas porque el formato tiene 33 filas.' : 'Excel institucional diligenciado y descargado.';
+    if (finalize) {
+      state.expenses = state.expenses.filter((item) => item.id !== expense.id);
+      expense.invoices.forEach((invoice) => state.supportFiles.delete(invoice.id));
+      state.activeId = state.expenses[0]?.id || null;
+      persist('Salida finalizada: se descargó el Excel y se eliminaron el borrador y sus soportes locales.');
+      closeModal(elements.detailModal);
+      render();
+      return true;
+    }
+    elements.saveStatus.textContent = 'Excel institucional de legalización descargado.';
+    return true;
   } catch (error) {
     elements.saveStatus.textContent = error.message || 'No se pudo crear el Excel institucional.';
+    return false;
   } finally { button.disabled = false; }
+}
+async function finalizeExpense() {
+  const expense = activeExpense();
+  if (!expense) return;
+  if (!expense.invoices.length) {
+    elements.saveStatus.textContent = 'Agregue al menos una factura antes de finalizar la salida.';
+    return;
+  }
+  if (!window.confirm(`¿Finalizar "${expense.name}"? Se descargará su Excel de legalización y se eliminarán el borrador y los soportes guardados sólo en este navegador. Esta acción no se puede deshacer.`)) return;
+  await exportExcel(true);
 }
 async function pdfLibrary() {
   const pdfjs = await import(PDF_JS_URL);
@@ -548,6 +596,10 @@ function canvasBytes(canvas) {
 
 async function pdfPages(file, pdfjs) {
   const pdf = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
+  if (pdf.numPages > MAX_PDF_PAGES) {
+    await pdf.destroy();
+    throw new Error(`El PDF supera el límite de ${MAX_PDF_PAGES} páginas.`);
+  }
   const pages = [];
   for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
     const page = await pdf.getPage(pageNumber);
@@ -663,7 +715,8 @@ function bindActions() {
   document.querySelector('[data-action="remove-support"]').addEventListener('click', clearPendingSupport);
   elements.invoicePhoto.addEventListener('change', () => handlePhoto(elements.invoicePhoto.files[0]));
   elements.invoiceSupport.addEventListener('change', () => handleDianFile(elements.invoiceSupport.files[0]));
-  document.querySelector('[data-action="download-excel"]').addEventListener('click', exportExcel);
+  document.querySelector('[data-action="download-excel"]').addEventListener('click', () => exportExcel());
+  document.querySelector('[data-action="finalize-expense"]').addEventListener('click', finalizeExpense);
   document.querySelector('[data-action="download-supports"]').addEventListener('click', () => {
     exportSupportsWord().catch((error) => {
       console.error('ERROR AL GENERAR SOPORTES:', error);
