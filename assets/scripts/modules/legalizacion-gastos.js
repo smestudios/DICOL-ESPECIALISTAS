@@ -1,6 +1,9 @@
 const STORAGE_KEY = 'dicol.legalizacion.salidas';
 const PDF_JS_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.min.mjs';
 const PDF_WORKER_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.worker.min.mjs';
+const MAX_SUPPORT_BYTES = 10 * 1024 * 1024;
+const MAX_PDF_PAGES = 25;
+const MAX_INVOICES_PER_EXPENSE = 33;
 
 const state = {
   expenses: [],
@@ -263,6 +266,10 @@ function addInvoice() {
     elements.saveStatus.textContent = 'Toma una foto o adjunta el PDF de la factura antes de agregarla.';
     return;
   }
+  if (expense.invoices.length >= MAX_INVOICES_PER_EXPENSE) {
+    elements.saveStatus.textContent = `El formato institucional admite máximo ${MAX_INVOICES_PER_EXPENSE} facturas por salida.`;
+    return;
+  }
   const invoice = {
     id: createId('FAC'),
     cufe,
@@ -348,6 +355,7 @@ async function scanPhoto(file) {
 
 async function handlePhoto(file) {
   if (!file) return;
+  if (!validateSupportFile(file, ['image'])) return;
   clearPendingSupport();
   elements.supportStatus.textContent = 'Aplicando filtro de documento a la foto…';
   elements.supportPreview.hidden = false;
@@ -455,6 +463,7 @@ async function pdfText(file) {
   const pdfjs = await pdfLibrary();
   const pdf = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
   try {
+    if (pdf.numPages > MAX_PDF_PAGES) throw new Error(`El PDF supera el límite de ${MAX_PDF_PAGES} páginas.`);
     const pages = [];
     for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
       const content = await (await pdf.getPage(pageNumber)).getTextContent();
@@ -471,6 +480,7 @@ async function handleDianFile(file) {
   const isPdf = file.type.includes('pdf') || file.name.toLowerCase().endsWith('.pdf');
   const isXml = /xml/i.test(file.type) || file.name.toLowerCase().endsWith('.xml');
   if (!isPdf && !isXml) { elements.saveStatus.textContent = 'Selecciona un PDF o XML válido.'; return; }
+  if (!validateSupportFile(file, isPdf ? ['pdf'] : ['xml'])) return;
   showPendingSupport(file, `${isXml ? 'XML' : 'PDF'} adjunto: ${file.name}. Leyendo los datos de la factura…`);
   try {
     const text = isXml ? await file.text() : await pdfText(file);
@@ -482,6 +492,21 @@ async function handleDianFile(file) {
     elements.supportStatus.textContent = `${isXml ? 'XML' : 'PDF'} adjunto: ${file.name}. No se pudieron leer los datos automáticamente; completa los campos manualmente.`;
     console.warn('No se pudo extraer información del soporte:', error);
   }
+}
+function validateSupportFile(file, acceptedTypes) {
+  if (file.size > MAX_SUPPORT_BYTES) {
+    elements.saveStatus.textContent = 'El soporte supera el límite de 10 MB.';
+    return false;
+  }
+  const name = file.name.toLowerCase();
+  const validType = acceptedTypes.some((type) => (type === 'image' && file.type.startsWith('image/'))
+    || (type === 'pdf' && (file.type.includes('pdf') || name.endsWith('.pdf')))
+    || (type === 'xml' && (file.type.includes('xml') || name.endsWith('.xml'))));
+  if (!validType) {
+    elements.saveStatus.textContent = 'El tipo de archivo seleccionado no es válido.';
+    return false;
+  }
+  return true;
 }
 function removeInvoice(invoiceId) {
   const expense = activeExpense();
@@ -548,6 +573,10 @@ function canvasBytes(canvas) {
 
 async function pdfPages(file, pdfjs) {
   const pdf = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
+  if (pdf.numPages > MAX_PDF_PAGES) {
+    await pdf.destroy();
+    throw new Error(`El PDF supera el límite de ${MAX_PDF_PAGES} páginas.`);
+  }
   const pages = [];
   for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
     const page = await pdf.getPage(pageNumber);
