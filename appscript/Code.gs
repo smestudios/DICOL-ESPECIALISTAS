@@ -135,7 +135,11 @@ function authorizePartner_(session, partnerId) {
 function authorizeEvaluation_(session, partnerId) { authorizePartner_(session, partnerId); }
 function savePartnerAuthorized_(data, session) {
   if (session.role === "admin") return savePartner_(data);
-  if (data.id) authorizePartner_(session, data.id);
+  // El navegador genera un ID antes de guardar un aliado nuevo. Sólo se debe
+  // comprobar la pertenencia cuando ese ID ya existe; de lo contrario se
+  // bloquearía erróneamente la creación con "No puedes gestionar este aliado".
+  const existing = data.id && byId_(SHEET_NAMES.partners, data.id);
+  if (existing) authorizePartner_(session, existing.id);
   // El especialista sólo puede crear aliados dentro de su propia cartera.
   return savePartner_({ ...data, especialista_id: session.specialistId });
 }
@@ -206,13 +210,14 @@ function saveEvaluation_(data, session) {
   require_(data, ["aliado_id", "periodo"]);
   if (!isPeriod_(data.periodo)) throw new Error("El periodo debe tener el formato AAAA-Q1, por ejemplo 2026-Q3.");
   return withLock_(function () {
-    const previous = rows_(SHEET_NAMES.evaluations).find((row) => row.aliado_id === data.aliado_id && row.periodo === data.periodo) || {};
     const values = {
       aliado_id: data.aliado_id, periodo: data.periodo,
       resultado_ventas: nonNegative_(data.resultado_ventas), demos_pequenas: nonNegative_(data.demos_pequenas),
       demos_grandes: nonNegative_(data.demos_grandes), certificados_dji: nonNegative_(data.certificados_dji),
       monto_equipos: nonNegative_(data.monto_equipos), monto_refacciones: nonNegative_(data.monto_refacciones),
-      cartas_firmadas: nonNegative_(data.cartas_firmadas), rebate_aplicado: session.role === "admin" ? nonNegative_(data.rebate_aplicado) : nonNegative_(previous.rebate_aplicado),
+      // El especialista puede actualizar toda la evaluación de los aliados de
+      // su cartera; authorizeEvaluation_ ya comprobó que el aliado es suyo.
+      cartas_firmadas: nonNegative_(data.cartas_firmadas), rebate_aplicado: nonNegative_(data.rebate_aplicado),
       justificacion: String(data.justificacion || "").trim(), certificacion_dji_obligatoria: false,
       actualizado_en: new Date().toISOString(),
     };

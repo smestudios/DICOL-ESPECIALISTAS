@@ -78,7 +78,12 @@ async function api(action, data, id) {
     headers: { "Content-Type": "text/plain;charset=utf-8" },
     body: JSON.stringify({ action, data, id, idToken }),
   });
-  if (!response.ok) throw new Error(`No fue posible conectar con Google Sheets (${response.status}).`);
+  if (!response.ok) {
+    if (response.status === 404) {
+      throw new Error("La URL de Google Apps Script no está disponible (404). Publique una nueva implementación como aplicación web y actualice la URL /exec configurada en rebates.js.");
+    }
+    throw new Error(`No fue posible conectar con Google Sheets (${response.status}).`);
+  }
   const payload = await response.json();
   if (!payload.ok) throw new Error(payload.error || "Google Sheets no aceptó la solicitud.");
   return payload.data;
@@ -120,8 +125,6 @@ function applyRoleUi() {
   ["#specialistButton", "#reassignPartnerButton"].forEach((selector) => { const control = $(selector); if (control) control.hidden = !isAdmin; });
   const partnerSelect = $("#partnerSpecialist");
   if (partnerSelect) partnerSelect.disabled = !isAdmin;
-  const appliedRebate = $("#editAppliedRebate");
-  if (appliedRebate) appliedRebate.disabled = !isAdmin;
 }
 async function persist(action, data, id) {
   if (pendingActions.has(action)) return false;
