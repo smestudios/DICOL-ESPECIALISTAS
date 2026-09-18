@@ -1,6 +1,4 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
 import {
-  getAuth,
   signInWithEmailAndPassword,
   onAuthStateChanged,
   sendPasswordResetEmail,
@@ -8,10 +6,7 @@ import {
   browserLocalPersistence,
   browserSessionPersistence
 } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
-import { firebaseConfig } from "./firebase-config.js";
-
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
+import { auth } from "./firebase-client.js";
 
 const form = document.querySelector("#loginForm");
 const emailInput = document.querySelector("#email");
