@@ -1,6 +1,5 @@
-import { getApp, getApps, initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
-import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
-import { firebaseConfig } from "../auth/firebase-config.js";
+import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
+import { auth } from "../auth/firebase-client.js";
 
 /* La información se consulta y actualiza únicamente en Google Sheets mediante Apps Script. */
 const APPS_SCRIPT_URL =
@@ -29,8 +28,6 @@ let selectedPartnerId;
 let activeView = "general";
 let userRole = "";
 const pendingActions = new Set();
-const firebaseApp = getApps().length ? getApp() : initializeApp(firebaseConfig);
-const auth = getAuth(firebaseApp);
 const $ = (selector) => document.querySelector(selector);
 const q = () => $("#quarterFilter").value;
 const currentPartner = () =>

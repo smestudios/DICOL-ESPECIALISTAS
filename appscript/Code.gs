@@ -48,6 +48,9 @@ const DEFAULT_POLICY = [
   ["nivel", "B", "Categoría B", 3, 60],
   ["nivel", "C", "Categoría C", 0, 0],
 ];
+// Cache de una sola ejecución: evita volver a leer una pestaña en la misma
+// solicitud, sin conservar datos entre usuarios ni entre escrituras.
+const REQUEST_ROWS = {};
 
 function setup() {
   const spreadsheet = SpreadsheetApp.getActive();
@@ -72,6 +75,7 @@ function configureFirebaseApiKey(apiKey) {
   PropertiesService.getScriptProperties().setProperty("FIREBASE_WEB_API_KEY", String(apiKey));
 }
 function dispatch_(request) {
+  Object.keys(REQUEST_ROWS).forEach((name) => delete REQUEST_ROWS[name]);
   const data = request.data || {};
   const session = firebaseSession_(request.idToken);
   assertSpecialistLink_(session);
@@ -286,14 +290,21 @@ function getPartnerSummary(partnerId, period) {
   const policy = policy_();
   return { partner, period, score: compliance.score, tier: compliance.tier, indicators: ["sales", "demos", "parts", "pilots", "information"].map((key) => ({ key, ...policy[key], value: compliance[key] })) };
 }
-function ensureSheet_(spreadsheet, name, headers) { const sheet = spreadsheet.getSheetByName(name) || spreadsheet.insertSheet(name); if (sheet.getLastRow() === 0) { sheet.appendRow(headers); sheet.setFrozenRows(1); } ensureHeaders_(sheet, headers); sheet.getRange(1, 1, 1, sheet.getLastColumn()).setFontWeight("bold"); return sheet; }
+function ensureSheet_(spreadsheet, name, headers) { const sheet = spreadsheet.getSheetByName(name) || spreadsheet.insertSheet(name); if (sheet.getLastRow() === 0) { sheet.appendRow(headers); sheet.setFrozenRows(1); } ensureHeaders_(sheet, headers); sheet.getRange(1, 1, 1, sheet.getLastColumn()).setFontWeight("bold"); delete REQUEST_ROWS[name]; return sheet; }
 function ensureHeaders_(sheet, headers) { const current = sheet.getRange(1, 1, 1, Math.max(1, sheet.getLastColumn())).getValues()[0]; const missing = headers.filter((header) => current.indexOf(header) === -1); if (missing.length) sheet.getRange(1, current.length + 1, 1, missing.length).setValues([missing]); }
 function assertUniqueName_(sheetName, name, id, label) { const normalized = String(name).trim().toUpperCase(); if (rows_(sheetName).some((row) => row.activo !== "false" && row.id !== id && String(row.nombre).trim().toUpperCase() === normalized)) throw new Error(`Ya existe un ${label} activo con ese nombre.`); }
 function withLock_(callback) { const lock = LockService.getScriptLock(); lock.waitLock(10000); try { return callback(); } finally { lock.releaseLock(); } }
 function sheet_(name) { const sheet = SpreadsheetApp.getActive().getSheetByName(name); if (!sheet) throw new Error(`No existe la hoja ${name}. Ejecute setup().`); return sheet; }
-function rows_(name) { const sheet = sheet_(name); if (sheet.getLastRow() < 2) return []; const values = sheet.getDataRange().getDisplayValues(); const headers = values.shift(); return values.filter((row) => row.some(Boolean)).map((row) => headers.reduce((object, header, index) => ((object[header] = row[index]), object), {})); }
+function rows_(name) {
+  if (REQUEST_ROWS[name]) return REQUEST_ROWS[name];
+  const sheet = sheet_(name);
+  if (sheet.getLastRow() < 2) return REQUEST_ROWS[name] = [];
+  const values = sheet.getDataRange().getDisplayValues();
+  const headers = values.shift();
+  return REQUEST_ROWS[name] = values.filter((row) => row.some(Boolean)).map((row) => headers.reduce((object, header, index) => ((object[header] = row[index]), object), {}));
+}
 function byId_(name, id) { return rows_(name).find((row) => row.id === id); }
-function upsert_(name, value, keys) { const sheet = sheet_(name); const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0]; const lookupKeys = keys || ["id"]; const index = sheet.getDataRange().getValues().slice(1).findIndex((row) => lookupKeys.every((key) => String(row[headers.indexOf(key)]) === String(value[key]))); const output = headers.map((header) => value[header] === undefined ? "" : value[header]); if (index < 0) sheet.appendRow(output); else sheet.getRange(index + 2, 1, 1, output.length).setValues([output]); return value; }
+function upsert_(name, value, keys) { const sheet = sheet_(name); const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0]; const lookupKeys = keys || ["id"]; const index = sheet.getDataRange().getValues().slice(1).findIndex((row) => lookupKeys.every((key) => String(row[headers.indexOf(key)]) === String(value[key]))); const output = headers.map((header) => value[header] === undefined ? "" : value[header]); if (index < 0) sheet.appendRow(output); else sheet.getRange(index + 2, 1, 1, output.length).setValues([output]); delete REQUEST_ROWS[name]; return value; }
 function number_(value) { return Number(String(value).replace(/[^0-9.-]/g, "")) || 0; }
 function nonNegative_(value) { return Math.max(0, number_(value)); }
 function require_(data, fields) { fields.forEach((field) => { if (data[field] === undefined || data[field] === null || data[field] === "") throw new Error(`El campo ${field} es obligatorio.`); }); }
