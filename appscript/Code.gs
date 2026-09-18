@@ -154,6 +154,10 @@ function getData_(session) {
   const policy = policy_();
   const rebateCredits = rows_(SHEET_NAMES.rebateCredits).filter((row) => partners.some((partner) => partner.id === row.aliado_id));
   return {
+    // El cliente necesita saber qué perfil autenticado está viendo la cartera
+    // para preasignar aliados. No se usa como fuente de autorización: cada
+    // escritura vuelve a validar la sesión y savePartnerAuthorized_ impone el ID.
+    viewer: { role: session.role, specialistId: session.specialistId },
     specialists,
     partners: partners.map((partner) => ({ ...partner, quarters: evaluations.filter((item) => item.aliado_id === partner.id).reduce((all, item) => ((all[item.periodo] = item), all), {}) })),
     policy,

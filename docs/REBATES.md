@@ -59,7 +59,7 @@ La pestaña `RebateCreditos` se crea al ejecutar `setup()`. Es el libro de movim
 4. Implemente el proyecto como aplicación web, ejecútelo como la cuenta de DICOL y copie la URL `/exec` en `assets/scripts/modules/rebates.js`.
 5. Después de cambios en Apps Script, cree una nueva implementación para publicar el código actualizado.
 
-La API acepta `getData`, `saveSpecialist`, `savePartner`, `saveEvaluation`, `saveParameters`, `applyRebateCredits`, `deletePartner` y `deleteSpecialist`. Todas las solicitudes usan `POST` e incluyen un ID token de Firebase. Los administradores pueden ejecutar todas las acciones y reasignar aliados. Cada especialista sólo recibe su cartera y puede crear, editar, eliminar, configurar metas, registrar evaluaciones y aplicar créditos exclusivamente sobre sus aliados asignados. No contiene catálogo, precios, kits ni acciones de catálogo.
+La API acepta `getData`, `saveSpecialist`, `savePartner`, `saveEvaluation`, `saveParameters`, `applyRebateCredits`, `deletePartner` y `deleteSpecialist`. Todas las solicitudes usan `POST` e incluyen un ID token de Firebase. Los administradores pueden ejecutar todas las acciones y reasignar aliados. Al crear o editar un aliado, el administrador debe elegir el especialista responsable; un especialista ve su propio perfil preasignado y no puede cambiarlo. El servidor impone esa asignación con el `specialistId` firmado de Firebase, por lo que no depende del valor que envíe el navegador. Cada especialista sólo recibe su cartera y puede crear, editar, eliminar, configurar metas, registrar evaluaciones y aplicar créditos exclusivamente sobre sus aliados asignados. No contiene catálogo, precios, kits ni acciones de catálogo.
 
 ## Operación
 
