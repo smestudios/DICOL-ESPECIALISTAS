@@ -98,7 +98,7 @@ function dispatch_(request) {
     case "saveSpecialist": requireAdmin_(session); return saveSpecialist_(data);
     case "savePartner": return savePartnerAuthorized_(data, session);
     case "saveParameters": return saveParametersAuthorized_(data, session);
-    case "deletePartner": authorizePartner_(session, request.id); return archivePartner_(request.id);
+    case "deletePartner": authorizePartner_(session, request.id); return deletePartner_(request.id);
     case "applyRebateCredits": authorizePartner_(session, data.aliado_id); return applyRebateCredits_(data);
     case "deleteSpecialist": requireAdmin_(session); return archiveSpecialist_(request.id);
     case "saveEvaluation": authorizeEvaluation_(session, data.aliado_id); return saveEvaluation_(data, session);
@@ -299,7 +299,22 @@ function calculateCompliance_(values) {
 function parameterMap_(partnerId, period) {
   return rows_(SHEET_NAMES.parameters).filter((row) => row.activo !== "false" && row.aliado_id === partnerId && row.periodo === period).reduce((all, row) => ((all[row.clave] = row.meta), all), {});
 }
-function archivePartner_(id) { const partner = byId_(SHEET_NAMES.partners, id); if (!partner) throw new Error("Aliado no encontrado."); return upsert_(SHEET_NAMES.partners, { ...partner, activo: false }); }
+// Eliminar un aliado es una operación definitiva. Además de la ficha, se
+// eliminan sus datos dependientes para que no queden evaluaciones, metas ni
+// créditos huérfanos en Google Sheets.
+function deletePartner_(id) {
+  return withLock_(function () {
+    const partner = byId_(SHEET_NAMES.partners, id);
+    if (!partner) throw new Error("Aliado no encontrado.");
+    const deleted = {
+      aliados: deleteRowsWhere_(SHEET_NAMES.partners, (row) => row.id === id),
+      evaluaciones: deleteRowsWhere_(SHEET_NAMES.evaluations, (row) => row.aliado_id === id),
+      parametros: deleteRowsWhere_(SHEET_NAMES.parameters, (row) => row.aliado_id === id),
+      creditos: deleteRowsWhere_(SHEET_NAMES.rebateCredits, (row) => row.aliado_id === id),
+    };
+    return { id, deleted };
+  });
+}
 function archiveSpecialist_(id) {
   if (rows_(SHEET_NAMES.partners).some((partner) => partner.especialista_id === id && partner.activo !== "false")) throw new Error("Reasigne los aliados antes de eliminar al especialista.");
   const person = byId_(SHEET_NAMES.specialists, id); if (!person) throw new Error("Especialista no encontrado."); return upsert_(SHEET_NAMES.specialists, { ...person, activo: false });
@@ -333,6 +348,25 @@ function rows_(name) {
   const values = sheet.getDataRange().getDisplayValues();
   const headers = values.shift();
   return REQUEST_ROWS[name] = values.filter((row) => row.some(Boolean)).map((row) => headers.reduce((object, header, index) => ((object[header] = row[index]), object), {}));
+}
+function deleteRowsWhere_(name, predicate) {
+  const sheet = sheet_(name);
+  if (sheet.getLastRow() < 2) return 0;
+  const values = sheet.getDataRange().getValues();
+  const headers = values.shift();
+  const matchingRows = values
+    .map((row, index) => ({
+      row: headers.reduce((item, header, column) => {
+        item[header] = String(row[column] ?? "");
+        return item;
+      }, {}),
+      index: index + 2,
+    }))
+    .filter(({ row }) => predicate(row))
+    .map(({ index }) => index);
+  matchingRows.reverse().forEach((rowNumber) => sheet.deleteRow(rowNumber));
+  if (matchingRows.length) delete REQUEST_ROWS[name];
+  return matchingRows.length;
 }
 function byId_(name, id) { return rows_(name).find((row) => row.id === id); }
 function upsert_(name, value, keys) { const sheet = sheet_(name); const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0]; const lookupKeys = keys || ["id"]; const index = sheet.getDataRange().getValues().slice(1).findIndex((row) => lookupKeys.every((key) => String(row[headers.indexOf(key)]) === String(value[key]))); const output = headers.map((header) => value[header] === undefined ? "" : value[header]); if (index < 0) sheet.appendRow(output); else sheet.getRange(index + 2, 1, 1, output.length).setValues([output]); delete REQUEST_ROWS[name]; return value; }
