@@ -1,3 +1,5 @@
+// Legalización es un flujo independiente de rebates. Este almacenamiento sólo
+// mantiene el borrador local hasta finalizar y descargar su Excel institucional.
 const STORAGE_KEY = 'dicol.legalizacion.salidas';
 const PDF_JS_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.min.mjs';
 const PDF_WORKER_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.worker.min.mjs';
@@ -530,9 +532,9 @@ function categoryTotals(invoices) {
   return totals;
 }
 
-async function exportExcel() {
+async function exportExcel(finalize = false) {
   const expense = activeExpense();
-  if (!expense || !window.XLSX) return;
+  if (!expense || !window.XLSX) return false;
   const button = document.querySelector('[data-action="download-excel"]');
   button.disabled = true;
   try {
@@ -556,10 +558,31 @@ async function exportExcel() {
     set('I45', totals['Peajes y Parqueadero'], '#,##0'); set('I46', totals.Hotel, '#,##0'); set('I47', totals.Alimentación, '#,##0'); set('I48', totals.Otros, '#,##0');
     const total = totalExpense({ invoices }); set('I49', total, '#,##0'); set('I50', Number(expense.advance) || 0, '#,##0'); set('I52', total, '#,##0'); set('I53', (Number(expense.advance) || 0) - total, '#,##0');
     XLSX.writeFile(workbook, `Legalizacion_${expense.name.replace(/[^a-z0-9]/gi, '_')}.xlsx`);
-    elements.saveStatus.textContent = expense.invoices.length > 33 ? 'Excel descargado: solo se incluyeron las primeras 33 facturas porque el formato tiene 33 filas.' : 'Excel institucional diligenciado y descargado.';
+    if (finalize) {
+      state.expenses = state.expenses.filter((item) => item.id !== expense.id);
+      expense.invoices.forEach((invoice) => state.supportFiles.delete(invoice.id));
+      state.activeId = state.expenses[0]?.id || null;
+      persist('Salida finalizada: se descargó el Excel y se eliminaron el borrador y sus soportes locales.');
+      closeModal(elements.detailModal);
+      render();
+      return true;
+    }
+    elements.saveStatus.textContent = 'Excel institucional de legalización descargado.';
+    return true;
   } catch (error) {
     elements.saveStatus.textContent = error.message || 'No se pudo crear el Excel institucional.';
+    return false;
   } finally { button.disabled = false; }
+}
+async function finalizeExpense() {
+  const expense = activeExpense();
+  if (!expense) return;
+  if (!expense.invoices.length) {
+    elements.saveStatus.textContent = 'Agregue al menos una factura antes de finalizar la salida.';
+    return;
+  }
+  if (!window.confirm(`¿Finalizar "${expense.name}"? Se descargará su Excel de legalización y se eliminarán el borrador y los soportes guardados sólo en este navegador. Esta acción no se puede deshacer.`)) return;
+  await exportExcel(true);
 }
 async function pdfLibrary() {
   const pdfjs = await import(PDF_JS_URL);
@@ -692,7 +715,8 @@ function bindActions() {
   document.querySelector('[data-action="remove-support"]').addEventListener('click', clearPendingSupport);
   elements.invoicePhoto.addEventListener('change', () => handlePhoto(elements.invoicePhoto.files[0]));
   elements.invoiceSupport.addEventListener('change', () => handleDianFile(elements.invoiceSupport.files[0]));
-  document.querySelector('[data-action="download-excel"]').addEventListener('click', exportExcel);
+  document.querySelector('[data-action="download-excel"]').addEventListener('click', () => exportExcel());
+  document.querySelector('[data-action="finalize-expense"]').addEventListener('click', finalizeExpense);
   document.querySelector('[data-action="download-supports"]').addEventListener('click', () => {
     exportSupportsWord().catch((error) => {
       console.error('ERROR AL GENERAR SOPORTES:', error);

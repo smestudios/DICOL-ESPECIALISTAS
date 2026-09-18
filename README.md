@@ -70,3 +70,7 @@ Para extracción, el navegador prioriza el texto contenido en PDF y XML. Las fot
 Los formatos oficiales descargables se encuentran en `assets/templates/`: `S-CON-FO-02.6 LEGALIZACION DE GASTOS. v 2.0.xlsx` y `SOLICITUD DE  VIATICOS.XLSX`. La página de inicio y el módulo de legalización los enlazan desde esa carpeta.
 
 El nuevo tablero `rebates.html` ofrece seguimiento por aliado y trimestre, gestión local de aliados/especialistas y una lectura de indicadores. La guía de operación y la base para Google Apps Script están en [`docs/REBATES.md`](docs/REBATES.md) y [`appscript/Code.gs`](appscript/Code.gs).
+
+## Cierre de legalizaciones
+
+La legalización es un flujo independiente de rebates y usa exclusivamente su plantilla institucional. Sus borradores y soportes se conservan de manera local sólo mientras se diligencia la salida. Use **Finalizar salida y descargar Excel** cuando termine: se descarga el Excel de esa legalización y se elimina el borrador, sus facturas y soportes locales; nunca se mezcla con los datos ni los archivos de rebates.
