@@ -351,6 +351,25 @@ function rows_(name) {
   const headers = values.shift();
   return REQUEST_ROWS[name] = values.filter((row) => row.some(Boolean)).map((row) => headers.reduce((object, header, index) => ((object[header] = row[index]), object), {}));
 }
+function deleteRowsWhere_(name, predicate) {
+  const sheet = sheet_(name);
+  if (sheet.getLastRow() < 2) return 0;
+  const values = sheet.getDataRange().getValues();
+  const headers = values.shift();
+  const matchingRows = values
+    .map((row, index) => ({
+      row: headers.reduce((item, header, column) => {
+        item[header] = String(row[column] ?? "");
+        return item;
+      }, {}),
+      index: index + 2,
+    }))
+    .filter(({ row }) => predicate(row))
+    .map(({ index }) => index);
+  matchingRows.reverse().forEach((rowNumber) => sheet.deleteRow(rowNumber));
+  if (matchingRows.length) delete REQUEST_ROWS[name];
+  return matchingRows.length;
+}
 function byId_(name, id) { return rows_(name).find((row) => row.id === id); }
 function upsert_(name, value, keys) { const sheet = sheet_(name); const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0]; const lookupKeys = keys || ["id"]; const index = sheet.getDataRange().getValues().slice(1).findIndex((row) => lookupKeys.every((key) => String(row[headers.indexOf(key)]) === String(value[key]))); const output = headers.map((header) => value[header] === undefined ? "" : value[header]); if (index < 0) sheet.appendRow(output); else sheet.getRange(index + 2, 1, 1, output.length).setValues([output]); delete REQUEST_ROWS[name]; return value; }
 function number_(value) { return Number(String(value).replace(/[^0-9.-]/g, "")) || 0; }
