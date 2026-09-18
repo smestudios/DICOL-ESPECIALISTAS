@@ -15,6 +15,7 @@ const SHEET_NAMES = {
   policy: "Politica",
   parameters: "Parametros",
   rebateCredits: "RebateCreditos",
+  auditLog: "AuditLog",
 };
 const HEADERS = {
   specialists: ["id", "nombre", "zona", "activo", "creado_en"],
@@ -29,6 +30,7 @@ const HEADERS = {
   policy: ["tipo", "clave", "nombre", "valor", "meta"],
   parameters: ["id", "aliado_id", "periodo", "clave", "nombre", "meta", "unidad", "activo"],
   rebateCredits: ["id", "aliado_id", "periodo_origen", "rebate_pct", "equipos_ganados", "equipos_aplicados", "saldo_equipos", "periodo_aplicacion", "creado_en", "actualizado_en"],
+  auditLog: ["id", "timestamp", "actor_uid", "actor_email", "actor_role", "action", "entity", "entity_id", "status", "detail"],
 };
 const DEFAULT_PARAMETERS = [
   ["ventas_equipos", "Meta de compra de equipos", 1, "unidades"],
@@ -93,17 +95,20 @@ function dispatch_(request) {
   const data = request.data || {};
   const session = firebaseSession_(request.idToken);
   assertSpecialistLink_(session);
+  let result;
   switch (request.action) {
     case "getData": return getData_(session);
-    case "saveSpecialist": requireAdmin_(session); return saveSpecialist_(data);
-    case "savePartner": return savePartnerAuthorized_(data, session);
-    case "saveParameters": return saveParametersAuthorized_(data, session);
-    case "deletePartner": authorizePartner_(session, request.id); return deletePartner_(request.id);
-    case "applyRebateCredits": authorizePartner_(session, data.aliado_id); return applyRebateCredits_(data);
-    case "deleteSpecialist": requireAdmin_(session); return archiveSpecialist_(request.id);
-    case "saveEvaluation": authorizeEvaluation_(session, data.aliado_id); return saveEvaluation_(data, session);
+    case "saveSpecialist": requireAdmin_(session); result = saveSpecialist_(data); break;
+    case "savePartner": result = savePartnerAuthorized_(data, session); break;
+    case "saveParameters": result = saveParametersAuthorized_(data, session); break;
+    case "deletePartner": authorizePartner_(session, request.id); result = archivePartner_(request.id); break;
+    case "applyRebateCredits": authorizePartner_(session, data.aliado_id); result = applyRebateCredits_(data); break;
+    case "deleteSpecialist": requireAdmin_(session); result = archiveSpecialist_(request.id); break;
+    case "saveEvaluation": authorizeEvaluation_(session, data.aliado_id); result = saveEvaluation_(data, session); break;
     default: throw new Error("Acción no permitida.");
   }
+  audit_(session, request.action, data.aliado_id ? "aliado" : request.id ? "registro" : "registro", data.aliado_id || request.id || result.id || "", "OK");
+  return result;
 }
 function firebaseSession_(idToken) {
   if (!idToken) throw new Error("Sesión de Firebase requerida.");
@@ -235,6 +240,7 @@ function syncEarnedCredit_(values) {
   const existing = rows_(SHEET_NAMES.rebateCredits).find((row) => row.aliado_id === values.aliado_id && row.periodo_origen === values.periodo && !row.periodo_aplicacion);
   const applied = existing ? nonNegative_(existing.equipos_aplicados) : 0;
   if (earnedUnits < applied) throw new Error("No puede reducir los equipos ganados: ya hay rebate aplicado de este trimestre.");
+  if (applied && number_(existing.rebate_pct) !== number_(values.rebate_calculado)) throw new Error("No puede cambiar la tasa de rebate de un periodo que ya tiene créditos aplicados. Solicite un ajuste administrativo.");
   return upsert_(SHEET_NAMES.rebateCredits, {
     id: existing ? existing.id : Utilities.getUuid(), aliado_id: values.aliado_id,
     periodo_origen: values.periodo, rebate_pct: values.rebate_calculado,
@@ -299,21 +305,17 @@ function calculateCompliance_(values) {
 function parameterMap_(partnerId, period) {
   return rows_(SHEET_NAMES.parameters).filter((row) => row.activo !== "false" && row.aliado_id === partnerId && row.periodo === period).reduce((all, row) => ((all[row.clave] = row.meta), all), {});
 }
-// Eliminar un aliado es una operación definitiva. Además de la ficha, se
-// eliminan sus datos dependientes para que no queden evaluaciones, metas ni
-// créditos huérfanos en Google Sheets.
-function deletePartner_(id) {
+// Archivar conserva el historial comercial y evita que el aliado aparezca en
+// la cartera activa. El borrado físico no es una operación disponible en web.
+function archivePartner_(id) {
   return withLock_(function () {
     const partner = byId_(SHEET_NAMES.partners, id);
     if (!partner) throw new Error("Aliado no encontrado.");
-    const deleted = {
-      aliados: deleteRowsWhere_(SHEET_NAMES.partners, (row) => row.id === id),
-      evaluaciones: deleteRowsWhere_(SHEET_NAMES.evaluations, (row) => row.aliado_id === id),
-      parametros: deleteRowsWhere_(SHEET_NAMES.parameters, (row) => row.aliado_id === id),
-      creditos: deleteRowsWhere_(SHEET_NAMES.rebateCredits, (row) => row.aliado_id === id),
-    };
-    return { id, deleted };
+    return upsert_(SHEET_NAMES.partners, { ...partner, activo: false, actualizado_en: new Date().toISOString() });
   });
+}
+function audit_(session, action, entity, entityId, status) {
+  try { upsert_(SHEET_NAMES.auditLog, { id: Utilities.getUuid(), timestamp: new Date().toISOString(), actor_uid: session.uid, actor_email: session.email, actor_role: session.role, action, entity, entity_id: entityId, status, detail: "" }); } catch (error) { console.error(`No se pudo auditar ${action}: ${error.message}`); }
 }
 function archiveSpecialist_(id) {
   if (rows_(SHEET_NAMES.partners).some((partner) => partner.especialista_id === id && partner.activo !== "false")) throw new Error("Reasigne los aliados antes de eliminar al especialista.");

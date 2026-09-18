@@ -698,7 +698,7 @@ $("#evaluationForm").onsubmit = (event) => {
 };
 $("#deletePartnerButton").onclick = () => {
   const partner = currentPartner();
-  if (partner && confirm(`¿Eliminar definitivamente el aliado ${partner.name} y toda su información asociada? Esta acción no se puede deshacer.`)) {
+  if (partner && confirm(`¿Archivar el aliado ${partner.name}? Dejará de aparecer en la cartera activa, pero se conservará su historial comercial.`)) {
     persist("deletePartner", undefined, partner.id);
   }
 };
