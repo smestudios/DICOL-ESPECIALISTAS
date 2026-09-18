@@ -1,6 +1,5 @@
-import { getApp, getApps, initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
-import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
-import { firebaseConfig } from "../auth/firebase-config.js";
+import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
+import { auth } from "../auth/firebase-client.js";
 
 /* La información se consulta y actualiza únicamente en Google Sheets mediante Apps Script. */
 const APPS_SCRIPT_URL =
@@ -21,16 +20,21 @@ const emptyState = {
   policy: POLICY,
   specialists: [],
   partners: [],
+  parameters: [],
+  rebateCredits: [],
 };
 let state = emptyState;
 let selectedPartnerId;
 let activeView = "general";
 let userRole = "";
 const pendingActions = new Set();
-const firebaseApp = getApps().length ? getApp() : initializeApp(firebaseConfig);
-const auth = getAuth(firebaseApp);
 const $ = (selector) => document.querySelector(selector);
 const q = () => $("#quarterFilter").value;
+const year = () => Number($("#yearFilter").value);
+const period = (quarter = q(), selectedYear = year()) => `${selectedYear}-${quarter}`;
+const initialDate = new Date();
+$("#yearFilter").innerHTML = `<option value="${initialDate.getFullYear()}">${initialDate.getFullYear()}</option>`;
+$("#quarterFilter").value = `Q${Math.floor(initialDate.getMonth() / 3) + 1}`;
 const currentPartner = () =>
   state.partners.find((p) => p.id === selectedPartnerId);
 const specialist = (id) => state.specialists.find((s) => s.id === id);
@@ -58,6 +62,7 @@ function normalizeData(data) {
       createdAt: partner.creado_en,
     })),
     parameters: data.parameters || [],
+    rebateCredits: data.rebateCredits || [],
   };
 }
 async function api(action, data, id) {
@@ -81,6 +86,8 @@ async function loadData() {
     userRole = token?.claims?.role || "";
     applyRoleUi();
     state = normalizeData(await api("getData"));
+    renderYearOptions();
+    // Apps Script filtra con el specialistId firmado del usuario Firebase.
     selectedPartnerId = state.partners.some((partner) => partner.id === selectedPartnerId)
       ? selectedPartnerId
       : state.partners[0]?.id;
@@ -92,12 +99,23 @@ async function loadData() {
   }
   render();
 }
+function renderYearOptions() {
+  const select = $("#yearFilter");
+  const selected = Number(select.value) || new Date().getFullYear();
+  const years = new Set([selected - 1, selected, selected + 1]);
+  const collect = (value) => { const match = String(value || "").match(/^(\d{4})-Q[1-4]$/); if (match) years.add(Number(match[1])); };
+  state.partners.forEach((partner) => Object.keys(partner.quarters).forEach(collect));
+  state.parameters.forEach((item) => collect(item.periodo));
+  state.rebateCredits.forEach((item) => { collect(item.periodo_origen); collect(item.periodo_aplicacion); });
+  select.innerHTML = [...years].sort((a, b) => b - a).map((value) => `<option value="${value}" ${value === selected ? "selected" : ""}>${value}</option>`).join("");
+}
 function applyRoleUi() {
   const isAdmin = userRole === "admin";
-  ["#newPartnerButton", "#specialistButton", "#parametersButton", "#editPartnerButton", "#reassignPartnerButton", "#deletePartnerButton"].forEach((selector) => {
-    const control = $(selector);
-    if (control) control.hidden = !isAdmin;
-  });
+  const specialistControls = ["#newPartnerButton", "#parametersButton", "#editPartnerButton", "#deletePartnerButton"];
+  specialistControls.forEach((selector) => { const control = $(selector); if (control) control.hidden = !["admin", "specialist"].includes(userRole); });
+  ["#specialistButton", "#reassignPartnerButton"].forEach((selector) => { const control = $(selector); if (control) control.hidden = !isAdmin; });
+  const partnerSelect = $("#partnerSpecialist");
+  if (partnerSelect) partnerSelect.disabled = !isAdmin;
   const appliedRebate = $("#editAppliedRebate");
   if (appliedRebate) appliedRebate.disabled = !isAdmin;
 }
@@ -118,8 +136,8 @@ async function persist(action, data, id) {
     document.querySelectorAll(`[data-save-action="${action}"]`).forEach((button) => (button.disabled = false));
   }
 }
-function evaluation(partner, period = q()) {
-  const values = { ...(partner.quarters[period] || {}), ...calculatedCompliance(partner, period) };
+function evaluation(partner, periodValue = period()) {
+  const values = { ...(partner.quarters[periodValue] || {}), ...calculatedCompliance(partner, periodValue) };
   const score = Math.round(
     Object.entries(state.policy)
       .filter(([key]) => key !== "tiers")
@@ -137,16 +155,16 @@ function evaluation(partner, period = q()) {
       state.policy.tiers.at(-1),
   };
 }
-function parametersFor(partnerId, period = q()) { return state.parameters.filter((item) => item.aliado_id === partnerId && item.periodo === period); }
-function parameter(key, partnerId = currentPartner()?.id, period = q()) { return parametersFor(partnerId, period).find((item) => item.clave === key); }
-function calculatedCompliance(partner, period = q()) {
-  const raw = partner.quarters[period] || {};
+function parametersFor(partnerId, periodValue = period()) { return state.parameters.filter((item) => item.aliado_id === partnerId && item.periodo === periodValue); }
+function parameter(key, partnerId = currentPartner()?.id, periodValue = period()) { return parametersFor(partnerId, periodValue).find((item) => item.clave === key); }
+function calculatedCompliance(partner, periodValue = period()) {
+  const raw = partner.quarters[periodValue] || {};
   const equipmentTotal = Number(raw.monto_equipos || 0);
   const partsTotal = Number(raw.monto_refacciones || 0);
   const equipmentUnits = Number(raw.resultado_ventas || 0);
   const ratio = equipmentTotal ? (partsTotal / equipmentTotal) * 100 : 0;
   const defaults = { ventas_equipos: 1, demos_pequenas: 3, demos_grandes: 1, porcentaje_refacciones: 8, certificados_dji: 1, cartas_firmadas: 1 };
-  const percent = (actual, key) => { const target = Number(parameter(key, partner.id, period)?.meta || defaults[key] || 0); return target ? Math.min(100, (actual / target) * 100) : 0; };
+  const percent = (actual, key) => { const target = Number(parameter(key, partner.id, periodValue)?.meta || defaults[key] || 0); return target ? Math.min(100, (actual / target) * 100) : 0; };
   const demos = Math.min(percent(Number(raw.demos_pequenas || 0), "demos_pequenas"), percent(Number(raw.demos_grandes || 0), "demos_grandes"));
   return { sales: percent(equipmentUnits, "ventas_equipos"), demos, parts: percent(ratio, "porcentaje_refacciones"), pilots: percent(Number(raw.certificados_dji || 0), "certificados_dji"), information: percent(Number(raw.cartas_firmadas || 0), "cartas_firmadas"), equipmentUnits, equipmentTotal, partsTotal, partsRatio: ratio };
 }
@@ -194,7 +212,7 @@ function renderTabs() {
 function renderGeneral() {
   const rows = allEvaluations().sort((a, b) => a.score - b.score);
   $("#generalTable").innerHTML =
-    `<table class="rebate-table"><thead><tr><th>Aliado</th><th>Usuario responsable</th><th>Zona</th><th>Cumplimiento ${q()}</th><th>Nivel</th><th>Rebate proyectado</th><th></th></tr></thead><tbody>${rows.map(({ partner, score, tier }) => `<tr><td><b>${esc(partner.name)}</b></td><td>${esc(partnerSpecialistName(partner))}</td><td>${esc(partner.zone || "—")}</td><td>${score}%</td><td><span class="status-pill status-${tier.name.toLowerCase()}">${tier.name}</span></td><td>${tier.rebate}%</td><td><button data-open-partner="${partner.id}">Ver ficha</button></td></tr>`).join("") || '<tr><td colspan="7">Aún no hay aliados registrados.</td></tr>'}</tbody></table>`;
+    `<table class="rebate-table"><thead><tr><th>Aliado</th><th>Usuario responsable</th><th>Zona</th><th>Cumplimiento ${period()}</th><th>Nivel</th><th>Rebate proyectado</th><th></th></tr></thead><tbody>${rows.map(({ partner, score, tier }) => `<tr><td><b>${esc(partner.name)}</b></td><td>${esc(partnerSpecialistName(partner))}</td><td>${esc(partner.zone || "—")}</td><td>${score}%</td><td><span class="status-pill status-${tier.name.toLowerCase()}">${tier.name}</span></td><td>${tier.rebate}%</td><td><button data-open-partner="${partner.id}">Ver ficha</button></td></tr>`).join("") || '<tr><td colspan="7">Aún no hay aliados registrados.</td></tr>'}</tbody></table>`;
   document.querySelectorAll("[data-open-partner]").forEach(
     (button) =>
       (button.onclick = () => {
@@ -284,6 +302,7 @@ function renderPartnerDetail() {
   $("#rebateValue").textContent = `${Number(result.tier.rebate)}%`;
   $("#gradeName").textContent = `Categoría ${result.tier.name} · rebate ganado ${result.tier.rebate}%`;
   renderCommercialOverview(result);
+  renderRebateBank(partner);
   $("#policyNote").textContent = `Política activa: ${rules()
     .map((rule) => `${rule.label} ${rule.weight}%`)
     .join(" · ")}. Los valores son porcentajes de cumplimiento contra la meta.`;
@@ -300,24 +319,53 @@ function renderCommercialOverview(result) {
   const indicators = rules();
   const met = indicators.filter((rule) => Number(result.values[rule.key] || 0) >= rule.target).length;
   const calculated = Number(result.values.rebate_calculado || result.tier.rebate || 0);
-  const applied = Number(result.values.rebate_aplicado || 0);
-  $("#commercialQuarter").textContent = q();
+  const applied = state.rebateCredits.filter((credit) => credit.aliado_id === currentPartner()?.id && credit.periodo_aplicacion === period()).reduce((sum, credit) => sum + Number(credit.equipos_aplicados || 0), 0);
+  $("#commercialQuarter").textContent = period();
   $("#commercialScore").textContent = `${result.score}%`;
   $("#commercialCalculated").textContent = `${calculated}%`;
-  $("#commercialApplied").textContent = `${applied}%`;
+  $("#commercialApplied").textContent = `${applied} equipo(s)`;
   $("#commercialSales").textContent = units;
   $("#commercialBilling").textContent = money(billing);
   $("#commercialDemos").textContent = `${Math.round(Number(result.values.demos || 0))}%`;
   $("#commercialParts").textContent = money(parts);
   $("#commercialPartsChart").textContent = money(parts);
   $("#commercialIndicators").textContent = `${met}/${indicators.length}`;
-  $("#commercialStatus").textContent = `Categoría ${result.tier.name} · rebate ganado ${calculated}% · aplicado: ${(applied - calculated).toFixed(1)}% vs. calculado`;
+  $("#commercialStatus").textContent = `Categoría ${result.tier.name} · rebate ganado ${calculated}% · rebates aplicados en ${period()}: ${applied} equipo(s)`;
   $("#commercialKpis").innerHTML = indicators.map((rule) => {
     const value = Number(result.values[rule.key] || 0);
     return `<div class="commercial-kpi"><span>${esc(rule.label)}</span><div><i style="width:${Math.min(100, value)}%"></i></div><b>${value}%</b><small>peso ${rule.weight}%</small></div>`;
   }).join("");
   $("#modelSales").innerHTML = `<div><b>Equipos comprados</b><span style="width:${Math.min(100, Number(result.values.sales || 0))}%"></span><small>${units} u</small></div>`;
 }
+function periodIndex(periodValue) { const match = String(periodValue || "").match(/^(\d{4})-Q([1-4])$/); return match ? Number(match[1]) * 4 + Number(match[2]) : -1; }
+function rebateCreditSummary(partnerId = currentPartner()?.id, periodValue = period()) {
+  const credits = state.rebateCredits.filter((credit) => credit.aliado_id === partnerId && !credit.periodo_aplicacion && periodIndex(credit.periodo_origen) < periodIndex(periodValue) && Number(credit.saldo_equipos || 0) > 0);
+  const byRate = credits.reduce((all, credit) => {
+    const rate = Number(credit.rebate_pct || 0);
+    all[rate] = (all[rate] || 0) + Number(credit.saldo_equipos || 0);
+    return all;
+  }, {});
+  return { credits, byRate, available: Object.values(byRate).reduce((sum, units) => sum + units, 0) };
+}
+function renderRebateBank(partner) {
+  const { byRate, available } = rebateCreditSummary(partner.id);
+  const applications = state.rebateCredits.filter((credit) => credit.aliado_id === partner.id && credit.periodo_aplicacion === period());
+  const availableDetail = Object.entries(byRate).sort(([a], [b]) => Number(b) - Number(a)).map(([rate, units]) => `${units} rebate(s) al ${rate}%`).join(" · ");
+  const appliedByRate = applications.reduce((all, credit) => { const rate = Number(credit.rebate_pct || 0); all[rate] = (all[rate] || 0) + Number(credit.equipos_aplicados || 0); return all; }, {});
+  const appliedDetail = Object.keys(appliedByRate).length ? `Aplicado en ${period()}: ${Object.entries(appliedByRate).map(([rate, units]) => `${units} al ${rate}%`).join(" · ")}.` : "";
+  $("#rebateCreditBalance").textContent = `${available} rebate(s) disponibles`;
+  $("#rebateCreditDetail").textContent = [availableDetail || "No hay rebates acumulados disponibles para este trimestre.", appliedDetail].filter(Boolean).join(" ");
+  $("#applyRebateButton").disabled = available <= 0;
+}
+function openRebateApplyDialog() {
+  const partner = currentPartner();
+  const { byRate, available } = rebateCreditSummary(partner?.id);
+  if (!partner || !available) return;
+  $("#rebateApplyQuarter").textContent = period();
+  $("#rebateApplyList").innerHTML = Object.entries(byRate).sort(([a], [b]) => Number(b) - Number(a)).map(([rate, units]) => `<label class="rebate-apply-row"><span><b>Rebate ${rate}%</b><small>${units} equipo(s) acumulado(s) disponibles</small></span><input data-rebate-rate="${rate}" type="number" min="0" max="${units}" step="1" value="0" required><em>equipos</em></label>`).join("");
+  $("#rebateApplyDialog").showModal();
+}
+
 function rules() {
   return Object.entries(state.policy)
     .filter(([key]) => key !== "tiers")
@@ -326,8 +374,8 @@ function rules() {
 function money(value) {
   return new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(value || 0);
 }
-function metricDefinitions(values, partner = currentPartner(), period = q()) {
-  const target = (key, fallback) => Number(parameter(key, partner.id, period)?.meta || fallback);
+function metricDefinitions(values, partner = currentPartner(), periodValue = period()) {
+  const target = (key, fallback) => Number(parameter(key, partner.id, periodValue)?.meta || fallback);
   const percent = (actual, goal) => goal ? Math.min(100, (actual / goal) * 100) : 0;
   const partsRate = target("porcentaje_refacciones", 8);
   const expectedParts = Number(values.equipmentTotal || 0) * partsRate / 100;
@@ -362,9 +410,10 @@ function renderRequirements(result) {
   }).join("");
 }
 function renderTrend(partner) {
+  $("#trendYear").textContent = year();
   $("#trendChart").innerHTML = ["Q1", "Q2", "Q3", "Q4"]
-    .map((period) => {
-      const score = evaluation(partner, period).score;
+    .map((quarter) => {
+      const score = evaluation(partner, period(quarter)).score;
       return `<div style="height:${Math.max(5, score)}%"><span>${score}%</span></div>`;
     })
     .join("");
@@ -415,10 +464,11 @@ function openPartnerDialog(partner) {
   $("#partnerName").value = partner?.name || "";
   $("#partnerZone").value = partner?.zone || "";
   $("#partnerNotes").value = partner?.notes || "";
+  $("#partnerSpecialist").disabled = userRole !== "admin";
   $("#partnerSpecialist").innerHTML = state.specialists
     .map(
       (person) =>
-        `<option value="${person.id}" ${partner?.specialistId === person.id ? "selected" : ""}>${esc(person.name)}${person.zone ? ` — ${esc(person.zone)}` : ""}</option>`,
+        `<option value="${person.id}" ${(partner?.specialistId || (userRole === "specialist" ? person.id : "")) === person.id ? "selected" : ""}>${esc(person.name)}${person.zone ? ` — ${esc(person.zone)}` : ""}</option>`,
     )
     .join("");
   $("#partnerDialog").showModal();
@@ -454,6 +504,17 @@ function esc(value) {
 }
 $("#newPartnerButton").onclick = () => openPartnerDialog();
 $("#editPartnerButton").onclick = () => openPartnerDialog(currentPartner());
+$("#applyRebateButton").onclick = openRebateApplyDialog;
+$("#rebateApplyForm").onsubmit = (event) => {
+  event.preventDefault();
+  const applications = [...document.querySelectorAll("[data-rebate-rate]")]
+    .map((input) => ({ rebate_pct: input.dataset.rebateRate, equipos: input.value }))
+    .filter((item) => Number(item.equipos) > 0);
+  if (!applications.length) return alert("Indique al menos un rebate para aplicar.");
+  persist("applyRebateCredits", { aliado_id: currentPartner().id, periodo: period(), aplicaciones: applications }).then((saved) => {
+    if (saved) $("#rebateApplyDialog").close();
+  });
+};
 $("#reassignPartnerButton").onclick = () => openPartnerDialog(currentPartner());
 $("#specialistButton").onclick = () => {
   renderSpecialistManager();
@@ -468,13 +529,13 @@ function renderParameters() {
   const defaults = [
     ["ventas_equipos", "Meta de compra de equipos", 1, "unidades"], ["demos_pequenas", "Demostraciones pequeñas", 3, "unidades"], ["demos_grandes", "Demostraciones grandes", 1, "unidades"], ["porcentaje_refacciones", "Refacciones sobre monto equipos", 8, "%"], ["certificados_dji", "Pilotos certificados DJI Academy", 1, "certificados"], ["cartas_firmadas", "Cartas firmadas", 1, "cartas"],
   ];
-  const items = defaults.map(([clave, nombre, meta, unidad]) => parameter(clave, partner.id) || ({ clave, nombre, meta, unidad }));
+  const items = defaults.map(([clave, nombre, meta, unidad]) => parameter(clave, partner.id, period()) || ({ clave, nombre, meta, unidad }));
   $("#parametersList").innerHTML = items.map(parameterRow).join("");
 }
 $("#parametersButton").onclick = () => { if (currentPartner()) { renderParameters(); $("#parametersDialog").showModal(); } else alert("Abra la ficha de un aliado para configurar sus metas."); };
 $("#parametersForm").onsubmit = (event) => {
   event.preventDefault();
-  const items = [...document.querySelectorAll(".parameter-row")].map((row) => ({ aliado_id: currentPartner().id, periodo: q(), nombre: row.querySelector('[data-field="nombre"]').value.trim(), clave: row.querySelector('[data-field="clave"]').value.trim(), meta: row.querySelector('[data-field="meta"]').value, unidad: row.querySelector('[data-field="unidad"]').value }));
+  const items = [...document.querySelectorAll(".parameter-row")].map((row) => ({ aliado_id: currentPartner().id, periodo: period(), nombre: row.querySelector('[data-field="nombre"]').value.trim(), clave: row.querySelector('[data-field="clave"]').value.trim(), meta: row.querySelector('[data-field="meta"]').value, unidad: row.querySelector('[data-field="unidad"]').value }));
   persist("saveParameters", items).then((saved) => { if (saved) $("#parametersDialog").close(); });
 };
 function reportCircle(percent, label) {
@@ -484,7 +545,7 @@ function reportBarChart(metrics) {
   return `<div class="report-bars">${metrics.map((metric) => `<div class="report-bar"><span>${esc(metric.label)}</span><div><i style="height:${Math.max(3, metric.percent)}%"></i></div><b>${metric.percent.toFixed(0)}%</b></div>`).join("")}</div>`;
 }
 function reportTrend(partner) {
-  return `<div class="report-trend">${["Q1", "Q2", "Q3", "Q4"].map((period) => { const score = evaluation(partner, period).score; return `<div><i style="height:${Math.max(5, score)}%"></i><b>${score}%</b><span>${period}</span></div>`; }).join("")}</div>`;
+  return `<div class="report-trend">${["Q1", "Q2", "Q3", "Q4"].map((quarter) => { const score = evaluation(partner, period(quarter)).score; return `<div><i style="height:${Math.max(5, score)}%"></i><b>${score}%</b><span>${quarter}</span></div>`; }).join("")}</div>`;
 }
 function reportHtml(partner, result, metrics) {
   const values = result.values;
@@ -494,7 +555,7 @@ function reportHtml(partner, result, metrics) {
   const cards = metrics.map((item) => `<article class="metric-card"><div><h3>${esc(item.label)}</h3><strong>${displayMetricValue(item.actual, item.unit)}</strong><p>Meta: ${displayMetricValue(item.target, item.unit)}</p><small>${esc(item.note || (item.weight ? `Peso de rebate: ${item.weight}%` : "Parte del bloque de demostraciones"))}</small></div>${reportCircle(item.percent, item.percent >= 100 ? "Cumple" : "En progreso")}</article>`).join("");
   return `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Resumen rebate ${esc(partner.name)}</title><style>
     *{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact} @page{size:A4 landscape;margin:10mm} body{margin:0;background:#edf2ee;color:#102016;font-family:Arial,Helvetica,sans-serif}.report{width:min(1120px,calc(100% - 32px));margin:24px auto;background:#fff;padding:34px 38px;box-shadow:0 12px 34px #0002}.top{display:flex;justify-content:space-between;gap:30px;padding-bottom:22px;border-bottom:3px solid #29dc75}.brand{display:flex;gap:17px;align-items:flex-start}.mark{display:grid;place-items:center;width:48px;height:48px;border-radius:12px;background:#07150c;color:#29dc75;font-size:21px;font-weight:900}.eyebrow{margin:0;color:#438255;font-size:10px;font-weight:800;letter-spacing:1.2px}.top h1{margin:4px 0;font-size:29px;letter-spacing:-.7px}.top p{margin:0;color:#617066;font-size:12px}.period{min-width:195px;padding:13px 15px;border:1px solid #dce6de;border-radius:11px;background:#f6faf7}.period b{display:block;font-size:13px}.period span{display:block;margin-top:5px;color:#617066;font-size:10px}.overview{display:grid;grid-template-columns:1.2fr repeat(3,1fr);gap:12px;margin:20px 0}.overview article{padding:15px;border:1px solid #dce6de;border-radius:12px;background:#fbfdfb}.overview span{display:block;color:#617066;font-size:10px;text-transform:uppercase;letter-spacing:.6px}.overview strong{display:block;margin:8px 0 3px;font-size:25px}.overview small{color:#438255;font-size:11px;font-weight:700}.section-title{margin:22px 0 10px;font-size:15px;letter-spacing:.2px}.metric-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:11px}.metric-card{display:flex;justify-content:space-between;gap:10px;min-height:137px;padding:14px;border:1px solid #dce6de;border-radius:12px;background:#fff}.metric-card h3{max-width:185px;margin:0 0 10px;font-size:13px}.metric-card strong{font-size:16px;color:#092d17}.metric-card p,.metric-card small{display:block;margin:5px 0;color:#617066;font-size:10px;line-height:1.35}.report-circle{--progress:0%;position:relative;display:grid;place-content:center;flex:0 0 72px;width:72px;height:72px;border-radius:50%;background:conic-gradient(#29dc75 var(--progress),#dce6de 0);text-align:center}.report-circle:before{position:absolute;inset:7px;border-radius:50%;background:#fff;content:""}.report-circle b,.report-circle span{position:relative;z-index:1}.report-circle b{font-size:14px}.report-circle span{margin-top:2px;color:#438255;font-size:8px;font-weight:700}.charts{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:18px}.chart{min-height:214px;padding:15px;border:1px solid #dce6de;border-radius:12px}.chart h3{margin:0;font-size:13px}.chart p{margin:4px 0 12px;color:#617066;font-size:10px}.report-bars{display:flex;align-items:end;height:142px;gap:10px;border-bottom:1px solid #cfdbd1}.report-bar{display:grid;grid-template-columns:1fr 28px;grid-template-rows:20px 1fr;gap:2px;flex:1;min-width:0}.report-bar span{grid-column:1/3;overflow:hidden;color:#617066;font-size:9px;text-overflow:ellipsis;white-space:nowrap}.report-bar div{position:relative;overflow:hidden;border-radius:5px 5px 0 0;background:#edf3ee}.report-bar i{position:absolute;right:0;bottom:0;left:0;border-radius:5px 5px 0 0;background:linear-gradient(#38e781,#119952)}.report-bar b{align-self:end;color:#119952;font-size:10px}.report-trend{display:flex;align-items:end;justify-content:space-around;height:142px;border-bottom:1px solid #cfdbd1}.report-trend div{display:grid;grid-template-rows:1fr auto auto;height:100%;min-width:42px;text-align:center}.report-trend i{align-self:end;display:block;border-radius:6px 6px 0 0;background:#163b23}.report-trend b{margin-top:5px;color:#163b23;font-size:10px}.report-trend span{margin-top:2px;color:#617066;font-size:9px}.recommendations{margin-top:18px;padding:17px 18px;border-radius:12px;background:#07150c;color:#fff}.recommendations h3{margin:0 0 9px;color:#79f2a8;font-size:13px}.recommendations ul{display:grid;grid-template-columns:1fr 1fr;gap:7px 22px;margin:0;padding-left:17px}.recommendations li{color:#e3eee5;font-size:10px;line-height:1.4}.footer{display:flex;justify-content:space-between;margin-top:17px;padding-top:11px;border-top:1px solid #dce6de;color:#758277;font-size:9px}.metric-card,.chart,.recommendations{break-inside:avoid}@media print{body{background:#fff}.report{width:277mm;margin:0;padding:0;box-shadow:none}}
-  </style></head><body><main class="report"><header class="top"><div class="brand"><div class="mark">D</div><div><p class="eyebrow">DICOL · CONTROL COMERCIAL</p><h1>Resumen de rebate</h1><p>${esc(partner.name)} · Especialista responsable: ${esc(partnerSpecialistName(partner))}</p></div></div><div class="period"><b>PERIODO ${q()}</b><span>Informe generado para seguimiento del aliado</span></div></header><section class="overview"><article><span>Cumplimiento ponderado</span><strong>${result.score}%</strong><small>${completed}/${metrics.length} indicadores al 100%</small></article><article><span>Categoría</span><strong>${esc(result.tier.name)}</strong><small>Clasificación del trimestre</small></article><article><span>Rebate ganado</span><strong>${result.tier.rebate}%</strong><small>Según cumplimiento binario</small></article><article><span>Compra de equipos</span><strong>${displayMetricValue(values.equipmentTotal, "COP")}</strong><small>${Number(values.equipmentUnits || 0)} unidades registradas</small></article></section><h2 class="section-title">Indicadores del trimestre</h2><section class="metric-grid">${cards}</section><section class="charts"><article class="chart"><h3>Cumplimiento por indicador</h3><p>Avance actual frente a la meta de cada compromiso.</p>${reportBarChart(metrics)}</article><article class="chart"><h3>Avance anual</h3><p>Cumplimiento ponderado por trimestre.</p>${reportTrend(partner)}</article></section><section class="recommendations"><h3>Próximos compromisos</h3><ul>${recommendations.map((item) => `<li>${esc(item)}</li>`).join("")}</ul></section><footer class="footer"><span>DICOL · Informe de seguimiento</span><span>Este documento no aprueba pagos; valide soportes y condiciones comerciales.</span><span>${new Date().toLocaleDateString("es-CO")}</span></footer></main></body></html>`;
+  </style></head><body><main class="report"><header class="top"><div class="brand"><div class="mark">D</div><div><p class="eyebrow">DICOL · CONTROL COMERCIAL</p><h1>Resumen de rebate</h1><p>${esc(partner.name)} · Especialista responsable: ${esc(partnerSpecialistName(partner))}</p></div></div><div class="period"><b>PERIODO ${period()}</b><span>Informe generado para seguimiento del aliado</span></div></header><section class="overview"><article><span>Cumplimiento ponderado</span><strong>${result.score}%</strong><small>${completed}/${metrics.length} indicadores al 100%</small></article><article><span>Categoría</span><strong>${esc(result.tier.name)}</strong><small>Clasificación del trimestre</small></article><article><span>Rebate ganado</span><strong>${result.tier.rebate}%</strong><small>Según cumplimiento binario</small></article><article><span>Compra de equipos</span><strong>${displayMetricValue(values.equipmentTotal, "COP")}</strong><small>${Number(values.equipmentUnits || 0)} unidades registradas</small></article></section><h2 class="section-title">Indicadores del trimestre</h2><section class="metric-grid">${cards}</section><section class="charts"><article class="chart"><h3>Cumplimiento por indicador</h3><p>Avance actual frente a la meta de cada compromiso.</p>${reportBarChart(metrics)}</article><article class="chart"><h3>Avance anual ${year()}</h3><p>Cumplimiento ponderado por trimestre.</p>${reportTrend(partner)}</article></section><section class="recommendations"><h3>Próximos compromisos</h3><ul>${recommendations.map((item) => `<li>${esc(item)}</li>`).join("")}</ul></section><footer class="footer"><span>DICOL · Informe de seguimiento</span><span>Este documento no aprueba pagos; valide soportes y condiciones comerciales.</span><span>${new Date().toLocaleDateString("es-CO")}</span></footer></main></body></html>`;
 }
 $("#downloadSummaryButton").onclick = () => {
   const partner = currentPartner();
@@ -559,9 +620,9 @@ $("#specialistForm").onsubmit = (event) => {
 $("#editEvaluationButton").onclick = () => {
   const partner = currentPartner();
   if (!partner) return;
-  const values = partner.quarters[q()] || {};
+  const values = partner.quarters[period()] || {};
   $("#evaluationDialogPartner").textContent = partner.name;
-  $("#evaluationDialogQuarter").textContent = q();
+  $("#evaluationDialogQuarter").textContent = period();
   $("#editSmallDemos").value = Number(values.demos_pequenas || 0);
   $("#editLargeDemos").value = Number(values.demos_grandes || 0);
   $("#editDjiCertified").value = Number(values.certificados_dji || 0);
@@ -576,7 +637,7 @@ $("#editEvaluationButton").onclick = () => {
 };
 function evaluationDraft() {
   const partner = currentPartner();
-  return { ...partner, quarters: { ...partner.quarters, [q()]: { ...(partner.quarters[q()] || {}), resultado_ventas: Number($("#editEquipmentUnits").value || 0), monto_equipos: Number($("#editEquipmentAmount").value || 0), monto_refacciones: Number($("#editPartsAmount").value || 0), demos_pequenas: Number($("#editSmallDemos").value || 0), demos_grandes: Number($("#editLargeDemos").value || 0), certificados_dji: Number($("#editDjiCertified").value || 0), cartas_firmadas: Number($("#editLetters").value || 0), rebate_aplicado: Number($("#editAppliedRebate").value || 0), justificacion: $("#editJustification").value.trim() } } };
+  return { ...partner, quarters: { ...partner.quarters, [period()]: { ...(partner.quarters[period()] || {}), resultado_ventas: Number($("#editEquipmentUnits").value || 0), monto_equipos: Number($("#editEquipmentAmount").value || 0), monto_refacciones: Number($("#editPartsAmount").value || 0), demos_pequenas: Number($("#editSmallDemos").value || 0), demos_grandes: Number($("#editLargeDemos").value || 0), certificados_dji: Number($("#editDjiCertified").value || 0), cartas_firmadas: Number($("#editLetters").value || 0), rebate_aplicado: Number($("#editAppliedRebate").value || 0), justificacion: $("#editJustification").value.trim() } } };
 }
 function renderEvaluationPreview() {
   const draft = evaluationDraft();
@@ -592,7 +653,7 @@ $("#evaluationForm").onsubmit = (event) => {
   const result = evaluation(draft);
   persist("saveEvaluation", {
     aliado_id: partner.id,
-    periodo: q(),
+    periodo: period(),
     resultado_ventas: $("#editEquipmentUnits").value,
     monto_equipos: $("#editEquipmentAmount").value,
     monto_refacciones: $("#editPartsAmount").value,
@@ -626,6 +687,7 @@ document.querySelectorAll("[data-view]").forEach(
 $("#quarterFilter").onchange = () => {
   render();
 };
+$("#yearFilter").onchange = () => render();
 document
   .querySelectorAll("[data-close]")
   .forEach(
