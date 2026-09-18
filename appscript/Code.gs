@@ -98,7 +98,7 @@ function dispatch_(request) {
     case "saveSpecialist": requireAdmin_(session); return saveSpecialist_(data);
     case "savePartner": return savePartnerAuthorized_(data, session);
     case "saveParameters": return saveParametersAuthorized_(data, session);
-    case "deletePartner": authorizePartner_(session, request.id); return archivePartner_(request.id);
+    case "deletePartner": authorizePartner_(session, request.id); return deletePartner_(request.id);
     case "applyRebateCredits": authorizePartner_(session, data.aliado_id); return applyRebateCredits_(data);
     case "deleteSpecialist": requireAdmin_(session); return archiveSpecialist_(request.id);
     case "saveEvaluation": authorizeEvaluation_(session, data.aliado_id); return saveEvaluation_(data, session);
@@ -135,7 +135,11 @@ function authorizePartner_(session, partnerId) {
 function authorizeEvaluation_(session, partnerId) { authorizePartner_(session, partnerId); }
 function savePartnerAuthorized_(data, session) {
   if (session.role === "admin") return savePartner_(data);
-  if (data.id) authorizePartner_(session, data.id);
+  // El navegador genera un ID antes de guardar un aliado nuevo. Sólo se debe
+  // comprobar la pertenencia cuando ese ID ya existe; de lo contrario se
+  // bloquearía erróneamente la creación con "No puedes gestionar este aliado".
+  const existing = data.id && byId_(SHEET_NAMES.partners, data.id);
+  if (existing) authorizePartner_(session, existing.id);
   // El especialista sólo puede crear aliados dentro de su propia cartera.
   return savePartner_({ ...data, especialista_id: session.specialistId });
 }
@@ -154,6 +158,10 @@ function getData_(session) {
   const policy = policy_();
   const rebateCredits = rows_(SHEET_NAMES.rebateCredits).filter((row) => partners.some((partner) => partner.id === row.aliado_id));
   return {
+    // El cliente necesita saber qué perfil autenticado está viendo la cartera
+    // para preasignar aliados. No se usa como fuente de autorización: cada
+    // escritura vuelve a validar la sesión y savePartnerAuthorized_ impone el ID.
+    viewer: { role: session.role, specialistId: session.specialistId },
     specialists,
     partners: partners.map((partner) => ({ ...partner, quarters: evaluations.filter((item) => item.aliado_id === partner.id).reduce((all, item) => ((all[item.periodo] = item), all), {}) })),
     policy,
@@ -202,13 +210,14 @@ function saveEvaluation_(data, session) {
   require_(data, ["aliado_id", "periodo"]);
   if (!isPeriod_(data.periodo)) throw new Error("El periodo debe tener el formato AAAA-Q1, por ejemplo 2026-Q3.");
   return withLock_(function () {
-    const previous = rows_(SHEET_NAMES.evaluations).find((row) => row.aliado_id === data.aliado_id && row.periodo === data.periodo) || {};
     const values = {
       aliado_id: data.aliado_id, periodo: data.periodo,
       resultado_ventas: nonNegative_(data.resultado_ventas), demos_pequenas: nonNegative_(data.demos_pequenas),
       demos_grandes: nonNegative_(data.demos_grandes), certificados_dji: nonNegative_(data.certificados_dji),
       monto_equipos: nonNegative_(data.monto_equipos), monto_refacciones: nonNegative_(data.monto_refacciones),
-      cartas_firmadas: nonNegative_(data.cartas_firmadas), rebate_aplicado: session.role === "admin" ? nonNegative_(data.rebate_aplicado) : nonNegative_(previous.rebate_aplicado),
+      // El especialista puede actualizar toda la evaluación de los aliados de
+      // su cartera; authorizeEvaluation_ ya comprobó que el aliado es suyo.
+      cartas_firmadas: nonNegative_(data.cartas_firmadas), rebate_aplicado: nonNegative_(data.rebate_aplicado),
       justificacion: String(data.justificacion || "").trim(), certificacion_dji_obligatoria: false,
       actualizado_en: new Date().toISOString(),
     };
@@ -290,7 +299,22 @@ function calculateCompliance_(values) {
 function parameterMap_(partnerId, period) {
   return rows_(SHEET_NAMES.parameters).filter((row) => row.activo !== "false" && row.aliado_id === partnerId && row.periodo === period).reduce((all, row) => ((all[row.clave] = row.meta), all), {});
 }
-function archivePartner_(id) { const partner = byId_(SHEET_NAMES.partners, id); if (!partner) throw new Error("Aliado no encontrado."); return upsert_(SHEET_NAMES.partners, { ...partner, activo: false }); }
+// Eliminar un aliado es una operación definitiva. Además de la ficha, se
+// eliminan sus datos dependientes para que no queden evaluaciones, metas ni
+// créditos huérfanos en Google Sheets.
+function deletePartner_(id) {
+  return withLock_(function () {
+    const partner = byId_(SHEET_NAMES.partners, id);
+    if (!partner) throw new Error("Aliado no encontrado.");
+    const deleted = {
+      aliados: deleteRowsWhere_(SHEET_NAMES.partners, (row) => row.id === id),
+      evaluaciones: deleteRowsWhere_(SHEET_NAMES.evaluations, (row) => row.aliado_id === id),
+      parametros: deleteRowsWhere_(SHEET_NAMES.parameters, (row) => row.aliado_id === id),
+      creditos: deleteRowsWhere_(SHEET_NAMES.rebateCredits, (row) => row.aliado_id === id),
+    };
+    return { id, deleted };
+  });
+}
 function archiveSpecialist_(id) {
   if (rows_(SHEET_NAMES.partners).some((partner) => partner.especialista_id === id && partner.activo !== "false")) throw new Error("Reasigne los aliados antes de eliminar al especialista.");
   const person = byId_(SHEET_NAMES.specialists, id); if (!person) throw new Error("Especialista no encontrado."); return upsert_(SHEET_NAMES.specialists, { ...person, activo: false });
@@ -324,6 +348,25 @@ function rows_(name) {
   const values = sheet.getDataRange().getDisplayValues();
   const headers = values.shift();
   return REQUEST_ROWS[name] = values.filter((row) => row.some(Boolean)).map((row) => headers.reduce((object, header, index) => ((object[header] = row[index]), object), {}));
+}
+function deleteRowsWhere_(name, predicate) {
+  const sheet = sheet_(name);
+  if (sheet.getLastRow() < 2) return 0;
+  const values = sheet.getDataRange().getValues();
+  const headers = values.shift();
+  const matchingRows = values
+    .map((row, index) => ({
+      row: headers.reduce((item, header, column) => {
+        item[header] = String(row[column] ?? "");
+        return item;
+      }, {}),
+      index: index + 2,
+    }))
+    .filter(({ row }) => predicate(row))
+    .map(({ index }) => index);
+  matchingRows.reverse().forEach((rowNumber) => sheet.deleteRow(rowNumber));
+  if (matchingRows.length) delete REQUEST_ROWS[name];
+  return matchingRows.length;
 }
 function byId_(name, id) { return rows_(name).find((row) => row.id === id); }
 function upsert_(name, value, keys) { const sheet = sheet_(name); const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0]; const lookupKeys = keys || ["id"]; const index = sheet.getDataRange().getValues().slice(1).findIndex((row) => lookupKeys.every((key) => String(row[headers.indexOf(key)]) === String(value[key]))); const output = headers.map((header) => value[header] === undefined ? "" : value[header]); if (index < 0) sheet.appendRow(output); else sheet.getRange(index + 2, 1, 1, output.length).setValues([output]); delete REQUEST_ROWS[name]; return value; }

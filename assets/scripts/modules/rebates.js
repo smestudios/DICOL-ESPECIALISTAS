@@ -22,6 +22,7 @@ const emptyState = {
   partners: [],
   parameters: [],
   rebateCredits: [],
+  viewer: {},
 };
 let state = emptyState;
 let selectedPartnerId;
@@ -63,6 +64,9 @@ function normalizeData(data) {
     })),
     parameters: data.parameters || [],
     rebateCredits: data.rebateCredits || [],
+    // Este contexto proviene de Apps Script tras validar el token; sólo se
+    // usa para la experiencia de la pantalla, no para autorizar escrituras.
+    viewer: data.viewer || {},
   };
 }
 async function api(action, data, id) {
@@ -74,7 +78,12 @@ async function api(action, data, id) {
     headers: { "Content-Type": "text/plain;charset=utf-8" },
     body: JSON.stringify({ action, data, id, idToken }),
   });
-  if (!response.ok) throw new Error(`No fue posible conectar con Google Sheets (${response.status}).`);
+  if (!response.ok) {
+    if (response.status === 404) {
+      throw new Error("La URL de Google Apps Script no está disponible (404). Publique una nueva implementación como aplicación web y actualice la URL /exec configurada en rebates.js.");
+    }
+    throw new Error(`No fue posible conectar con Google Sheets (${response.status}).`);
+  }
   const payload = await response.json();
   if (!payload.ok) throw new Error(payload.error || "Google Sheets no aceptó la solicitud.");
   return payload.data;
@@ -83,9 +92,9 @@ async function loadData() {
   setConnectionStatus("Conectando con Google Sheets…");
   try {
     const token = await auth.currentUser?.getIdTokenResult();
-    userRole = token?.claims?.role || "";
-    applyRoleUi();
     state = normalizeData(await api("getData"));
+    userRole = state.viewer.role || token?.claims?.role || "";
+    applyRoleUi();
     renderYearOptions();
     // Apps Script filtra con el specialistId firmado del usuario Firebase.
     selectedPartnerId = state.partners.some((partner) => partner.id === selectedPartnerId)
@@ -116,8 +125,6 @@ function applyRoleUi() {
   ["#specialistButton", "#reassignPartnerButton"].forEach((selector) => { const control = $(selector); if (control) control.hidden = !isAdmin; });
   const partnerSelect = $("#partnerSpecialist");
   if (partnerSelect) partnerSelect.disabled = !isAdmin;
-  const appliedRebate = $("#editAppliedRebate");
-  if (appliedRebate) appliedRebate.disabled = !isAdmin;
 }
 async function persist(action, data, id) {
   if (pendingActions.has(action)) return false;
@@ -449,9 +456,17 @@ function renderInsights(result) {
   ).join("");
 }
 function openPartnerDialog(partner) {
-  if (!state.specialists.length) {
+  const isAdmin = userRole === "admin";
+  const ownSpecialist = state.specialists.find(
+    (person) => person.id === state.viewer.specialistId,
+  ) || state.specialists[0];
+  if (isAdmin && !state.specialists.length) {
     alert("Agregue primero un especialista de DICOL.");
     $("#specialistDialog").showModal();
+    return;
+  }
+  if (!isAdmin && !ownSpecialist) {
+    alert("No fue posible identificar su perfil de especialista. Cierre sesión e ingrese de nuevo; si el problema continúa, solicite al administrador verificar el vínculo de su cuenta.");
     return;
   }
   $("#partnerDialogTitle").textContent = partner
@@ -464,13 +479,24 @@ function openPartnerDialog(partner) {
   $("#partnerName").value = partner?.name || "";
   $("#partnerZone").value = partner?.zone || "";
   $("#partnerNotes").value = partner?.notes || "";
-  $("#partnerSpecialist").disabled = userRole !== "admin";
-  $("#partnerSpecialist").innerHTML = state.specialists
-    .map(
-      (person) =>
-        `<option value="${person.id}" ${(partner?.specialistId || (userRole === "specialist" ? person.id : "")) === person.id ? "selected" : ""}>${esc(person.name)}${person.zone ? ` — ${esc(person.zone)}` : ""}</option>`,
-    )
-    .join("");
+  const partnerSpecialist = $("#partnerSpecialist");
+  const specialistHelp = $("#partnerSpecialistHelp");
+  if (isAdmin) {
+    partnerSpecialist.disabled = false;
+    specialistHelp.hidden = true;
+    const selectedId = partner?.specialistId || "";
+    partnerSpecialist.innerHTML = [
+      `<option value="" disabled ${selectedId ? "" : "selected"}>Seleccione el especialista responsable</option>`,
+      ...state.specialists.map((person) => `<option value="${person.id}" ${selectedId === person.id ? "selected" : ""}>${esc(person.name)}${person.zone ? ` — ${esc(person.zone)}` : ""}</option>`),
+    ].join("");
+  } else {
+    // Un especialista siempre crea aliados en su propia cartera. El servidor
+    // vuelve a imponer esta asignación aunque se altere el navegador.
+    partnerSpecialist.disabled = true;
+    partnerSpecialist.innerHTML = `<option value="${ownSpecialist.id}">${esc(ownSpecialist.name)}${ownSpecialist.zone ? ` — ${esc(ownSpecialist.zone)}` : ""}</option>`;
+    specialistHelp.textContent = `Este aliado se asignará automáticamente a tu perfil: ${ownSpecialist.name}.`;
+    specialistHelp.hidden = false;
+  }
   $("#partnerDialog").showModal();
 }
 function renderSpecialistManager() {
@@ -585,7 +611,7 @@ $("#partnerForm").onsubmit = (event) => {
   const partner = {
     id,
     nombre: $("#partnerName").value.trim(),
-    especialista_id: $("#partnerSpecialist").value,
+    especialista_id: $("#partnerSpecialist").value || state.viewer.specialistId,
     zona: $("#partnerZone").value.trim(),
     notas: $("#partnerNotes").value.trim(),
     creado_en: old?.createdAt,
@@ -672,7 +698,7 @@ $("#evaluationForm").onsubmit = (event) => {
 };
 $("#deletePartnerButton").onclick = () => {
   const partner = currentPartner();
-  if (partner && confirm(`¿Eliminar el aliado ${partner.name}?`)) {
+  if (partner && confirm(`¿Eliminar definitivamente el aliado ${partner.name} y toda su información asociada? Esta acción no se puede deshacer.`)) {
     persist("deletePartner", undefined, partner.id);
   }
 };
