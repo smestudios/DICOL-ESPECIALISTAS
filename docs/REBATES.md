@@ -2,7 +2,7 @@
 
 ## Regla de negocio
 
-Cada aliado tiene sus **propias metas por trimestre** (`Q1` a `Q4`). Se administran con **Metas del aliado** y se guardan en la pestaña `Parametros` de Google Sheets junto con el identificador del aliado y el trimestre.
+Cada aliado tiene sus **propias metas por periodo anual** (`AAAA-Q1` a `AAAA-Q4`, por ejemplo `2026-Q3`). El selector de año y trimestre permite consultar cualquier vigencia guardada; las metas se administran con **Metas del aliado** y se guardan en la pestaña `Parametros` junto con el identificador del aliado y el periodo completo.
 
 Las metas configurables son:
 
@@ -39,13 +39,13 @@ El API recalcula los porcentajes, el ponderado y el rebate calculado al guardar 
 
 ## Bolsa acumulada de rebate
 
-Un rebate ganado se convierte en un **crédito de equipos**, siempre asociado al aliado que lo generó. Por ejemplo, si en `Q1` un aliado alcanza categoría A (5 %) y registra 3 equipos, se acumulan **3 equipos al 5 %**. En `Q2` se pueden aplicar esos tres equipos; el sistema los descuenta de la bolsa y conserva el trimestre de origen, el porcentaje y el trimestre donde se aplicaron.
+Un rebate ganado se convierte en un **crédito de equipos**, siempre asociado al aliado que lo generó. Por ejemplo, si en `2026-Q3` un aliado alcanza categoría A (5 %) y registra 3 equipos, se acumulan **3 equipos al 5 %**. En `2027-Q1` se pueden aplicar esos tres equipos; el sistema los descuenta de la bolsa y conserva el periodo de origen, el porcentaje y el periodo donde se aplicaron.
 
 - La bolsa se calcula en el servidor al guardar cada evaluación; no depende de un porcentaje enviado por el navegador.
 - La bolsa muestra el saldo agrupado por porcentaje: por ejemplo, `3 rebates al 5 %` y `4 rebates al 3 %`. Cada rebate representa un equipo al que se puede aplicar ese porcentaje.
 - Al aplicar, el usuario elige cuántos rebates usar de cada porcentaje disponible; dentro de cada porcentaje, el sistema consume primero los créditos más antiguos del mismo aliado y nunca más equipos de los que quedan disponibles.
 - Si se corrige una evaluación de origen, no se puede dejar por debajo de los equipos que ya fueron aplicados.
-- El saldo se mantiene por aliado. El selector actual trabaja con `Q1`–`Q4` del mismo ciclo anual: para conservar créditos entre años, la siguiente mejora debe incorporar el año al periodo antes de iniciar un nuevo ciclo.
+- El saldo se mantiene por aliado y continúa entre años. Un crédito de `2026-Q4` queda disponible para `2027-Q1`; el sistema compara el periodo completo, no sólo el número de trimestre.
 
 La pestaña `RebateCreditos` se crea al ejecutar `setup()`. Es el libro de movimientos: las filas sin `periodo_aplicacion` son saldos de origen y las filas con ese campo son las aplicaciones auditables.
 
@@ -54,7 +54,7 @@ La pestaña `RebateCreditos` se crea al ejecutar `setup()`. Es el libro de movim
 ## Instalación de Apps Script
 
 1. En la hoja que será la base, abra **Extensiones → Apps Script** y reemplace el contenido con [`appscript/Code.gs`](../appscript/Code.gs).
-2. Ejecute `setup()` una vez. Crea o completa las pestañas **Especialistas**, **Aliados**, **Evaluaciones**, **Politica**, **Parametros** y **RebateCreditos**. También restaura la política fija A/B/C indicada arriba.
+2. Ejecute `setup()` una vez. Crea o completa las pestañas **Especialistas**, **Aliados**, **Evaluaciones**, **Politica**, **Parametros** y **RebateCreditos**. También restaura la política fija A/B/C indicada arriba. Si ya había datos con el formato anterior `Q1`–`Q4`, ejecute una única vez `migrateLegacyPeriods(2026)` sustituyendo `2026` por el año real de esos registros antes de operar la nueva versión.
 3. Ejecute una vez `configureFirebaseApiKey('TU_API_KEY_WEB')` en Apps Script. La key web está en `assets/scripts/auth/firebase-config.js`; esta configuración permite validar los ID tokens, pero no entrega permisos administrativos.
 4. Implemente el proyecto como aplicación web, ejecútelo como la cuenta de DICOL y copie la URL `/exec` en `assets/scripts/modules/rebates.js`.
 5. Después de cambios en Apps Script, cree una nueva implementación para publicar el código actualizado.
@@ -64,6 +64,6 @@ La API acepta `getData`, `saveSpecialist`, `savePartner`, `saveEvaluation`, `sav
 ## Operación
 
 1. Registre especialistas y aliados.
-2. Abra la ficha del aliado, elija el trimestre y use **Metas del aliado** para definir sus compromisos.
-3. Use **Editar evaluación** para registrar los resultados reales del trimestre.
-4. Revise los indicadores, categoría y rebate ganado. En el trimestre posterior, use **Aplicar rebate acumulado**, indique cuántos rebates de 3 % y/o 5 % desea usar y confirme. Puede aplicar sólo una parte de cada saldo; la bolsa descuenta los equipos seleccionados.
+2. Abra la ficha del aliado, elija el **año** y el trimestre, y use **Metas del aliado** para definir sus compromisos de ese periodo.
+3. Use **Editar evaluación** para registrar los resultados reales del periodo seleccionado.
+4. Revise los indicadores, categoría y rebate ganado. En un periodo posterior —inclusive de otro año— use **Aplicar rebate acumulado**, indique cuántos rebates de 3 % y/o 5 % desea usar y confirme. Puede aplicar sólo una parte de cada saldo; la bolsa descuenta los equipos seleccionados.

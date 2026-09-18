@@ -35,6 +35,8 @@
         </div>
         <div class="hero-controls">
           <label
+            >Año<select id="yearFilter" aria-label="Año de seguimiento"></select></label
+          ><label
             >Trimestre<select id="quarterFilter">
               <option>Q1</option>
               <option>Q2</option>
@@ -184,7 +186,7 @@
                   </p>
                 </article>
                 <article class="trend-card">
-                  <p>Avance anual del aliado</p>
+                  <p>Avance anual del aliado · <span id="trendYear"></span></p>
                   <div id="trendChart" class="trend-chart"></div>
                   <div class="chart-labels">
                     <span>Q1</span><span>Q2</span><span>Q3</span><span>Q4</span>

@@ -58,6 +58,20 @@ function setup() {
   restorePolicyBoletin2025();
 }
 
+// Ejecute una sola vez al pasar del formato antiguo Q1…Q4 al formato 2026-Q1.
+// El año es obligatorio para no atribuir silenciosamente históricos al año equivocado.
+function migrateLegacyPeriods(year) {
+  if (!/^\d{4}$/.test(String(year))) throw new Error("Indique el año de los datos antiguos, por ejemplo 2026.");
+  return withLock_(function () {
+    return [
+      migratePeriodColumn_(SHEET_NAMES.evaluations, "periodo", year),
+      migratePeriodColumn_(SHEET_NAMES.parameters, "periodo", year),
+      migratePeriodColumn_(SHEET_NAMES.rebateCredits, "periodo_origen", year),
+      migratePeriodColumn_(SHEET_NAMES.rebateCredits, "periodo_aplicacion", year),
+    ].reduce((sum, count) => sum + count, 0);
+  });
+}
+
 // Restaura exclusivamente la política oficial: A >= 80 % = 5 %, B >= 60 % = 3 %, C = 0 %.
 function restorePolicyBoletin2025() {
   const sheet = sheet_(SHEET_NAMES.policy);
@@ -161,7 +175,7 @@ function saveParameters_(items) {
   return withLock_(function () {
     return items.map((item) => {
       require_(item, ["aliado_id", "periodo", "clave", "nombre", "meta"]);
-      if (!/^Q[1-4]$/.test(item.periodo)) throw new Error("El periodo debe ser Q1, Q2, Q3 o Q4.");
+      if (!isPeriod_(item.periodo)) throw new Error("El periodo debe tener el formato AAAA-Q1, por ejemplo 2026-Q3.");
       const meta = number_(item.meta);
       if (meta <= 0) throw new Error(`La meta de ${item.nombre} debe ser mayor que cero.`);
       const key = String(item.clave).trim();
@@ -186,7 +200,7 @@ function savePartner_(data) {
 }
 function saveEvaluation_(data, session) {
   require_(data, ["aliado_id", "periodo"]);
-  if (!/^Q[1-4]$/.test(data.periodo)) throw new Error("El periodo debe ser Q1, Q2, Q3 o Q4.");
+  if (!isPeriod_(data.periodo)) throw new Error("El periodo debe tener el formato AAAA-Q1, por ejemplo 2026-Q3.");
   return withLock_(function () {
     const previous = rows_(SHEET_NAMES.evaluations).find((row) => row.aliado_id === data.aliado_id && row.periodo === data.periodo) || {};
     const values = {
@@ -221,7 +235,7 @@ function syncEarnedCredit_(values) {
 }
 function applyRebateCredits_(data) {
   require_(data, ["aliado_id", "periodo", "aplicaciones"]);
-  if (!/^Q[1-4]$/.test(data.periodo)) throw new Error("El periodo debe ser Q1, Q2, Q3 o Q4.");
+  if (!isPeriod_(data.periodo)) throw new Error("El periodo debe tener el formato AAAA-Q1, por ejemplo 2026-Q3.");
   if (!Array.isArray(data.aplicaciones) || !data.aplicaciones.length) throw new Error("Seleccione al menos un rebate acumulado para aplicar.");
   const requestedByRate = data.aplicaciones.reduce((all, item) => {
     const rate = number_(item.rebate_pct);
@@ -231,9 +245,8 @@ function applyRebateCredits_(data) {
     return all;
   }, {});
   if (!Object.keys(requestedByRate).length) throw new Error("Indique cuántos rebates desea aplicar.");
-  const order = { Q1: 1, Q2: 2, Q3: 3, Q4: 4 };
   return withLock_(function () {
-    const credits = rows_(SHEET_NAMES.rebateCredits).filter((row) => row.aliado_id === data.aliado_id && !row.periodo_aplicacion && number_(row.saldo_equipos) > 0 && order[row.periodo_origen] < order[data.periodo]).sort((a, b) => order[a.periodo_origen] - order[b.periodo_origen]);
+    const credits = rows_(SHEET_NAMES.rebateCredits).filter((row) => row.aliado_id === data.aliado_id && !row.periodo_aplicacion && number_(row.saldo_equipos) > 0 && periodIndex_(row.periodo_origen) < periodIndex_(data.periodo)).sort((a, b) => periodIndex_(a.periodo_origen) - periodIndex_(b.periodo_origen));
     const availableByRate = credits.reduce((all, credit) => {
       const rate = number_(credit.rebate_pct);
       all[rate] = (all[rate] || 0) + number_(credit.saldo_equipos);
@@ -282,16 +295,25 @@ function archiveSpecialist_(id) {
   if (rows_(SHEET_NAMES.partners).some((partner) => partner.especialista_id === id && partner.activo !== "false")) throw new Error("Reasigne los aliados antes de eliminar al especialista.");
   const person = byId_(SHEET_NAMES.specialists, id); if (!person) throw new Error("Especialista no encontrado."); return upsert_(SHEET_NAMES.specialists, { ...person, activo: false });
 }
-function getPartnerSummary(partnerId, period) {
-  const partner = byId_(SHEET_NAMES.partners, partnerId);
-  if (!partner) throw new Error("Aliado no encontrado.");
-  const saved = rows_(SHEET_NAMES.evaluations).find((item) => item.aliado_id === partnerId && item.periodo === period) || {};
-  const compliance = calculateCompliance_({ aliado_id: partnerId, periodo: period, ...saved });
-  const policy = policy_();
-  return { partner, period, score: compliance.score, tier: compliance.tier, indicators: ["sales", "demos", "parts", "pilots", "information"].map((key) => ({ key, ...policy[key], value: compliance[key] })) };
-}
 function ensureSheet_(spreadsheet, name, headers) { const sheet = spreadsheet.getSheetByName(name) || spreadsheet.insertSheet(name); if (sheet.getLastRow() === 0) { sheet.appendRow(headers); sheet.setFrozenRows(1); } ensureHeaders_(sheet, headers); sheet.getRange(1, 1, 1, sheet.getLastColumn()).setFontWeight("bold"); delete REQUEST_ROWS[name]; return sheet; }
 function ensureHeaders_(sheet, headers) { const current = sheet.getRange(1, 1, 1, Math.max(1, sheet.getLastColumn())).getValues()[0]; const missing = headers.filter((header) => current.indexOf(header) === -1); if (missing.length) sheet.getRange(1, current.length + 1, 1, missing.length).setValues([missing]); }
+function migratePeriodColumn_(sheetName, column, year) {
+  const sheet = sheet_(sheetName);
+  if (sheet.getLastRow() < 2) return 0;
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const columnIndex = headers.indexOf(column);
+  if (columnIndex < 0) throw new Error(`No existe la columna ${column} en ${sheetName}.`);
+  const range = sheet.getRange(2, columnIndex + 1, sheet.getLastRow() - 1, 1);
+  const values = range.getValues();
+  let migrated = 0;
+  const output = values.map(([value]) => {
+    if (/^Q[1-4]$/.test(String(value))) { migrated += 1; return [`${year}-${value}`]; }
+    return [value];
+  });
+  if (migrated) range.setValues(output);
+  delete REQUEST_ROWS[sheetName];
+  return migrated;
+}
 function assertUniqueName_(sheetName, name, id, label) { const normalized = String(name).trim().toUpperCase(); if (rows_(sheetName).some((row) => row.activo !== "false" && row.id !== id && String(row.nombre).trim().toUpperCase() === normalized)) throw new Error(`Ya existe un ${label} activo con ese nombre.`); }
 function withLock_(callback) { const lock = LockService.getScriptLock(); lock.waitLock(10000); try { return callback(); } finally { lock.releaseLock(); } }
 function sheet_(name) { const sheet = SpreadsheetApp.getActive().getSheetByName(name); if (!sheet) throw new Error(`No existe la hoja ${name}. Ejecute setup().`); return sheet; }
@@ -307,5 +329,7 @@ function byId_(name, id) { return rows_(name).find((row) => row.id === id); }
 function upsert_(name, value, keys) { const sheet = sheet_(name); const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0]; const lookupKeys = keys || ["id"]; const index = sheet.getDataRange().getValues().slice(1).findIndex((row) => lookupKeys.every((key) => String(row[headers.indexOf(key)]) === String(value[key]))); const output = headers.map((header) => value[header] === undefined ? "" : value[header]); if (index < 0) sheet.appendRow(output); else sheet.getRange(index + 2, 1, 1, output.length).setValues([output]); delete REQUEST_ROWS[name]; return value; }
 function number_(value) { return Number(String(value).replace(/[^0-9.-]/g, "")) || 0; }
 function nonNegative_(value) { return Math.max(0, number_(value)); }
+function isPeriod_(value) { return /^\d{4}-Q[1-4]$/.test(String(value)); }
+function periodIndex_(value) { const match = String(value).match(/^(\d{4})-Q([1-4])$/); return match ? Number(match[1]) * 4 + Number(match[2]) : -1; }
 function require_(data, fields) { fields.forEach((field) => { if (data[field] === undefined || data[field] === null || data[field] === "") throw new Error(`El campo ${field} es obligatorio.`); }); }
 function response_(payload, event) { const callback = event && event.parameter && event.parameter.callback; const content = callback ? `${callback}(${JSON.stringify(payload)})` : JSON.stringify(payload); return ContentService.createTextOutput(content).setMimeType(callback ? ContentService.MimeType.JAVASCRIPT : ContentService.MimeType.JSON); }
