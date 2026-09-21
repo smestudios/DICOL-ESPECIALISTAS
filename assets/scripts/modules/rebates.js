@@ -1,9 +1,12 @@
-import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
 import { auth } from "../auth/firebase-client.js";
+import { DICOL_CONFIG } from "../config/dicol-config.js";
 
 /* La información se consulta y actualiza únicamente en Google Sheets mediante Apps Script. */
-const APPS_SCRIPT_URL =
-  "https://script.google.com/macros/s/AKfycbyxEKQfHQ_39AcIjS69B-5xRyleIsL4w25LJTGMmwyKMgp9uLucsNWFfHwuyWBOtUjVjQ/exec";
+const APPS_SCRIPT_URL = DICOL_CONFIG.appsScriptUrl;
+const EXPECTED_API_VERSION = DICOL_CONFIG.apiVersion;
+const RETRYABLE_HTTP_STATUS = new Set([408, 429, 500, 502, 503, 504]);
+const MAX_READ_ATTEMPTS = 3;
+const REQUEST_TIMEOUT_MS = 20_000;
 const POLICY = {
   sales: { label: "Cumplimiento de la meta por compra", weight: 50, target: 100 },
   demos: { label: "Demostraciones pequeñas y grandes", weight: 20, target: 100 },
@@ -31,10 +34,15 @@ let userRole = "";
 const pendingActions = new Set();
 const $ = (selector) => document.querySelector(selector);
 const q = () => $("#quarterFilter").value;
-const year = () => Number($("#yearFilter").value);
+const year = () => {
+  const value = Number($("#yearFilter").value);
+  return Number.isInteger(value) && value >= 2000 && value <= 9999
+    ? value
+    : new Date().getFullYear();
+};
 const period = (quarter = q(), selectedYear = year()) => `${selectedYear}-${quarter}`;
 const initialDate = new Date();
-$("#yearFilter").innerHTML = `<option value="${initialDate.getFullYear()}">${initialDate.getFullYear()}</option>`;
+$("#yearFilter").value = initialDate.getFullYear();
 $("#quarterFilter").value = `Q${Math.floor(initialDate.getMonth() / 3) + 1}`;
 const currentPartner = () =>
   state.partners.find((p) => p.id === selectedPartnerId);
@@ -69,24 +77,70 @@ function normalizeData(data) {
     viewer: data.viewer || {},
   };
 }
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const requestId = () => globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+const readBackoff = (attempt) => Math.min(4_000, 500 * 2 ** (attempt - 1)) + Math.floor(Math.random() * 300);
+async function fetchWithTimeout(url, options, timeoutMs) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try { return await fetch(url, { ...options, signal: controller.signal, cache: "no-store" }); }
+  finally { clearTimeout(timer); }
+}
 async function api(action, data, id) {
   const user = auth.currentUser;
   if (!user) throw new Error("Tu sesión expiró. Ingresa nuevamente al portal.");
-  const idToken = await user.getIdToken();
-  const response = await fetch(APPS_SCRIPT_URL, {
-    method: "POST",
-    headers: { "Content-Type": "text/plain;charset=utf-8" },
-    body: JSON.stringify({ action, data, id, idToken }),
-  });
-  if (!response.ok) {
-    if (response.status === 404) {
-      throw new Error("La URL de Google Apps Script no está disponible (404). Publique una nueva implementación como aplicación web y actualice la URL /exec configurada en rebates.js.");
+  const canRetry = action === "getData";
+  const maxAttempts = canRetry ? MAX_READ_ATTEMPTS : 1;
+  const currentRequestId = requestId();
+  let forceRefreshToken = false;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    let idToken;
+    try {
+      idToken = await user.getIdToken(forceRefreshToken);
+      forceRefreshToken = false;
+    } catch (_) {
+      throw new Error("No fue posible obtener la sesión de Firebase.");
     }
-    throw new Error(`No fue posible conectar con Google Sheets (${response.status}).`);
+
+    try {
+      const response = await fetchWithTimeout(APPS_SCRIPT_URL, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({ action, data, id, idToken, requestId: currentRequestId, clientVersion: EXPECTED_API_VERSION }),
+      }, REQUEST_TIMEOUT_MS);
+      const rawText = await response.text();
+      let payload;
+      try { payload = JSON.parse(rawText); } catch (_) { payload = null; }
+
+      if (payload?.code === "AUTH_INVALID" || payload?.code === "AUTH_EXPIRED") {
+        if (attempt === 1) { forceRefreshToken = true; continue; }
+        throw new Error("Tu sesión de Firebase ya no es válida. Ingresa nuevamente.");
+      }
+      if (!response.ok) {
+        if (response.status === 404) throw new Error("La implementación de Google Apps Script configurada ya no existe (404). Actualice la versión de la implementación web existente o configure su URL /exec correcta en dicol-config.js.");
+        if (canRetry && RETRYABLE_HTTP_STATUS.has(response.status) && attempt < maxAttempts) {
+          await sleep(readBackoff(attempt));
+          continue;
+        }
+        throw new Error(`El servicio respondió con HTTP ${response.status}.`);
+      }
+      if (!payload) throw new Error("El servidor respondió con un formato inválido.");
+      if (payload.apiVersion && payload.apiVersion !== EXPECTED_API_VERSION) throw new Error("La página y el servidor DICOL tienen versiones diferentes. Actualice la aplicación.");
+      if (!payload.ok) throw new Error(payload.error || "Google Sheets no aceptó la solicitud.");
+      return payload.data;
+    } catch (error) {
+      const retryableNetworkError = error?.name === "AbortError" || error instanceof TypeError;
+      if (canRetry && retryableNetworkError && attempt < maxAttempts) {
+        await sleep(readBackoff(attempt));
+        continue;
+      }
+      if (error?.name === "AbortError") throw new Error("Google Sheets está tardando demasiado en responder. Intente nuevamente.");
+      if (retryableNetworkError) throw new Error("No fue posible llegar a Google Sheets. Revise su conexión e intente nuevamente.");
+      throw error;
+    }
   }
-  const payload = await response.json();
-  if (!payload.ok) throw new Error(payload.error || "Google Sheets no aceptó la solicitud.");
-  return payload.data;
+  throw new Error("No fue posible obtener los datos de DICOL.");
 }
 async function loadData() {
   setConnectionStatus("Conectando con Google Sheets…");
@@ -95,7 +149,6 @@ async function loadData() {
     state = normalizeData(await api("getData"));
     userRole = state.viewer.role || token?.claims?.role || "";
     applyRoleUi();
-    renderYearOptions();
     // Apps Script filtra con el specialistId firmado del usuario Firebase.
     selectedPartnerId = state.partners.some((partner) => partner.id === selectedPartnerId)
       ? selectedPartnerId
@@ -107,16 +160,6 @@ async function loadData() {
     setConnectionStatus(error.message, true);
   }
   render();
-}
-function renderYearOptions() {
-  const select = $("#yearFilter");
-  const selected = Number(select.value) || new Date().getFullYear();
-  const years = new Set([selected - 1, selected, selected + 1]);
-  const collect = (value) => { const match = String(value || "").match(/^(\d{4})-Q[1-4]$/); if (match) years.add(Number(match[1])); };
-  state.partners.forEach((partner) => Object.keys(partner.quarters).forEach(collect));
-  state.parameters.forEach((item) => collect(item.periodo));
-  state.rebateCredits.forEach((item) => { collect(item.periodo_origen); collect(item.periodo_aplicacion); });
-  select.innerHTML = [...years].sort((a, b) => b - a).map((value) => `<option value="${value}" ${value === selected ? "selected" : ""}>${value}</option>`).join("");
 }
 function applyRoleUi() {
   const isAdmin = userRole === "admin";
@@ -132,8 +175,21 @@ async function persist(action, data, id) {
   document.querySelectorAll(`[data-save-action="${action}"]`).forEach((button) => (button.disabled = true));
   try {
     setConnectionStatus("Guardando en Google Sheets…");
-    await api(action, data, id);
-    await loadData();
+    const response = await api(action, data, id);
+    // Las escrituras devuelven una instantánea consistente generada en la misma
+    // solicitud. Así se evita una segunda autenticación y viaje a Sheets.
+    if (response.snapshot) {
+      state = normalizeData(response.snapshot);
+      userRole = state.viewer.role || userRole;
+      applyRoleUi();
+      selectedPartnerId = state.partners.some((partner) => partner.id === selectedPartnerId)
+        ? selectedPartnerId
+        : state.partners[0]?.id;
+      setConnectionStatus("Cambios sincronizados con Google Sheets.");
+      render();
+    } else {
+      await loadData();
+    }
     return true;
   } catch (error) {
     setConnectionStatus(error.message, true);
@@ -713,13 +769,25 @@ document.querySelectorAll("[data-view]").forEach(
 $("#quarterFilter").onchange = () => {
   render();
 };
-$("#yearFilter").onchange = () => render();
+$("#yearFilter").onchange = () => {
+  if (!$("#yearFilter").checkValidity()) {
+    $("#yearFilter").value = new Date().getFullYear();
+  }
+  render();
+};
 document
   .querySelectorAll("[data-close]")
   .forEach(
     (button) => (button.onclick = () => $(`#${button.dataset.close}`).close()),
   );
-// Espera a que Firebase recupere la sesión antes de enviar el token a Apps Script.
-onAuthStateChanged(auth, (user) => {
-  if (user) loadData();
+let dataLoadPromise;
+function loadDataOnce() {
+  if (dataLoadPromise) return dataLoadPromise;
+  dataLoadPromise = loadData().finally(() => { dataLoadPromise = undefined; });
+  return dataLoadPromise;
+}
+const authReady = window.dicolAuthReady || new Promise((resolve) => {
+  window.addEventListener("dicol-auth-ready", (event) => resolve(event.detail), { once: true });
 });
+// auth-guard.js es el único dueño de Firebase y de la autorización del perfil.
+authReady.then(() => loadDataOnce()).catch(() => {});

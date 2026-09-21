@@ -56,14 +56,21 @@ La pestaña `RebateCreditos` se crea al ejecutar `setup()`. Es el libro de movim
 1. En la hoja que será la base, abra **Extensiones → Apps Script** y reemplace el contenido con [`appscript/Code.gs`](../appscript/Code.gs).
 2. Ejecute `setup()` una vez. Crea o completa las pestañas **Especialistas**, **Aliados**, **Evaluaciones**, **Politica**, **Parametros** y **RebateCreditos**. También restaura la política fija A/B/C indicada arriba. Si ya había datos con el formato anterior `Q1`–`Q4`, ejecute una única vez `migrateLegacyPeriods(2026)` sustituyendo `2026` por el año real de esos registros antes de operar la nueva versión.
 3. Ejecute una vez `configureFirebaseApiKey('TU_API_KEY_WEB')` en Apps Script. La key web está en `assets/scripts/auth/firebase-config.js`; esta configuración permite validar los ID tokens, pero no entrega permisos administrativos.
-4. Implemente el proyecto como aplicación web, ejecútelo como la cuenta de DICOL y copie la URL `/exec` en `assets/scripts/modules/rebates.js`.
-5. Después de cambios en Apps Script, cree una nueva implementación para publicar el código actualizado.
+4. Cree una única implementación como aplicación web: **Implementar → Nueva implementación → Aplicación web**. Ejecútela como la cuenta de DICOL y permita el acceso HTTP que requiere el sitio; la autorización de datos la realiza la API con el ID token de Firebase. Copie la URL que termina en **`/exec`** en `assets/scripts/config/dicol-config.js`; no use la URL de edición ni `/dev`.
+5. Para publicar cambios posteriores, use **Implementar → Administrar implementaciones → [implementación activa] → Editar → Nueva versión → Implementar**. Esto conserva la misma URL `/exec`; no cree otra implementación para cada cambio.
+6. Si ve un error 404, compruebe que la implementación activa no fue eliminada y que `dicol-config.js` contiene su URL `/exec`. Publique el sitio estático después de cambiar esa configuración y pruebe el acceso con un administrador y un especialista.
 
 La API acepta `getData`, `saveSpecialist`, `savePartner`, `saveEvaluation`, `saveParameters`, `applyRebateCredits`, `deletePartner` y `deleteSpecialist`. Todas las solicitudes usan `POST` e incluyen un ID token de Firebase. Los administradores pueden ejecutar todas las acciones y reasignar aliados. Al crear o editar un aliado, el administrador debe elegir el especialista responsable; un especialista ve su propio perfil preasignado y no puede cambiarlo. El servidor impone esa asignación con el `specialistId` firmado de Firebase, por lo que no depende del valor que envíe el navegador. Cada especialista sólo recibe su cartera y tiene permisos completos para crear, editar, archivar, configurar metas, registrar o corregir evaluaciones y aplicar créditos exclusivamente sobre sus aliados asignados; no puede reasignarlos ni gestionar especialistas. Archivar un aliado lo oculta de la cartera activa y conserva su historial comercial. Cada operación de escritura queda registrada en `AuditLog`. No contiene catálogo, precios, kits ni acciones de catálogo.
 
 ## Operación
 
 1. Registre especialistas y aliados.
-2. Abra la ficha del aliado, elija el **año** y el trimestre, y use **Metas del aliado** para definir sus compromisos de ese periodo.
+2. Abra la ficha del aliado, escriba cualquier **año de cuatro dígitos** (desde 2000) y el trimestre, y use **Metas del aliado** para definir sus compromisos de ese periodo. El año no queda limitado a los periodos ya creados, por lo que puede planear vigencias futuras.
 3. Use **Editar evaluación** para registrar los resultados reales del periodo seleccionado.
 4. Revise los indicadores, categoría y rebate ganado. En un periodo posterior —inclusive de otro año— use **Aplicar rebate acumulado**, indique cuántos rebates de 3 % y/o 5 % desea usar y confirme. Puede aplicar sólo una parte de cada saldo; la bolsa descuenta los equipos seleccionados.
+
+## Rendimiento y consistencia
+
+- Al guardar una evaluación, metas o aliados, el servidor devuelve la cartera consistente en esa misma respuesta. El navegador ya no envía una segunda solicitud completa de lectura después de cada cambio.
+- Las seis metas trimestrales se escriben en bloque. Esto reduce de forma importante las llamadas a Google Sheets y evita que el tiempo de guardado crezca innecesariamente por cada meta.
+- Google Sheets sigue siendo la fuente oficial y el servidor recalcula el cumplimiento, la categoría y los créditos. No cierre ni recargue la página hasta que aparezca el mensaje **“Cambios sincronizados con Google Sheets”**.
