@@ -45,7 +45,8 @@
   color: var(--gray-soft);
   font-size: 12px;
 }
-.hero-controls select {
+.hero-controls select,
+.hero-controls input {
   margin-left: 9px;
   padding: 9px;
   color: #fff;
