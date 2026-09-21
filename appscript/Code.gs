@@ -108,7 +108,9 @@ function dispatch_(request) {
     default: throw new Error("Acción no permitida.");
   }
   audit_(session, request.action, data.aliado_id ? "aliado" : request.id ? "registro" : "registro", data.aliado_id || request.id || result.id || "", "OK");
-  return result;
+  // Devolver la cartera ya actualizada elimina el segundo POST que antes hacía
+  // el navegador después de cada guardado. La sesión ya fue validada arriba.
+  return { result, snapshot: getData_(session) };
 }
 function firebaseSession_(idToken) {
   if (!idToken) throw new Error("Sesión de Firebase requerida.");
@@ -158,17 +160,23 @@ function getData_(session) {
   const allPartners = rows_(SHEET_NAMES.partners).filter((row) => row.activo !== "false");
   const specialists = session.role === "admin" ? allSpecialists : allSpecialists.filter((row) => row.id === session.specialistId);
   const partners = session.role === "admin" ? allPartners : allPartners.filter((row) => row.especialista_id === session.specialistId);
+  const partnerIds = partners.reduce((all, partner) => ((all[partner.id] = true), all), {});
   const evaluations = rows_(SHEET_NAMES.evaluations);
-  const parameters = rows_(SHEET_NAMES.parameters).filter((row) => row.activo !== "false" && partners.some((partner) => partner.id === row.aliado_id));
+  const parameters = rows_(SHEET_NAMES.parameters).filter((row) => row.activo !== "false" && partnerIds[row.aliado_id]);
   const policy = policy_();
-  const rebateCredits = rows_(SHEET_NAMES.rebateCredits).filter((row) => partners.some((partner) => partner.id === row.aliado_id));
+  const rebateCredits = rows_(SHEET_NAMES.rebateCredits).filter((row) => partnerIds[row.aliado_id]);
+  const evaluationsByPartner = evaluations.reduce((all, item) => {
+    if (!all[item.aliado_id]) all[item.aliado_id] = {};
+    all[item.aliado_id][item.periodo] = item;
+    return all;
+  }, {});
   return {
     // El cliente necesita saber qué perfil autenticado está viendo la cartera
     // para preasignar aliados. No se usa como fuente de autorización: cada
     // escritura vuelve a validar la sesión y savePartnerAuthorized_ impone el ID.
     viewer: { role: session.role, specialistId: session.specialistId },
     specialists,
-    partners: partners.map((partner) => ({ ...partner, quarters: evaluations.filter((item) => item.aliado_id === partner.id).reduce((all, item) => ((all[item.periodo] = item), all), {}) })),
+    partners: partners.map((partner) => ({ ...partner, quarters: evaluationsByPartner[partner.id] || {} })),
     policy,
     parameters,
     rebateCredits,
@@ -186,15 +194,20 @@ function policy_() {
 function saveParameters_(items) {
   if (!Array.isArray(items) || !items.length) throw new Error("Agregue las metas del aliado.");
   return withLock_(function () {
-    return items.map((item) => {
+    const existingByKey = rows_(SHEET_NAMES.parameters).reduce((all, row) => {
+      if (row.activo !== "false") all[`${row.aliado_id}|${row.periodo}|${row.clave}`] = row;
+      return all;
+    }, {});
+    const values = items.map((item) => {
       require_(item, ["aliado_id", "periodo", "clave", "nombre", "meta"]);
       if (!isPeriod_(item.periodo)) throw new Error("El periodo debe tener el formato AAAA-Q1, por ejemplo 2026-Q3.");
       const meta = number_(item.meta);
       if (meta <= 0) throw new Error(`La meta de ${item.nombre} debe ser mayor que cero.`);
       const key = String(item.clave).trim();
-      const current = rows_(SHEET_NAMES.parameters).find((row) => row.aliado_id === item.aliado_id && row.periodo === item.periodo && row.clave === key && row.activo !== "false");
-      return upsert_(SHEET_NAMES.parameters, { id: current ? current.id : Utilities.getUuid(), aliado_id: item.aliado_id, periodo: item.periodo, clave: key, nombre: String(item.nombre).trim(), meta, unidad: item.unidad || "unidades", activo: true });
+      const current = existingByKey[`${item.aliado_id}|${item.periodo}|${key}`];
+      return { id: current ? current.id : Utilities.getUuid(), aliado_id: item.aliado_id, periodo: item.periodo, clave: key, nombre: String(item.nombre).trim(), meta, unidad: item.unidad || "unidades", activo: true };
     });
+    return upsertMany_(SHEET_NAMES.parameters, values);
   });
 }
 function saveSpecialist_(data) {
@@ -372,6 +385,23 @@ function deleteRowsWhere_(name, predicate) {
 }
 function byId_(name, id) { return rows_(name).find((row) => row.id === id); }
 function upsert_(name, value, keys) { const sheet = sheet_(name); const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0]; const lookupKeys = keys || ["id"]; const index = sheet.getDataRange().getValues().slice(1).findIndex((row) => lookupKeys.every((key) => String(row[headers.indexOf(key)]) === String(value[key]))); const output = headers.map((header) => value[header] === undefined ? "" : value[header]); if (index < 0) sheet.appendRow(output); else sheet.getRange(index + 2, 1, 1, output.length).setValues([output]); delete REQUEST_ROWS[name]; return value; }
+// Evita releer la hoja completa por cada meta. Esto es relevante al guardar
+// las seis metas trimestrales de un aliado.
+function upsertMany_(name, values) {
+  const sheet = sheet_(name);
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const rows = sheet.getLastRow() < 2 ? [] : sheet.getRange(2, 1, sheet.getLastRow() - 1, headers.length).getValues();
+  const positions = rows.reduce((all, row, index) => ((all[String(row[headers.indexOf("id")])] = index + 2), all), {});
+  const inserts = [];
+  values.forEach((value) => {
+    const output = headers.map((header) => value[header] === undefined ? "" : value[header]);
+    const position = positions[String(value.id)];
+    if (position) sheet.getRange(position, 1, 1, output.length).setValues([output]); else inserts.push(output);
+  });
+  if (inserts.length) sheet.getRange(sheet.getLastRow() + 1, 1, inserts.length, headers.length).setValues(inserts);
+  delete REQUEST_ROWS[name];
+  return values;
+}
 function number_(value) { return Number(String(value).replace(/[^0-9.-]/g, "")) || 0; }
 function nonNegative_(value) { return Math.max(0, number_(value)); }
 function isPeriod_(value) { return /^\d{4}-Q[1-4]$/.test(String(value)); }

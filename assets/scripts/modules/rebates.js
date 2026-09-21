@@ -31,10 +31,15 @@ let userRole = "";
 const pendingActions = new Set();
 const $ = (selector) => document.querySelector(selector);
 const q = () => $("#quarterFilter").value;
-const year = () => Number($("#yearFilter").value);
+const year = () => {
+  const value = Number($("#yearFilter").value);
+  return Number.isInteger(value) && value >= 2000 && value <= 9999
+    ? value
+    : new Date().getFullYear();
+};
 const period = (quarter = q(), selectedYear = year()) => `${selectedYear}-${quarter}`;
 const initialDate = new Date();
-$("#yearFilter").innerHTML = `<option value="${initialDate.getFullYear()}">${initialDate.getFullYear()}</option>`;
+$("#yearFilter").value = initialDate.getFullYear();
 $("#quarterFilter").value = `Q${Math.floor(initialDate.getMonth() / 3) + 1}`;
 const currentPartner = () =>
   state.partners.find((p) => p.id === selectedPartnerId);
@@ -73,14 +78,19 @@ async function api(action, data, id) {
   const user = auth.currentUser;
   if (!user) throw new Error("Tu sesión expiró. Ingresa nuevamente al portal.");
   const idToken = await user.getIdToken();
-  const response = await fetch(APPS_SCRIPT_URL, {
-    method: "POST",
-    headers: { "Content-Type": "text/plain;charset=utf-8" },
-    body: JSON.stringify({ action, data, id, idToken }),
-  });
+  let response;
+  try {
+    response = await fetch(APPS_SCRIPT_URL, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ action, data, id, idToken }),
+    });
+  } catch (error) {
+    throw new Error("No fue posible llegar a Google Sheets. Revise su conexión e intente nuevamente.");
+  }
   if (!response.ok) {
     if (response.status === 404) {
-      throw new Error("La URL de Google Apps Script no está disponible (404). Publique una nueva implementación como aplicación web y actualice la URL /exec configurada en rebates.js.");
+      throw new Error("La implementación de Google Apps Script configurada ya no existe (404). Cree una implementación de aplicación web, copie su URL terminada en /exec y reemplácela en APPS_SCRIPT_URL de rebates.js; después publique este sitio.");
     }
     throw new Error(`No fue posible conectar con Google Sheets (${response.status}).`);
   }
@@ -95,7 +105,6 @@ async function loadData() {
     state = normalizeData(await api("getData"));
     userRole = state.viewer.role || token?.claims?.role || "";
     applyRoleUi();
-    renderYearOptions();
     // Apps Script filtra con el specialistId firmado del usuario Firebase.
     selectedPartnerId = state.partners.some((partner) => partner.id === selectedPartnerId)
       ? selectedPartnerId
@@ -107,16 +116,6 @@ async function loadData() {
     setConnectionStatus(error.message, true);
   }
   render();
-}
-function renderYearOptions() {
-  const select = $("#yearFilter");
-  const selected = Number(select.value) || new Date().getFullYear();
-  const years = new Set([selected - 1, selected, selected + 1]);
-  const collect = (value) => { const match = String(value || "").match(/^(\d{4})-Q[1-4]$/); if (match) years.add(Number(match[1])); };
-  state.partners.forEach((partner) => Object.keys(partner.quarters).forEach(collect));
-  state.parameters.forEach((item) => collect(item.periodo));
-  state.rebateCredits.forEach((item) => { collect(item.periodo_origen); collect(item.periodo_aplicacion); });
-  select.innerHTML = [...years].sort((a, b) => b - a).map((value) => `<option value="${value}" ${value === selected ? "selected" : ""}>${value}</option>`).join("");
 }
 function applyRoleUi() {
   const isAdmin = userRole === "admin";
@@ -132,8 +131,21 @@ async function persist(action, data, id) {
   document.querySelectorAll(`[data-save-action="${action}"]`).forEach((button) => (button.disabled = true));
   try {
     setConnectionStatus("Guardando en Google Sheets…");
-    await api(action, data, id);
-    await loadData();
+    const response = await api(action, data, id);
+    // Las escrituras devuelven una instantánea consistente generada en la misma
+    // solicitud. Así se evita una segunda autenticación y viaje a Sheets.
+    if (response.snapshot) {
+      state = normalizeData(response.snapshot);
+      userRole = state.viewer.role || userRole;
+      applyRoleUi();
+      selectedPartnerId = state.partners.some((partner) => partner.id === selectedPartnerId)
+        ? selectedPartnerId
+        : state.partners[0]?.id;
+      setConnectionStatus("Cambios sincronizados con Google Sheets.");
+      render();
+    } else {
+      await loadData();
+    }
     return true;
   } catch (error) {
     setConnectionStatus(error.message, true);
@@ -713,7 +725,12 @@ document.querySelectorAll("[data-view]").forEach(
 $("#quarterFilter").onchange = () => {
   render();
 };
-$("#yearFilter").onchange = () => render();
+$("#yearFilter").onchange = () => {
+  if (!$("#yearFilter").checkValidity()) {
+    $("#yearFilter").value = new Date().getFullYear();
+  }
+  render();
+};
 document
   .querySelectorAll("[data-close]")
   .forEach(
