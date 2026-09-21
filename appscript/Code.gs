@@ -17,6 +17,10 @@ const SHEET_NAMES = {
   rebateCredits: "RebateCreditos",
   auditLog: "AuditLog",
 };
+const API_VERSION = "1.1";
+const NUMERIC_COLUMNS = new Set(["resultado_ventas", "rebate_calculado", "rebate_aplicado", "diferencia", "sales", "demos", "parts", "pilots", "information", "demos_pequenas", "demos_grandes", "certificados_dji", "monto_equipos", "monto_refacciones", "cartas_firmadas", "meta", "rebate_pct", "equipos_ganados", "equipos_aplicados", "saldo_equipos", "valor"]);
+const BOOLEAN_COLUMNS = new Set(["activo", "certificacion_dji_obligatoria"]);
+const DATE_COLUMNS = new Set(["creado_en", "actualizado_en", "timestamp"]);
 const HEADERS = {
   specialists: ["id", "nombre", "zona", "activo", "creado_en"],
   partners: ["id", "nombre", "especialista_id", "zona", "notas", "activo", "creado_en"],
@@ -81,10 +85,19 @@ function restorePolicyBoletin2025() {
   sheet.getRange(2, 1, DEFAULT_POLICY.length, HEADERS.policy.length).setValues(DEFAULT_POLICY);
 }
 
-function doGet(event) { return response_({ ok: false, error: "Use POST autenticado." }, event); }
+function doGet(event) { return response_({ ok: false, code: "METHOD_NOT_ALLOWED", error: "Use POST autenticado." }, event); }
 function doPost(event) {
-  try { return response_({ ok: true, data: dispatch_(JSON.parse(event.postData.contents || "{}")) }, event); }
-  catch (error) { return response_({ ok: false, error: error.message }, event); }
+  let request = {};
+  try {
+    request = JSON.parse((event && event.postData && event.postData.contents) || "{}");
+    if (!request || typeof request !== "object" || Array.isArray(request)) throw appError_("INVALID_REQUEST", "La solicitud no tiene un formato válido.");
+    return response_({ ok: true, requestId: request.requestId || "", data: dispatch_(request) }, event);
+  } catch (error) {
+    const code = error && error.code || "SERVER_ERROR";
+    const message = error && error.message || "Se produjo un error inesperado.";
+    console.error(JSON.stringify({ requestId: request && request.requestId || "", code, message, stack: error && error.stack || "" }));
+    return response_({ ok: false, requestId: request && request.requestId || "", code, error: message }, event);
+  }
 }
 function configureFirebaseApiKey(apiKey) {
   if (!apiKey) throw new Error("Indique la API key web de Firebase.");
@@ -113,17 +126,26 @@ function dispatch_(request) {
   return { result, snapshot: getData_(session) };
 }
 function firebaseSession_(idToken) {
-  if (!idToken) throw new Error("Sesión de Firebase requerida.");
+  if (!idToken) throw appError_("AUTH_REQUIRED", "Sesión de Firebase requerida.");
   const apiKey = PropertiesService.getScriptProperties().getProperty("FIREBASE_WEB_API_KEY");
-  if (!apiKey) throw new Error("Falta configurar FIREBASE_WEB_API_KEY en Apps Script.");
+  if (!apiKey) throw appError_("SERVER_CONFIG", "Falta configurar FIREBASE_WEB_API_KEY.");
   const response = UrlFetchApp.fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(apiKey)}`, {
     method: "post", contentType: "application/json", payload: JSON.stringify({ idToken }), muteHttpExceptions: true,
   });
-  if (response.getResponseCode() !== 200) throw new Error("No fue posible validar la sesión de Firebase.");
-  const user = JSON.parse(response.getContentText()).users && JSON.parse(response.getContentText()).users[0];
-  if (!user || user.disabled) throw new Error("La cuenta no está disponible.");
-  const claims = user.customAttributes ? JSON.parse(user.customAttributes) : {};
-  if (!["admin", "specialist"].includes(claims.role)) throw new Error("Tu cuenta no tiene un rol autorizado.");
+  let payload;
+  try { payload = JSON.parse(response.getContentText() || "{}"); }
+  catch (_) { throw appError_("AUTH_INVALID", "No fue posible validar la sesión."); }
+  if (response.getResponseCode() !== 200) {
+    const firebaseMessage = payload.error && payload.error.message || "";
+    if (firebaseMessage.indexOf("INVALID_ID_TOKEN") >= 0 || firebaseMessage.indexOf("TOKEN_EXPIRED") >= 0) throw appError_("AUTH_EXPIRED", "La sesión de Firebase expiró.");
+    throw appError_("AUTH_INVALID", "La sesión de Firebase no es válida.");
+  }
+  const user = payload.users && payload.users[0];
+  if (!user || user.disabled) throw appError_("AUTH_INVALID", "La cuenta no está disponible.");
+  let claims = {};
+  try { claims = user.customAttributes ? JSON.parse(user.customAttributes) : {}; }
+  catch (_) { throw appError_("AUTH_INVALID", "Los permisos de la cuenta no son válidos."); }
+  if (!["admin", "specialist"].includes(claims.role)) throw appError_("FORBIDDEN", "Tu cuenta no tiene un rol autorizado.");
   return { uid: user.localId, email: user.email || "", role: claims.role, specialistId: claims.specialistId || "" };
 }
 function requireAdmin_(session) { if (session.role !== "admin") throw new Error("Esta acción requiere un perfil administrador."); }
@@ -354,15 +376,15 @@ function migratePeriodColumn_(sheetName, column, year) {
   return migrated;
 }
 function assertUniqueName_(sheetName, name, id, label) { const normalized = String(name).trim().toUpperCase(); if (rows_(sheetName).some((row) => row.activo !== "false" && row.id !== id && String(row.nombre).trim().toUpperCase() === normalized)) throw new Error(`Ya existe un ${label} activo con ese nombre.`); }
-function withLock_(callback) { const lock = LockService.getScriptLock(); lock.waitLock(10000); try { return callback(); } finally { lock.releaseLock(); } }
+function withLock_(callback) { const lock = LockService.getScriptLock(); if (!lock.tryLock(20000)) throw appError_("BUSY", "El servicio está ocupado procesando otra operación. Intente nuevamente."); try { return callback(); } finally { lock.releaseLock(); } }
 function sheet_(name) { const sheet = SpreadsheetApp.getActive().getSheetByName(name); if (!sheet) throw new Error(`No existe la hoja ${name}. Ejecute setup().`); return sheet; }
 function rows_(name) {
   if (REQUEST_ROWS[name]) return REQUEST_ROWS[name];
   const sheet = sheet_(name);
   if (sheet.getLastRow() < 2) return REQUEST_ROWS[name] = [];
-  const values = sheet.getDataRange().getDisplayValues();
-  const headers = values.shift();
-  return REQUEST_ROWS[name] = values.filter((row) => row.some(Boolean)).map((row) => headers.reduce((object, header, index) => ((object[header] = row[index]), object), {}));
+  const values = sheet.getDataRange().getValues();
+  const headers = values.shift().map((header) => String(header).trim());
+  return REQUEST_ROWS[name] = values.filter((row) => row.some((value) => value !== "" && value !== null)).map((row) => headers.reduce((object, header, index) => ((object[header] = normalizeCell_(header, row[index])), object), {}));
 }
 function deleteRowsWhere_(name, predicate) {
   const sheet = sheet_(name);
@@ -402,9 +424,31 @@ function upsertMany_(name, values) {
   delete REQUEST_ROWS[name];
   return values;
 }
-function number_(value) { return Number(String(value).replace(/[^0-9.-]/g, "")) || 0; }
+function normalizeCell_(header, value) {
+  if (NUMERIC_COLUMNS.has(header)) return parseNumericCell_(value);
+  if (BOOLEAN_COLUMNS.has(header)) {
+    if (value === false) return "false";
+    if (value === true) return "true";
+    return String(value || "").trim().toLowerCase() === "false" ? "false" : "true";
+  }
+  if (DATE_COLUMNS.has(header) && value instanceof Date) return value.toISOString();
+  return String(value === null || value === undefined ? "" : value);
+}
+function parseNumericCell_(value) {
+  if (value === null || value === "") return 0;
+  if (typeof value === "number") return isFinite(value) ? value : 0;
+  let text = String(value).trim();
+  if (!text) return 0;
+  if (text.indexOf(".") >= 0 && text.indexOf(",") >= 0) text = text.lastIndexOf(",") > text.lastIndexOf(".") ? text.replace(/\./g, "").replace(",", ".") : text.replace(/,/g, "");
+  else if ((text.match(/\./g) || []).length > 1) text = text.replace(/\./g, "");
+  else if (text.indexOf(",") >= 0) text = text.replace(",", ".");
+  const parsed = Number(text.replace(/[^0-9.-]/g, ""));
+  return isFinite(parsed) ? parsed : 0;
+}
+function number_(value) { return parseNumericCell_(value); }
 function nonNegative_(value) { return Math.max(0, number_(value)); }
 function isPeriod_(value) { return /^\d{4}-Q[1-4]$/.test(String(value)); }
 function periodIndex_(value) { const match = String(value).match(/^(\d{4})-Q([1-4])$/); return match ? Number(match[1]) * 4 + Number(match[2]) : -1; }
 function require_(data, fields) { fields.forEach((field) => { if (data[field] === undefined || data[field] === null || data[field] === "") throw new Error(`El campo ${field} es obligatorio.`); }); }
-function response_(payload, event) { const callback = event && event.parameter && event.parameter.callback; const content = callback ? `${callback}(${JSON.stringify(payload)})` : JSON.stringify(payload); return ContentService.createTextOutput(content).setMimeType(callback ? ContentService.MimeType.JAVASCRIPT : ContentService.MimeType.JSON); }
+function appError_(code, message) { const error = new Error(message); error.code = code; return error; }
+function response_(payload, event) { const body = { apiVersion: API_VERSION, serverTime: new Date().toISOString(), ...payload }; const callback = event && event.parameter && event.parameter.callback; const content = callback ? `${callback}(${JSON.stringify(body)})` : JSON.stringify(body); return ContentService.createTextOutput(content).setMimeType(callback ? ContentService.MimeType.JAVASCRIPT : ContentService.MimeType.JSON); }

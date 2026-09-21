@@ -1,9 +1,12 @@
-import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
 import { auth } from "../auth/firebase-client.js";
+import { DICOL_CONFIG } from "../config/dicol-config.js";
 
 /* La información se consulta y actualiza únicamente en Google Sheets mediante Apps Script. */
-const APPS_SCRIPT_URL =
-  "https://script.google.com/macros/s/AKfycbyxEKQfHQ_39AcIjS69B-5xRyleIsL4w25LJTGMmwyKMgp9uLucsNWFfHwuyWBOtUjVjQ/exec";
+const APPS_SCRIPT_URL = DICOL_CONFIG.appsScriptUrl;
+const EXPECTED_API_VERSION = DICOL_CONFIG.apiVersion;
+const RETRYABLE_HTTP_STATUS = new Set([408, 429, 500, 502, 503, 504]);
+const MAX_READ_ATTEMPTS = 3;
+const REQUEST_TIMEOUT_MS = 20_000;
 const POLICY = {
   sales: { label: "Cumplimiento de la meta por compra", weight: 50, target: 100 },
   demos: { label: "Demostraciones pequeñas y grandes", weight: 20, target: 100 },
@@ -74,29 +77,70 @@ function normalizeData(data) {
     viewer: data.viewer || {},
   };
 }
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const requestId = () => globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+const readBackoff = (attempt) => Math.min(4_000, 500 * 2 ** (attempt - 1)) + Math.floor(Math.random() * 300);
+async function fetchWithTimeout(url, options, timeoutMs) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try { return await fetch(url, { ...options, signal: controller.signal, cache: "no-store" }); }
+  finally { clearTimeout(timer); }
+}
 async function api(action, data, id) {
   const user = auth.currentUser;
   if (!user) throw new Error("Tu sesión expiró. Ingresa nuevamente al portal.");
-  const idToken = await user.getIdToken();
-  let response;
-  try {
-    response = await fetch(APPS_SCRIPT_URL, {
-      method: "POST",
-      headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify({ action, data, id, idToken }),
-    });
-  } catch (error) {
-    throw new Error("No fue posible llegar a Google Sheets. Revise su conexión e intente nuevamente.");
-  }
-  if (!response.ok) {
-    if (response.status === 404) {
-      throw new Error("La implementación de Google Apps Script configurada ya no existe (404). Cree una implementación de aplicación web, copie su URL terminada en /exec y reemplácela en APPS_SCRIPT_URL de rebates.js; después publique este sitio.");
+  const canRetry = action === "getData";
+  const maxAttempts = canRetry ? MAX_READ_ATTEMPTS : 1;
+  const currentRequestId = requestId();
+  let forceRefreshToken = false;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    let idToken;
+    try {
+      idToken = await user.getIdToken(forceRefreshToken);
+      forceRefreshToken = false;
+    } catch (_) {
+      throw new Error("No fue posible obtener la sesión de Firebase.");
     }
-    throw new Error(`No fue posible conectar con Google Sheets (${response.status}).`);
+
+    try {
+      const response = await fetchWithTimeout(APPS_SCRIPT_URL, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({ action, data, id, idToken, requestId: currentRequestId, clientVersion: EXPECTED_API_VERSION }),
+      }, REQUEST_TIMEOUT_MS);
+      const rawText = await response.text();
+      let payload;
+      try { payload = JSON.parse(rawText); } catch (_) { payload = null; }
+
+      if (payload?.code === "AUTH_INVALID" || payload?.code === "AUTH_EXPIRED") {
+        if (attempt === 1) { forceRefreshToken = true; continue; }
+        throw new Error("Tu sesión de Firebase ya no es válida. Ingresa nuevamente.");
+      }
+      if (!response.ok) {
+        if (response.status === 404) throw new Error("La implementación de Google Apps Script configurada ya no existe (404). Actualice la versión de la implementación web existente o configure su URL /exec correcta en dicol-config.js.");
+        if (canRetry && RETRYABLE_HTTP_STATUS.has(response.status) && attempt < maxAttempts) {
+          await sleep(readBackoff(attempt));
+          continue;
+        }
+        throw new Error(`El servicio respondió con HTTP ${response.status}.`);
+      }
+      if (!payload) throw new Error("El servidor respondió con un formato inválido.");
+      if (payload.apiVersion && payload.apiVersion !== EXPECTED_API_VERSION) throw new Error("La página y el servidor DICOL tienen versiones diferentes. Actualice la aplicación.");
+      if (!payload.ok) throw new Error(payload.error || "Google Sheets no aceptó la solicitud.");
+      return payload.data;
+    } catch (error) {
+      const retryableNetworkError = error?.name === "AbortError" || error instanceof TypeError;
+      if (canRetry && retryableNetworkError && attempt < maxAttempts) {
+        await sleep(readBackoff(attempt));
+        continue;
+      }
+      if (error?.name === "AbortError") throw new Error("Google Sheets está tardando demasiado en responder. Intente nuevamente.");
+      if (retryableNetworkError) throw new Error("No fue posible llegar a Google Sheets. Revise su conexión e intente nuevamente.");
+      throw error;
+    }
   }
-  const payload = await response.json();
-  if (!payload.ok) throw new Error(payload.error || "Google Sheets no aceptó la solicitud.");
-  return payload.data;
+  throw new Error("No fue posible obtener los datos de DICOL.");
 }
 async function loadData() {
   setConnectionStatus("Conectando con Google Sheets…");
@@ -736,7 +780,14 @@ document
   .forEach(
     (button) => (button.onclick = () => $(`#${button.dataset.close}`).close()),
   );
-// Espera a que Firebase recupere la sesión antes de enviar el token a Apps Script.
-onAuthStateChanged(auth, (user) => {
-  if (user) loadData();
+let dataLoadPromise;
+function loadDataOnce() {
+  if (dataLoadPromise) return dataLoadPromise;
+  dataLoadPromise = loadData().finally(() => { dataLoadPromise = undefined; });
+  return dataLoadPromise;
+}
+const authReady = window.dicolAuthReady || new Promise((resolve) => {
+  window.addEventListener("dicol-auth-ready", (event) => resolve(event.detail), { once: true });
 });
+// auth-guard.js es el único dueño de Firebase y de la autorización del perfil.
+authReady.then(() => loadDataOnce()).catch(() => {});
