@@ -119,7 +119,6 @@ function dispatch_(request) {
     case "applyRebateCredits": authorizePartner_(session, data.aliado_id); result = applyRebateCredits_(data); break;
     case "deleteSpecialist": requireAdmin_(session); result = archiveSpecialist_(request.id); break;
     case "saveEvaluation": authorizeEvaluation_(session, data.aliado_id); result = saveEvaluation_(data, session); break;
-    case "bulkImportTemporal": requireAdmin_(session); result = bulkImportTemporal_(data.records); break;
     default: throw new Error("Acción no permitida.");
   }
   audit_(session, request.action, data.aliado_id ? "aliado" : request.id ? "registro" : "registro", data.aliado_id || request.id || result.id || "", "OK");
@@ -234,71 +233,6 @@ function saveParameters_(items) {
     return upsertMany_(SHEET_NAMES.parameters, values);
   });
 }
-// Importación temporal de las evaluaciones históricas entregadas por DICOL.
-// Sólo está disponible para administradores y conserva los valores de origen,
-// incluidas las metas legítimas en cero.
-function bulkImportTemporal_(records) {
-  if (!Array.isArray(records) || !records.length || records.length > 500) throw new Error("La actualización debe incluir entre 1 y 500 evaluaciones.");
-  return withLock_(function () {
-    const required = ["periodo", "aliado", "meta_ventas", "resultado_ventas", "monto_equipos", "meta_demos_pequenas", "resultado_demos_pequenas", "meta_demos_grandes", "resultado_demos_grandes", "meta_certificados", "resultado_certificados", "resultado_refacciones", "meta_cartas", "resultado_cartas"];
-    const unique = {};
-    records.forEach((record, index) => {
-      if (!record || typeof record !== "object") throw new Error(`La evaluación ${index + 1} no tiene un formato válido.`);
-      required.forEach((field) => { if (record[field] === undefined || record[field] === null || record[field] === "") throw new Error(`Falta ${field} en la evaluación ${index + 1}.`); });
-      if (!isPeriod_(record.periodo) || !String(record.aliado).trim()) throw new Error(`Periodo o aliado inválido en la evaluación ${index + 1}.`);
-      required.filter((field) => field.startsWith("meta_") || field.startsWith("resultado_") || field === "monto_equipos").forEach((field) => { if (number_(record[field]) < 0) throw new Error(`${field} no puede ser negativo en la evaluación ${index + 1}.`); });
-      // Si la fuente contiene la misma pareja dos veces, la última fila gana.
-      unique[`${normalizePartnerName_(record.aliado)}|${record.periodo}`] = record;
-    });
-    const source = Object.keys(unique).map((key) => unique[key]);
-    const partnersByName = rows_(SHEET_NAMES.partners).filter((partner) => partner.activo !== "false").reduce((all, partner) => ((all[normalizePartnerName_(partner.nombre)] = partner), all), {});
-    const partnerIds = {};
-    const newPartners = [];
-    source.forEach((record) => {
-      const normalized = normalizePartnerName_(record.aliado);
-      if (partnerIds[normalized]) return;
-      const current = partnersByName[normalized];
-      if (current) { partnerIds[normalized] = current.id; return; }
-      const partner = { id: Utilities.getUuid(), nombre: String(record.aliado).trim(), especialista_id: "", zona: "", notas: "Importado desde EVALUACIONES TRIMESTRALES 2026.xlsx", activo: true, creado_en: new Date().toISOString() };
-      partnerIds[normalized] = partner.id;
-      newPartners.push(partner);
-    });
-    if (newPartners.length) upsertMany_(SHEET_NAMES.partners, newPartners);
-
-    const existingParameters = rows_(SHEET_NAMES.parameters).filter((item) => item.activo !== "false").reduce((all, item) => ((all[`${item.aliado_id}|${item.periodo}|${item.clave}`] = item), all), {});
-    const parameterValues = [];
-    source.forEach((record) => {
-      const partnerId = partnerIds[normalizePartnerName_(record.aliado)];
-      const goals = [
-        ["ventas_equipos", "Meta de compra de equipos", record.meta_ventas, "unidades"],
-        ["demos_pequenas", "Demostraciones pequeñas", record.meta_demos_pequenas, "unidades"],
-        ["demos_grandes", "Demostraciones grandes", record.meta_demos_grandes, "unidades"],
-        ["porcentaje_refacciones", "Compra de refacciones", 8, "% del monto de equipos"],
-        ["certificados_dji", "Pilotos certificados DJI Academy", record.meta_certificados, "certificados"],
-        ["cartas_firmadas", "Cartas firmadas", record.meta_cartas, "cartas"],
-      ];
-      goals.forEach(([clave, nombre, meta, unidad]) => {
-        const current = existingParameters[`${partnerId}|${record.periodo}|${clave}`];
-        parameterValues.push({ id: current ? current.id : Utilities.getUuid(), aliado_id: partnerId, periodo: record.periodo, clave, nombre, meta: number_(meta), unidad, activo: true });
-      });
-    });
-    upsertMany_(SHEET_NAMES.parameters, parameterValues);
-
-    const evaluations = source.map((record) => {
-      const values = { aliado_id: partnerIds[normalizePartnerName_(record.aliado)], periodo: record.periodo, resultado_ventas: number_(record.resultado_ventas), demos_pequenas: number_(record.resultado_demos_pequenas), demos_grandes: number_(record.resultado_demos_grandes), certificados_dji: number_(record.resultado_certificados), monto_equipos: number_(record.monto_equipos), monto_refacciones: number_(record.resultado_refacciones), cartas_firmadas: number_(record.resultado_cartas), rebate_aplicado: 0, justificacion: "Importado desde EVALUACIONES TRIMESTRALES 2026.xlsx", certificacion_dji_obligatoria: false, actualizado_en: new Date().toISOString() };
-      const compliance = calculateCompliance_(values);
-      ["sales", "demos", "parts", "pilots", "information"].forEach((key) => values[key] = compliance[key]);
-      values.rebate_calculado = compliance.tier.rebate;
-      values.diferencia = values.rebate_aplicado - values.rebate_calculado;
-      syncEarnedCredit_(values);
-      return values;
-    });
-    // Evaluaciones no tienen una columna id: se actualizan por aliado y periodo.
-    evaluations.forEach((value) => upsert_(SHEET_NAMES.evaluations, value, ["aliado_id", "periodo"]));
-    return { createdPartners: newPartners.length, evaluations: evaluations.length, parameters: parameterValues.length };
-  });
-}
-function normalizePartnerName_(value) { return String(value || "").trim().toUpperCase().replace(/\s+/g, " "); }
 function saveSpecialist_(data) {
   require_(data, ["nombre"]);
   return withLock_(function () {
