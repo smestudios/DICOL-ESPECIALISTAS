@@ -18,16 +18,22 @@
       <section class="temporary-update__card" aria-labelledby="update-title">
         <p class="eyebrow">ADMINISTRACIÓN · USO TEMPORAL</p>
         <h1 id="update-title">Actualización masiva de rebates</h1>
-        <p>Esta herramienta carga las metas y resultados de 2025-Q4 y 2026-Q1 a 2026-Q3. Cuando la fuente repite un aliado en el mismo periodo, se conserva la última fila suministrada.</p>
+        <p>Revise primero los datos extraídos del archivo <strong>EVALUACIONES TRIMESTRALES 2026</strong> y aplique cada aliado de forma independiente. No se cargarán modelos de drones: <strong>equipos</strong> es la cantidad de equipos y <strong>Monto comprado en equipos (COP)</strong> es la facturación de venta de drones.</p>
         <dl class="temporary-update__summary">
           <div><dt>Aliados</dt><dd id="partnerTotal">—</dd></div>
           <div><dt>Evaluaciones</dt><dd id="evaluationTotal">—</dd></div>
-          <div><dt>Periodos</dt><dd>4</dd></div>
+          <div><dt>Periodos</dt><dd id="periodTotal">—</dd></div>
         </dl>
         <div id="adminOnlyMessage" class="temporary-update__notice" hidden>Esta página está disponible únicamente para administradores.</div>
-        <button id="bulkUpdateButton" class="btn-primary" type="button" disabled>Actualizar masivamente</button>
         <p id="bulkUpdateStatus" class="temporary-update__status" role="status">Validando acceso…</p>
-        <p class="temporary-update__help">Los aliados ya existentes conservan su usuario responsable. Los aliados nuevos se crean sin responsable para asignarlos posteriormente desde Rebates.</p>
+        <p class="temporary-update__help">La fuente contiene filas repetidas para algunos aliados y periodos; se muestra y aplica únicamente la última fila del archivo, tal como está registrada en la fuente. Los aliados existentes conservan su responsable; los nuevos se crean sin responsable.</p>
+      </section>
+      <section class="temporary-update__review" aria-labelledby="review-title">
+        <div class="temporary-update__review-head">
+          <div><p class="eyebrow">REVISIÓN PREVIA</p><h2 id="review-title">Apruebe aliado por aliado</h2></div>
+          <p id="reviewSummary">Cargando datos…</p>
+        </div>
+        <div id="partnerReviewList" class="partner-review-list" aria-live="polite"></div>
       </section>
     </main>
     <script type="module" src="assets/scripts/auth/logout.js"></script>
