@@ -19,6 +19,7 @@ const POLICY = {
     { name: "C", min: 0, rebate: 0 },
   ],
 };
+const REQUIRED_GOAL_KEYS = ["ventas_equipos", "demos_pequenas", "demos_grandes", "porcentaje_refacciones", "certificados_dji", "cartas_firmadas"];
 const emptyState = {
   policy: POLICY,
   specialists: [],
@@ -200,7 +201,9 @@ async function persist(action, data, id) {
   }
 }
 function evaluation(partner, periodValue = period()) {
+  const goalsConfigured = hasConfiguredGoals(partner.id, periodValue);
   const values = { ...(partner.quarters[periodValue] || {}), ...calculatedCompliance(partner, periodValue) };
+  if (!goalsConfigured) return { score: 0, values, tier: { name: "Sin metas", rebate: 0 }, goalsConfigured: false };
   const score = Math.round(
     Object.entries(state.policy)
       .filter(([key]) => key !== "tiers")
@@ -216,18 +219,22 @@ function evaluation(partner, periodValue = period()) {
     tier:
       state.policy.tiers.find((tier) => score >= tier.min) ||
       state.policy.tiers.at(-1),
+    goalsConfigured: true,
   };
 }
 function parametersFor(partnerId, periodValue = period()) { return state.parameters.filter((item) => item.aliado_id === partnerId && item.periodo === periodValue); }
 function parameter(key, partnerId = currentPartner()?.id, periodValue = period()) { return parametersFor(partnerId, periodValue).find((item) => item.clave === key); }
+function hasConfiguredGoals(partnerId, periodValue = period()) {
+  const configured = new Set(parametersFor(partnerId, periodValue).map((item) => item.clave));
+  return REQUIRED_GOAL_KEYS.every((key) => configured.has(key));
+}
 function calculatedCompliance(partner, periodValue = period()) {
   const raw = partner.quarters[periodValue] || {};
   const equipmentTotal = Number(raw.monto_equipos || 0);
   const partsTotal = Number(raw.monto_refacciones || 0);
   const equipmentUnits = Number(raw.resultado_ventas || 0);
   const ratio = equipmentTotal ? (partsTotal / equipmentTotal) * 100 : 0;
-  const defaults = { ventas_equipos: 1, demos_pequenas: 3, demos_grandes: 1, porcentaje_refacciones: 8, certificados_dji: 1, cartas_firmadas: 1 };
-  const percent = (actual, key) => { const target = Number(parameter(key, partner.id, periodValue)?.meta || defaults[key] || 0); return target ? Math.min(100, (actual / target) * 100) : 0; };
+  const percent = (actual, key) => { const target = Number(parameter(key, partner.id, periodValue)?.meta); return target ? Math.min(100, (actual / target) * 100) : 0; };
   const demos = Math.min(percent(Number(raw.demos_pequenas || 0), "demos_pequenas"), percent(Number(raw.demos_grandes || 0), "demos_grandes"));
   return { sales: percent(equipmentUnits, "ventas_equipos"), demos, parts: percent(ratio, "porcentaje_refacciones"), pilots: percent(Number(raw.certificados_dji || 0), "certificados_dji"), information: percent(Number(raw.cartas_firmadas || 0), "cartas_firmadas"), equipmentUnits, equipmentTotal, partsTotal, partsRatio: ratio };
 }
@@ -275,7 +282,7 @@ function renderTabs() {
 function renderGeneral() {
   const rows = allEvaluations().sort((a, b) => a.score - b.score);
   $("#generalTable").innerHTML =
-    `<table class="rebate-table"><thead><tr><th>Aliado</th><th>Usuario responsable</th><th>Zona</th><th>Cumplimiento ${period()}</th><th>Nivel</th><th>Rebate proyectado</th><th></th></tr></thead><tbody>${rows.map(({ partner, score, tier }) => `<tr><td><b>${esc(partner.name)}</b></td><td>${esc(partnerSpecialistName(partner))}</td><td>${esc(partner.zone || "—")}</td><td>${score}%</td><td><span class="status-pill status-${tier.name.toLowerCase()}">${tier.name}</span></td><td>${tier.rebate}%</td><td><button data-open-partner="${partner.id}">Ver ficha</button></td></tr>`).join("") || '<tr><td colspan="7">Aún no hay aliados registrados.</td></tr>'}</tbody></table>`;
+    `<table class="rebate-table"><thead><tr><th>Aliado</th><th>Usuario responsable</th><th>Zona</th><th>Cumplimiento ${period()}</th><th>Nivel</th><th>Rebate proyectado</th><th></th></tr></thead><tbody>${rows.map(({ partner, score, tier, goalsConfigured }) => `<tr><td><b>${esc(partner.name)}</b></td><td>${esc(partnerSpecialistName(partner))}</td><td>${esc(partner.zone || "—")}</td><td>${goalsConfigured ? `${score}%` : "Pendiente"}</td><td><span class="status-pill status-${goalsConfigured ? tier.name.toLowerCase() : "pending"}">${tier.name}</span></td><td>${tier.rebate}%</td><td><button data-open-partner="${partner.id}">Ver ficha</button></td></tr>`).join("") || '<tr><td colspan="7">Aún no hay aliados registrados.</td></tr>'}</tbody></table>`;
   document.querySelectorAll("[data-open-partner]").forEach(
     (button) =>
       (button.onclick = () => {
@@ -345,6 +352,7 @@ function renderPartnerDetail() {
   $("#detailContent").hidden = !partner;
   if (!partner) return;
   const result = evaluation(partner);
+  const goalsConfigured = result.goalsConfigured;
   $("#detailName").textContent = partner.name;
   $("#detailSpecialist").textContent =
     `ESPECIALISTA DICOL RESPONSABLE · ${partnerSpecialistName(partner).toUpperCase()}`;
@@ -352,23 +360,27 @@ function renderPartnerDetail() {
     .filter(Boolean)
     .join(" · ");
   $("#scoreValue").textContent = `${result.score}%`;
-  $("#scoreGrade").textContent = `Nivel ${result.tier.name}`;
+  $("#scoreGrade").textContent = goalsConfigured ? `Nivel ${result.tier.name}` : "Pendiente de metas";
   document
     .querySelector(".score-ring")
     .style.setProperty("--score", `${result.score}%`);
   $("#scoreExplanation").textContent =
-    result.score >= 80
+    !goalsConfigured
+      ? `Este aliado no puede calificarse en ${period()} hasta que se configuren sus metas.`
+      : result.score >= 80
       ? "Cumple la meta del nivel superior en este trimestre."
       : result.score >= 60
         ? "Cumple el mínimo, pero tiene oportunidades para alcanzar el nivel A."
         : "No alcanza el mínimo trimestral; requiere un plan de acción con el especialista DICOL.";
   $("#rebateValue").textContent = `${Number(result.tier.rebate)}%`;
-  $("#gradeName").textContent = `Categoría ${result.tier.name} · rebate ganado ${result.tier.rebate}%`;
+  $("#gradeName").textContent = goalsConfigured ? `Categoría ${result.tier.name} · rebate ganado ${result.tier.rebate}%` : "Configure las metas para habilitar la calificación";
   renderCommercialOverview(result);
   renderRebateBank(partner);
-  $("#policyNote").textContent = `Política activa: ${rules()
+  $("#policyNote").textContent = goalsConfigured ? `Política activa: ${rules()
     .map((rule) => `${rule.label} ${rule.weight}%`)
-    .join(" · ")}. Los valores son porcentajes de cumplimiento contra la meta.`;
+    .join(" · ")}. Los valores son porcentajes de cumplimiento contra la meta.` : `Pendiente: configure las seis metas del aliado para ${period()} antes de registrar o calificar su evaluación.`;
+  $("#editEvaluationButton").disabled = !goalsConfigured;
+  $("#editEvaluationButton").title = goalsConfigured ? "" : "Configure primero las metas del aliado para este periodo.";
   renderIndicators(result);
   renderRequirements(result);
   renderTrend(partner);
@@ -393,7 +405,7 @@ function renderCommercialOverview(result) {
   $("#commercialParts").textContent = money(parts);
   $("#commercialPartsChart").textContent = money(parts);
   $("#commercialIndicators").textContent = `${met}/${indicators.length}`;
-  $("#commercialStatus").textContent = `Categoría ${result.tier.name} · rebate ganado ${calculated}% · rebates aplicados en ${period()}: ${applied} equipo(s)`;
+  $("#commercialStatus").textContent = result.goalsConfigured ? `Categoría ${result.tier.name} · rebate ganado ${calculated}% · rebates aplicados en ${period()}: ${applied} equipo(s)` : "Pendiente de metas: la calificación y el rebate están bloqueados.";
   $("#commercialKpis").innerHTML = indicators.map((rule) => {
     const value = Number(result.values[rule.key] || 0);
     return `<div class="commercial-kpi"><span>${esc(rule.label)}</span><div><i style="width:${Math.min(100, value)}%"></i></div><b>${value}%</b><small>peso ${rule.weight}%</small></div>`;
@@ -438,17 +450,17 @@ function money(value) {
   return new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(value || 0);
 }
 function metricDefinitions(values, partner = currentPartner(), periodValue = period()) {
-  const target = (key, fallback) => Number(parameter(key, partner.id, periodValue)?.meta || fallback);
+  const target = (key) => Number(parameter(key, partner.id, periodValue)?.meta || 0);
   const percent = (actual, goal) => goal ? Math.min(100, (actual / goal) * 100) : 0;
-  const partsRate = target("porcentaje_refacciones", 8);
+  const partsRate = target("porcentaje_refacciones");
   const expectedParts = Number(values.equipmentTotal || 0) * partsRate / 100;
   return [
-    { key: "sales", label: "Meta por compra", actual: Number(values.equipmentUnits || 0), target: target("ventas_equipos", 1), unit: "unidades", weight: 50 },
-    { key: "small", label: "Demostraciones pequeñas", actual: Number(values.demos_pequenas || 0), target: target("demos_pequenas", 3), unit: "demostraciones", weight: 0 },
-    { key: "large", label: "Demostraciones grandes", actual: Number(values.demos_grandes || 0), target: target("demos_grandes", 1), unit: "demostraciones", weight: 20 },
+    { key: "sales", label: "Meta por compra", actual: Number(values.equipmentUnits || 0), target: target("ventas_equipos"), unit: "unidades", weight: 50 },
+    { key: "small", label: "Demostraciones pequeñas", actual: Number(values.demos_pequenas || 0), target: target("demos_pequenas"), unit: "demostraciones", weight: 0 },
+    { key: "large", label: "Demostraciones grandes", actual: Number(values.demos_grandes || 0), target: target("demos_grandes"), unit: "demostraciones", weight: 20 },
     { key: "parts", label: "Compra de refacciones", actual: Number(values.partsTotal || 0), target: expectedParts, unit: "COP", weight: 10, note: `${partsRate}% del monto de equipos (${money(Number(values.equipmentTotal || 0))})` },
-    { key: "pilots", label: "Pilotos certificados DJI Academy", actual: Number(values.certificados_dji || 0), target: target("certificados_dji", 1), unit: "certificados", weight: 10 },
-    { key: "letters", label: "Cartas firmadas", actual: Number(values.cartas_firmadas || 0), target: target("cartas_firmadas", 1), unit: "cartas", weight: 10 },
+    { key: "pilots", label: "Pilotos certificados DJI Academy", actual: Number(values.certificados_dji || 0), target: target("certificados_dji"), unit: "certificados", weight: 10 },
+    { key: "letters", label: "Cartas firmadas", actual: Number(values.cartas_firmadas || 0), target: target("cartas_firmadas"), unit: "cartas", weight: 10 },
   ].map((item) => ({ ...item, percent: percent(item.actual, item.target) }));
 }
 function displayMetricValue(value, unit) { return unit === "COP" ? money(value) : `${Number(value).toLocaleString("es-CO")} ${unit}`; }
@@ -702,6 +714,7 @@ $("#specialistForm").onsubmit = (event) => {
 $("#editEvaluationButton").onclick = () => {
   const partner = currentPartner();
   if (!partner) return;
+  if (!hasConfiguredGoals(partner.id, period())) return alert("Configure primero las metas del aliado para este periodo. Hasta entonces no se puede calificar.");
   const values = partner.quarters[period()] || {};
   $("#evaluationDialogPartner").textContent = partner.name;
   $("#evaluationDialogQuarter").textContent = period();
@@ -731,6 +744,7 @@ function renderEvaluationPreview() {
 $("#evaluationForm").onsubmit = (event) => {
   event.preventDefault();
   const partner = currentPartner();
+  if (!hasConfiguredGoals(partner.id, period())) return alert("Configure primero las metas del aliado para este periodo. Hasta entonces no se puede calificar.");
   const draft = evaluationDraft();
   const result = evaluation(draft);
   persist("saveEvaluation", {

@@ -3,5 +3,5 @@
 export const DICOL_CONFIG = Object.freeze({
   appsScriptUrl:
     "https://script.google.com/macros/s/AKfycbyxEKQfHQ_39AcIjS69B-5xRyleIsL4w25LJTGMmwyKMgp9uLucsNWFfHwuyWBOtUjVjQ/exec",
-  apiVersion: "1.1",
+  apiVersion: "1.2",
 });

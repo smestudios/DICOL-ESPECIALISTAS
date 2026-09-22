@@ -228,6 +228,10 @@
   background: #722e2e;
   color: #ffd9d9;
 }
+.status-pending {
+  background: #4e5961;
+  color: #eff4f6;
+}
 .specialist-cards {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
