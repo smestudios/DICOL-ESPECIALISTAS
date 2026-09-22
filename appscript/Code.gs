@@ -17,7 +17,7 @@ const SHEET_NAMES = {
   rebateCredits: "RebateCreditos",
   auditLog: "AuditLog",
 };
-const API_VERSION = "1.1";
+const API_VERSION = "1.2";
 const NUMERIC_COLUMNS = new Set(["resultado_ventas", "rebate_calculado", "rebate_aplicado", "diferencia", "sales", "demos", "parts", "pilots", "information", "demos_pequenas", "demos_grandes", "certificados_dji", "monto_equipos", "monto_refacciones", "cartas_firmadas", "meta", "rebate_pct", "equipos_ganados", "equipos_aplicados", "saldo_equipos", "valor"]);
 const BOOLEAN_COLUMNS = new Set(["activo", "certificacion_dji_obligatoria"]);
 const DATE_COLUMNS = new Set(["creado_en", "actualizado_en", "timestamp"]);
@@ -44,6 +44,7 @@ const DEFAULT_PARAMETERS = [
   ["certificados_dji", "Pilotos certificados DJI Academy", 1, "certificados"],
   ["cartas_firmadas", "Cartas firmadas", 1, "cartas"],
 ];
+const REQUIRED_PARAMETER_KEYS = DEFAULT_PARAMETERS.map((item) => item[0]);
 const DEFAULT_POLICY = [
   ["indicador", "sales", "Cumplimiento de la meta por compra", 50, 100],
   ["indicador", "demos", "Demostraciones pequeñas y grandes", 20, 100],
@@ -250,6 +251,7 @@ function saveEvaluation_(data, session) {
   require_(data, ["aliado_id", "periodo"]);
   if (!isPeriod_(data.periodo)) throw new Error("El periodo debe tener el formato AAAA-Q1, por ejemplo 2026-Q3.");
   return withLock_(function () {
+    requireConfiguredGoals_(data.aliado_id, data.periodo);
     const values = {
       aliado_id: data.aliado_id, periodo: data.periodo,
       resultado_ventas: nonNegative_(data.resultado_ventas), demos_pequenas: nonNegative_(data.demos_pequenas),
@@ -323,7 +325,7 @@ function applyRebateCredits_(data) {
 }
 function calculateCompliance_(values) {
   const metas = parameterMap_(values.aliado_id, values.periodo);
-  const target = (key) => number_(metas[key]) || number_(DEFAULT_PARAMETERS.find((item) => item[0] === key)[2]);
+  const target = (key) => number_(metas[key]);
   const percent = (actual, goal) => goal > 0 ? Math.min(100, (number_(actual) / goal) * 100) : 0;
   const sales = percent(values.resultado_ventas, target("ventas_equipos"));
   const small = percent(values.demos_pequenas, target("demos_pequenas"));
@@ -339,6 +341,11 @@ function calculateCompliance_(values) {
 }
 function parameterMap_(partnerId, period) {
   return rows_(SHEET_NAMES.parameters).filter((row) => row.activo !== "false" && row.aliado_id === partnerId && row.periodo === period).reduce((all, row) => ((all[row.clave] = row.meta), all), {});
+}
+function requireConfiguredGoals_(partnerId, period) {
+  const metas = parameterMap_(partnerId, period);
+  const missing = REQUIRED_PARAMETER_KEYS.filter((key) => !Object.prototype.hasOwnProperty.call(metas, key));
+  if (missing.length) throw new Error("Configure todas las metas del aliado para este periodo antes de calificarlo.");
 }
 // Archivar conserva el historial comercial y evita que el aliado aparezca en
 // la cartera activa. El borrado físico no es una operación disponible en web.

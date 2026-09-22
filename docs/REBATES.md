@@ -13,6 +13,8 @@ Las metas configurables son:
 5. Pilotos certificados DJI Academy (certificados).
 6. Cartas firmadas (cartas).
 
+Un aliado **no se puede calificar ni generar rebate** mientras no tenga configuradas las seis metas de su periodo. La pantalla mostrará el estado **“Sin metas”** y bloqueará el registro de la evaluación hasta que se guarden las metas; el API aplica la misma validación para impedir que se omita desde otra petición.
+
 En la evaluación se registran los resultados reales: equipos comprados, monto de equipos en COP, monto de refacciones en COP, demostraciones, certificados y cartas. El monto de equipos es la base de cálculo para refacciones, no una meta con peso propio. Por ejemplo, con compras de equipos por `$300.200.150`, una meta de refacciones de `8 %` exige `$24.016.012` para obtener 100 % en ese indicador.
 
 Cada ficha presenta el avance como `real/meta`, su porcentaje con dos decimales y una barra de progreso. Los montos se muestran en COP; los demás indicadores se muestran en sus unidades respectivas.
