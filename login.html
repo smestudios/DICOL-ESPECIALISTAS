@@ -22,11 +22,46 @@
 
           <div class="brand-copy">
             <p class="eyebrow">DICOL · PORTAL ADMINISTRATIVO</p>
-            <h1>Todo tu trabajo.<br /><span>En un solo lugar.</span></h1>
+            <h1>Portal administrativo<br /><span>DICOL</span></h1>
             <p class="brand-description">
-              Accede a las herramientas internas para especialistas, gestión
-              de gastos y seguimiento comercial.
+              Accede a las herramientas internas de gestión de gastos y
+              seguimiento comercial.
             </p>
+          </div>
+
+          <div class="drone-visual" role="img" aria-label="Ilustración de un dron sobre una cuadrícula técnica">
+            <svg viewBox="0 0 560 330" aria-hidden="true" focusable="false">
+              <defs>
+                <linearGradient id="drone-body" x1="0" x2="1" y1="0" y2="1">
+                  <stop offset="0" stop-color="#d9eee0" />
+                  <stop offset="1" stop-color="#477052" />
+                </linearGradient>
+                <linearGradient id="drone-arm" x1="0" x2="1">
+                  <stop stop-color="#7ba487" />
+                  <stop offset="1" stop-color="#1e3b28" />
+                </linearGradient>
+                <filter id="drone-glow" x="-40%" y="-40%" width="180%" height="180%">
+                  <feGaussianBlur stdDeviation="7" result="blur" />
+                  <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+                </filter>
+              </defs>
+              <g class="drone-grid">
+                <path d="M16 60H544M16 130H544M16 200H544M16 270H544M90 12V318M185 12V318M280 12V318M375 12V318M470 12V318" />
+              </g>
+              <g class="drone-trail"><path d="M51 255C120 167 196 155 276 174c73 18 126-17 221-115" /></g>
+              <g class="drone" filter="url(#drone-glow)">
+                <path d="M249 151 126 92M310 151 434 92M249 184 126 245M310 184 434 245" fill="none" stroke="url(#drone-arm)" stroke-width="13" stroke-linecap="round" />
+                <g class="rotor"><ellipse cx="106" cy="84" rx="52" ry="14" /><circle cx="106" cy="84" r="11" /></g>
+                <g class="rotor"><ellipse cx="454" cy="84" rx="52" ry="14" /><circle cx="454" cy="84" r="11" /></g>
+                <g class="rotor"><ellipse cx="106" cy="253" rx="52" ry="14" /><circle cx="106" cy="253" r="11" /></g>
+                <g class="rotor"><ellipse cx="454" cy="253" rx="52" ry="14" /><circle cx="454" cy="253" r="11" /></g>
+                <path d="M221 146c28-21 90-21 118 0l17 46c-21 28-130 28-151 0z" fill="url(#drone-body)" stroke="#a9d2b4" stroke-width="3" />
+                <path d="M248 193h64l-10 45c-10 13-37 13-47 0z" fill="#284a32" stroke="#76ba87" stroke-width="3" />
+                <path d="M260 198h40l-6 24h-28z" fill="#0a1710" stroke="#38e879" stroke-width="2" />
+                <circle cx="280" cy="210" r="7" fill="#38e879" />
+              </g>
+              <g class="drone-label"><circle cx="42" cy="42" r="4" /><path d="M54 42h70" /><text x="54" y="31">VISTA DE OPERACIÓN</text></g>
+            </svg>
           </div>
 
           <div class="brand-footer">
@@ -43,7 +78,7 @@
 
           <div class="form-heading">
             <p class="eyebrow">BIENVENIDO</p>
-            <h2>Inicia sesión.</h2>
+            <h2>Iniciar sesión</h2>
             <p>Ingresa tus credenciales para continuar al portal.</p>
           </div>
 
