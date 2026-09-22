@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>DICOL | Control de rebates</title>
+    <title>DICOL | Rebates</title>
     <link rel="stylesheet" href="assets/styles/site.css" />
     <link rel="stylesheet" href="assets/styles/rebates.css" />
     <script type="module" src="assets/scripts/auth/auth-guard.js"></script>
@@ -25,12 +25,10 @@
     <main class="rebates-app">
       <section class="rebates-hero">
         <div>
-          <p class="eyebrow">DICOL · IMPORTADORA · CONTROL COMERCIAL</p>
-          <h1>Rebates claros para DICOL, sus especialistas y cada aliado.</h1>
+          <p class="eyebrow">DICOL · CONTROL COMERCIAL</p>
+          <h1>Rebates DICOL</h1>
           <p>
-            Los especialistas de DICOL hacen seguimiento a los aliados
-            asignados. Esta vista reúne el resultado general, el desempeño por
-            especialista y una ficha lista para conversar con cada aliado.
+            Seguimiento de aliados y desempeño comercial por responsable.
           </p>
         </div>
         <div class="hero-controls">
@@ -85,11 +83,10 @@
         <div class="section-heading">
           <div>
             <p class="eyebrow">VISIÓN GENERAL</p>
-            <h2>Seguimiento de todos los aliados</h2>
+            <h2>Aliados</h2>
           </div>
           <p>
-            Priorice los compromisos antes de la liquidación del trimestre
-            siguiente.
+            Consulte el cumplimiento y los rebates proyectados de cada aliado.
           </p>
         </div>
         <div id="generalTable" class="table-card"></div>
@@ -97,12 +94,11 @@
       <section id="specialistsView" class="dashboard-view" hidden>
         <div class="section-heading">
           <div>
-            <p class="eyebrow">RESPONSABILIDAD DICOL</p>
-            <h2>Indicadores por usuario</h2>
+            <p class="eyebrow">RESPONSABLES DICOL</p>
+            <h2>Desempeño por responsable</h2>
           </div>
           <p>
-            Cada usuario responsable visualiza el estado consolidado de los aliados a
-            su cargo.
+            Consulte el cumplimiento consolidado de la cartera de cada responsable.
           </p>
         </div>
         <div id="specialistCards" class="specialist-cards"></div>
@@ -112,7 +108,7 @@
           <aside class="partner-sidebar">
             <div>
               <p class="eyebrow">ALIADOS</p>
-              <h2>Ficha individual</h2>
+              <h2>Cartera de aliados</h2>
             </div>
             <input
               id="partnerSearch"
@@ -150,7 +146,7 @@
                 <div class="commercial-overview__heading">
                   <div>
                     <p class="eyebrow">PULSO COMERCIAL · <span id="commercialQuarter">Q1</span></p>
-                    <h3>Resumen para la gestión del aliado</h3>
+                    <h3>Resumen comercial</h3>
                   </div>
                   <div><p id="commercialStatus"></p></div>
                 </div>
@@ -216,7 +212,7 @@
                 <div id="indicatorGrid" class="indicator-grid"></div>
               </section>
               <section class="requirements-card" aria-label="Resumen de metas del aliado">
-                <div><p class="eyebrow">METAS DEL ALIADO</p><h3>Avance frente a cada compromiso</h3><p>Cada indicador muestra su avance real frente a la meta del trimestre. Para el rebate, un indicador aporta su peso solo al llegar al 100 %; las dos demostraciones deben cumplirse.</p></div>
+                <div><p class="eyebrow">METAS DEL ALIADO</p><h3>Avance por indicador</h3><p>Cada indicador muestra su avance real frente a la meta del trimestre. Para el rebate, un indicador aporta su peso solo al llegar al 100 %; las dos demostraciones deben cumplirse.</p></div>
                 <div id="requirementsProgress" class="requirements-progress"></div>
               </section>
               <section class="insight-grid">
@@ -280,7 +276,7 @@
     <dialog id="evaluationDialog" class="evaluation-dialog"><form id="evaluationForm"><div class="dialog-heading"><div><p class="eyebrow">EDICIÓN AISLADA · <span id="evaluationDialogQuarter"></span></p><h2 id="evaluationDialogPartner">Actualizar cumplimiento</h2></div><button type="button" data-close="evaluationDialog">×</button></div><p class="dialog-help">Registre los valores reales del trimestre. La meta de refacciones se calcula automáticamente como el porcentaje configurado del monto comprado en equipos.</p><div id="evaluationPreview" class="evaluation-preview"></div><div class="evaluation-form-grid"><label>Equipos comprados (unidades)<input id="editEquipmentUnits" type="number" min="0" step="1" required></label><label>Monto comprado en equipos (COP)<input id="editEquipmentAmount" type="number" min="0" step="1" required></label><label>Compra de refacciones (COP)<input id="editPartsAmount" type="number" min="0" step="1" required></label><label>Demos pequeñas realizadas<input id="editSmallDemos" type="number" min="0" step="1" required></label><label>Demos grandes realizadas<input id="editLargeDemos" type="number" min="0" step="1" required></label><label>Personas certificadas DJI Academy<input id="editDjiCertified" type="number" min="0" step="1" required></label><label>Cartas firmadas<input id="editLetters" type="number" min="0" step="1" required></label><label>Rebate aplicado histórico (%)<input id="editAppliedRebate" type="number" min="0" max="100" step="0.01" required><small>Se conserva para registros anteriores. Los nuevos rebates se aplican desde la bolsa acumulada.</small></label></div><label>Justificación y soportes<textarea id="editJustification" rows="4" placeholder="Facturas, evidencias de demos, DJI Academy, excepciones o pendientes."></textarea></label><div class="dialog-actions"><button class="rebate-button" type="button" data-close="evaluationDialog">Cancelar</button><button class="rebate-button rebate-button--primary" type="submit" data-save-action="saveEvaluation">Guardar cambios</button></div></form></dialog>
     <dialog id="specialistDialog">
       <div class="dialog-heading">
-        <h2>Usuarios DICOL</h2>
+        <h2>Responsables DICOL</h2>
         <button type="button" data-close="specialistDialog">×</button>
       </div>
       <p class="dialog-help">
@@ -306,7 +302,7 @@
     <dialog id="policyDialog">
       <form id="policyForm">
         <div class="dialog-heading">
-          <h2>Política de rebates</h2>
+          <h2>Reglas de rebates</h2>
           <button type="button" data-close="policyDialog">×</button>
         </div>
         <p class="dialog-help">
