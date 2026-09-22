@@ -307,7 +307,7 @@ function saveSpecialist_(data) {
   });
 }
 function savePartner_(data) {
-  require_(data, ["nombre", "especialista_id"]);
+  require_(data, ["nombre"]);
   return withLock_(function () {
     assertUniqueName_(SHEET_NAMES.partners, data.nombre, data.id, "aliado");
     return upsert_(SHEET_NAMES.partners, { id: data.id || Utilities.getUuid(), nombre: String(data.nombre).trim(), especialista_id: data.especialista_id, zona: data.zona || "", notas: data.notas || "", activo: true, creado_en: data.creado_en || new Date().toISOString() });
