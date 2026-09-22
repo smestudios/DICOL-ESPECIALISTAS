@@ -225,7 +225,7 @@ function saveParameters_(items) {
       require_(item, ["aliado_id", "periodo", "clave", "nombre", "meta"]);
       if (!isPeriod_(item.periodo)) throw new Error("El periodo debe tener el formato AAAA-Q1, por ejemplo 2026-Q3.");
       const meta = number_(item.meta);
-      if (meta <= 0) throw new Error(`La meta de ${item.nombre} debe ser mayor que cero.`);
+      if (meta < 0) throw new Error(`La meta de ${item.nombre} no puede ser negativa.`);
       const key = String(item.clave).trim();
       const current = existingByKey[`${item.aliado_id}|${item.periodo}|${key}`];
       return { id: current ? current.id : Utilities.getUuid(), aliado_id: item.aliado_id, periodo: item.periodo, clave: key, nombre: String(item.nombre).trim(), meta, unidad: item.unidad || "unidades", activo: true };
@@ -241,7 +241,7 @@ function saveSpecialist_(data) {
   });
 }
 function savePartner_(data) {
-  require_(data, ["nombre", "especialista_id"]);
+  require_(data, ["nombre"]);
   return withLock_(function () {
     assertUniqueName_(SHEET_NAMES.partners, data.nombre, data.id, "aliado");
     return upsert_(SHEET_NAMES.partners, { id: data.id || Utilities.getUuid(), nombre: String(data.nombre).trim(), especialista_id: data.especialista_id, zona: data.zona || "", notas: data.notas || "", activo: true, creado_en: data.creado_en || new Date().toISOString() });
