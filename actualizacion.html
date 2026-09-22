@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#050805" />
+    <title>DICOL | Actualización temporal</title>
+    <link rel="stylesheet" href="assets/styles/site.css" />
+    <script type="module" src="assets/scripts/auth/auth-guard.js"></script>
+  </head>
+  <body>
+    <header class="navbar" aria-label="Navegación principal">
+      <a class="logo" href="index.html#inicio"><img src="assets/images/dicol-logo.webp" alt="Logo DICOL" /><span>DICOL</span></a>
+      <nav aria-label="Accesos del portal"><ul class="nav-links"><li><a href="index.html#herramientas">Herramientas</a></li><li><a href="rebates.html">Rebates</a></li></ul></nav>
+      <button class="nav-button nav-button--logout" data-logout type="button">Cerrar sesión</button>
+    </header>
+    <main class="temporary-update">
+      <section class="temporary-update__card" aria-labelledby="update-title">
+        <p class="eyebrow">ADMINISTRACIÓN · USO TEMPORAL</p>
+        <h1 id="update-title">Actualización masiva de rebates</h1>
+        <p>Esta herramienta carga las metas y resultados de 88 evaluaciones: 2025-Q4 y 2026-Q1 a 2026-Q3. Los valores se conservan exactamente como fueron suministrados.</p>
+        <dl class="temporary-update__summary">
+          <div><dt>Aliados</dt><dd id="partnerTotal">—</dd></div>
+          <div><dt>Evaluaciones</dt><dd id="evaluationTotal">—</dd></div>
+          <div><dt>Periodos</dt><dd>4</dd></div>
+        </dl>
+        <div id="adminOnlyMessage" class="temporary-update__notice" hidden>Esta página está disponible únicamente para administradores.</div>
+        <button id="bulkUpdateButton" class="btn-primary" type="button" disabled>Actualizar masivamente</button>
+        <p id="bulkUpdateStatus" class="temporary-update__status" role="status">Validando acceso…</p>
+        <p class="temporary-update__help">Los aliados ya existentes conservan su usuario responsable. Los aliados nuevos se crean sin responsable para asignarlos posteriormente desde Rebates.</p>
+      </section>
+    </main>
+    <script type="module" src="assets/scripts/auth/logout.js"></script>
+    <script type="module" src="assets/scripts/modules/actualizacion-temporal.js"></script>
+  </body>
+</html>
