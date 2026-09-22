@@ -3,10 +3,11 @@ import { DICOL_CONFIG } from "../config/dicol-config.js";
 import { ACTUALIZACION_TEMPORAL_DATA } from "../data/actualizacion-temporal-data.js";
 
 const $ = (selector) => document.querySelector(selector);
-const button = $("#bulkUpdateButton");
 const status = $("#bulkUpdateStatus");
 const adminMessage = $("#adminOnlyMessage");
-const normalizeName = (value) => String(value || "").trim().toUpperCase().replace(/\s+/g, " ");
+const reviewList = $("#partnerReviewList");
+const reviewSummary = $("#reviewSummary");
+const normalizeName = (value) => String(value || "").trim().toUpperCase().replace(/[^A-Z0-9]+/g, "");
 const sourceByPartnerPeriod = new Map();
 
 // El archivo origen trae algunas parejas aliado/periodo repetidas. Tal como se
@@ -14,9 +15,19 @@ const sourceByPartnerPeriod = new Map();
 ACTUALIZACION_TEMPORAL_DATA.forEach((record) => sourceByPartnerPeriod.set(`${normalizeName(record.aliado)}|${record.periodo}`, record));
 const sourceRecords = [...sourceByPartnerPeriod.values()];
 const partnerTotal = new Set(sourceRecords.map((item) => normalizeName(item.aliado))).size;
+const periods = [...new Set(sourceRecords.map((item) => item.periodo))].sort();
+const recordsByPartner = sourceRecords.reduce((all, record) => {
+  const key = normalizeName(record.aliado);
+  if (!all.has(key)) all.set(key, { name: record.aliado, records: [] });
+  all.get(key).records.push(record);
+  return all;
+}, new Map());
+let canApply = false;
+let isApplying = false;
 
 $("#partnerTotal").textContent = partnerTotal;
 $("#evaluationTotal").textContent = sourceRecords.length;
+$("#periodTotal").textContent = periods.length;
 
 function setStatus(message, isError = false) {
   status.textContent = message;
@@ -50,73 +61,76 @@ async function api(action, data, id) {
   return payload.data || {};
 }
 
-function parameterItems(record, partnerId) {
-  return [
-    ["ventas_equipos", "Meta de compra de equipos", record.meta_ventas, "unidades"],
-    ["demos_pequenas", "Demostraciones pequeñas", record.meta_demos_pequenas, "unidades"],
-    ["demos_grandes", "Demostraciones grandes", record.meta_demos_grandes, "unidades"],
-    // El backend recibe la meta de refacciones como porcentaje: 8 % de AC.
-    ["porcentaje_refacciones", "Compra de refacciones", 8, "% del monto de equipos"],
-    ["certificados_dji", "Pilotos certificados DJI Academy", record.meta_certificados, "certificados"],
-    ["cartas_firmadas", "Cartas firmadas", record.meta_cartas, "cartas"],
-  ].map(([clave, nombre, meta, unidad]) => ({ id: requestId(), aliado_id: partnerId, periodo: record.periodo, clave, nombre, meta, unidad }));
+const numberFormat = new Intl.NumberFormat("es-CO");
+const moneyFormat = new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 });
+function metric(meta, result, isMoney = false) {
+  const format = isMoney ? moneyFormat : numberFormat;
+  return `${format.format(Number(meta || 0))} / ${format.format(Number(result || 0))}`;
 }
 
-function evaluationItem(record, partnerId) {
-  return {
-    aliado_id: partnerId,
-    periodo: record.periodo,
-    resultado_ventas: record.resultado_ventas,
-    demos_pequenas: record.resultado_demos_pequenas,
-    demos_grandes: record.resultado_demos_grandes,
-    certificados_dji: record.resultado_certificados,
-    monto_equipos: record.monto_equipos,
-    monto_refacciones: record.resultado_refacciones,
-    cartas_firmadas: record.resultado_cartas,
-    rebate_aplicado: 0,
-    justificacion: "Importado desde EVALUACIONES TRIMESTRALES 2026.xlsx",
-  };
-}
-
-async function bulkUpdate() {
-  if (!window.confirm(`Se cargarán ${sourceRecords.length} evaluaciones únicas con los valores originales. ¿Desea continuar?`)) return;
-  button.disabled = true;
-  try {
-    setStatus("Leyendo la cartera actual en Google Sheets…");
-    const snapshot = await api("getData");
-    const partnersByName = new Map((snapshot.partners || []).map((partner) => [normalizeName(partner.nombre), partner]));
-    let createdPartners = 0;
-    for (const record of sourceRecords) {
-      const name = normalizeName(record.aliado);
-      if (partnersByName.has(name)) continue;
-      setStatus(`Creando aliado ${createdPartners + 1}…`);
-      const saved = await api("savePartner", { id: requestId(), nombre: record.aliado, especialista_id: "", zona: "", notas: "Importado desde EVALUACIONES TRIMESTRALES 2026.xlsx" });
-      const partner = saved.result || saved;
-      partnersByName.set(name, partner);
-      createdPartners += 1;
-    }
-    for (const [index, record] of sourceRecords.entries()) {
-      const partner = partnersByName.get(normalizeName(record.aliado));
-      if (!partner?.id) throw new Error(`No se encontró el ID del aliado ${record.aliado}.`);
-      setStatus(`Guardando metas ${index + 1}/${sourceRecords.length}: ${record.periodo} · ${record.aliado}`);
-      await api("saveParameters", parameterItems(record, partner.id));
-      setStatus(`Guardando evaluación ${index + 1}/${sourceRecords.length}: ${record.periodo} · ${record.aliado}`);
-      await api("saveEvaluation", evaluationItem(record, partner.id));
-    }
-    setStatus(`Actualización terminada: ${sourceRecords.length} evaluaciones y ${sourceRecords.length * 6} metas guardadas. Aliados nuevos: ${createdPartners}.`);
-  } catch (error) {
-    setStatus(error.message || "No fue posible completar la actualización.", true);
-    button.disabled = false;
+function renderReview() {
+  reviewList.replaceChildren();
+  reviewSummary.textContent = `${partnerTotal} aliados · ${sourceRecords.length} evaluaciones únicas · ${periods.join(", ")}`;
+  for (const { name, records } of [...recordsByPartner.values()].sort((a, b) => a.name.localeCompare(b.name, "es"))) {
+    records.sort((a, b) => a.periodo.localeCompare(b.periodo));
+    const card = document.createElement("article");
+    card.className = "partner-review";
+    const heading = document.createElement("div");
+    heading.className = "partner-review__head";
+    const title = document.createElement("h3");
+    title.textContent = name;
+    const detail = document.createElement("p");
+    detail.textContent = `${records.length} trimestre${records.length === 1 ? "" : "s"} para revisar`;
+    heading.append(title, detail);
+    const tableWrap = document.createElement("div");
+    tableWrap.className = "partner-review__table-wrap";
+    const table = document.createElement("table");
+    table.innerHTML = "<thead><tr><th>Periodo</th><th>Equipos<br><small>Meta / resultado</small></th><th>Monto comprado en equipos (COP)<br><small>Resultado</small></th><th>Demos P<br><small>Meta / resultado</small></th><th>Demos G<br><small>Meta / resultado</small></th><th>Certificados<br><small>Meta / resultado</small></th><th>Refacciones (COP)<br><small>Meta / resultado</small></th><th>Cartas<br><small>Meta / resultado</small></th></tr></thead>";
+    const body = document.createElement("tbody");
+    records.forEach((record) => {
+      const row = document.createElement("tr");
+      [record.periodo, metric(record.meta_ventas, record.resultado_ventas), moneyFormat.format(Number(record.monto_equipos || 0)), metric(record.meta_demos_pequenas, record.resultado_demos_pequenas), metric(record.meta_demos_grandes, record.resultado_demos_grandes), metric(record.meta_certificados, record.resultado_certificados), metric(record.meta_refacciones, record.resultado_refacciones, true), metric(record.meta_cartas, record.resultado_cartas)].forEach((value) => {
+        const cell = document.createElement("td"); cell.textContent = value; row.append(cell);
+      });
+      body.append(row);
+    });
+    table.append(body); tableWrap.append(table);
+    const footer = document.createElement("div"); footer.className = "partner-review__footer";
+    const source = document.createElement("p"); source.textContent = "Metas y resultados extraídos de las columnas «META VS CUMPLIMIENTO» del Excel.";
+    const applyButton = document.createElement("button"); applyButton.className = "btn-primary partner-review__apply"; applyButton.type = "button"; applyButton.textContent = "Aplicar este aliado"; applyButton.disabled = !canApply;
+    applyButton.addEventListener("click", () => applyPartner(name, records, applyButton, card));
+    footer.append(source, applyButton); card.append(heading, tableWrap, footer); reviewList.append(card);
   }
 }
 
-button.addEventListener("click", bulkUpdate);
+async function applyPartner(name, records, applyButton, card) {
+  if (!canApply || isApplying) return;
+  if (!window.confirm(`Se guardarán las metas y resultados de ${records.length} periodo(s) para ${name}. Esta acción actualizará esos periodos en Google Sheets. ¿Desea continuar?`)) return;
+  isApplying = true;
+  applyButton.disabled = true;
+  try {
+    setStatus(`Aplicando ${name} en Google Sheets…`);
+    const saved = await api("bulkImportTemporal", { records });
+    const result = saved.result || {};
+    card.classList.add("partner-review--applied");
+    applyButton.textContent = "Aplicado";
+    setStatus(`${name} actualizado: ${result.evaluations || records.length} evaluaciones y ${result.parameters || records.length * 6} metas guardadas.${result.createdPartners ? " Se creó el aliado." : ""}`);
+  } catch (error) {
+    setStatus(error.message || "No fue posible completar la actualización.", true);
+    applyButton.disabled = false;
+  } finally {
+    isApplying = false;
+  }
+}
+
 (window.dicolAuthReady || Promise.reject(new Error("AUTH_REQUIRED"))).then(({ profile }) => {
   if (profile?.role !== "admin") {
     adminMessage.hidden = false;
     setStatus("No tienes permisos de administrador.", true);
+    renderReview();
     return;
   }
-  button.disabled = false;
-  setStatus("Datos validados y listos para actualizar.");
-}).catch(() => setStatus("No fue posible validar tu acceso.", true));
+  canApply = true;
+  renderReview();
+  setStatus("Datos validados. Revise y aplique cada aliado cuando esté conforme.");
+}).catch(() => { renderReview(); setStatus("No fue posible validar tu acceso.", true); });

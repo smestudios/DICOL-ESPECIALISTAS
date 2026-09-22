@@ -298,7 +298,8 @@ function bulkImportTemporal_(records) {
     return { createdPartners: newPartners.length, evaluations: evaluations.length, parameters: parameterValues.length };
   });
 }
-function normalizePartnerName_(value) { return String(value || "").trim().toUpperCase().replace(/\s+/g, " "); }
+// Sólo para la importación: "DRONE DEPOT" y "DRONEDEPOT" son el mismo aliado.
+function normalizePartnerName_(value) { return String(value || "").trim().toUpperCase().replace(/[^A-Z0-9]+/g, ""); }
 function saveSpecialist_(data) {
   require_(data, ["nombre"]);
   return withLock_(function () {

@@ -71,6 +71,14 @@ La API acepta `getData`, `saveSpecialist`, `savePartner`, `saveEvaluation`, `sav
 3. Use **Editar evaluación** para registrar los resultados reales del periodo seleccionado.
 4. Revise los indicadores, categoría y rebate ganado. En un periodo posterior —inclusive de otro año— use **Aplicar rebate acumulado**, indique cuántos rebates de 3 % y/o 5 % desea usar y confirme. Puede aplicar sólo una parte de cada saldo; la bolsa descuenta los equipos seleccionados.
 
+## Carga verificada desde evaluaciones trimestrales
+
+La página administrativa `actualizacion.html` sirve para revisar el archivo **EVALUACIONES TRIMESTRALES 2026** antes de escribirlo en Google Sheets. La carga no es automática: cada aliado muestra sus trimestres y tiene su propio botón **Aplicar este aliado**. Al confirmarlo, el API guarda en una sola operación las seis metas y la evaluación de los periodos visibles para ese aliado.
+
+La columna **RESUL. VENTAS** se interpreta exclusivamente como cantidad de **equipos**, no como modelos vendidos. La columna **FAC. VENTA DRONES** del Excel se guarda como **Monto comprado en equipos (COP)** (`monto_equipos`), que es la facturación de venta de drones y la base para calcular el indicador de refacciones. Las metas y resultados de demostraciones, certificados, refacciones y cartas se extraen de sus columnas respectivas de **META VS CUMPLIMIENTO**. La meta de refacciones que muestra el Excel se deriva del 8 % de la facturación; por ello el sistema conserva el parámetro de 8 % y guarda el resultado monetario de refacciones.
+
+Si un aliado-periodo está repetido en el Excel, la vista conserva la última fila suministrada. Las variaciones sólo de espacios o signos en el nombre (por ejemplo, `DRONE DEPOT` y `DRONEDEPOT`) se tratan como el mismo aliado. Esto se hace visible antes de aplicar y evita cargar dos veces una misma evaluación. Un aliado existente conserva su responsable; uno que no exista se crea sin responsable para asignarlo posteriormente desde Rebates.
+
 ## Rendimiento y consistencia
 
 - Al guardar una evaluación, metas o aliados, el servidor devuelve la cartera consistente en esa misma respuesta. El navegador ya no envía una segunda solicitud completa de lectura después de cada cambio.
