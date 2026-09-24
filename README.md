@@ -73,4 +73,4 @@ El nuevo tablero `rebates.html` ofrece seguimiento por aliado y trimestre, gesti
 
 ## Cierre de legalizaciones
 
-La legalización es un flujo independiente de rebates y usa exclusivamente su plantilla institucional. Sus borradores y soportes se conservan de manera local sólo mientras se diligencia la salida. Use **Finalizar salida y descargar Excel** cuando termine: se descarga el Excel de esa legalización y se elimina el borrador, sus facturas y soportes locales; nunca se mezcla con los datos ni los archivos de rebates.
+La legalización usa un Apps Script y una hoja de cálculo independientes de rebates: **LEGALIZACIONES DE GASTOS**. Cada salida genera una pestaña propia asociada al ID de especialista firmado por Firebase y guarda sus soportes en `Facturas/<especialista>/<salida>/` del repositorio configurado. Al finalizar se solicitan `Legalizaciones.xlsx` y `Facturas.pdf`; después de la confirmación se eliminan la pestaña, el registro y todos sus archivos. La instalación del Apps Script, el token de GitHub y la URL que debe configurarse en el frontend están documentados en [Legalizaciones de gastos](docs/LEGALIZACIONES_DE_GASTOS.md).
