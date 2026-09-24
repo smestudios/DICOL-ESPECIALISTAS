@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="assets/styles/site.css" />
     <script type="module" src="assets/scripts/auth/auth-guard.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-    <script src="https://unpkg.com/docx@9.5.1/dist/index.iife.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   </head>
   <body class="app-body expense-window-body">
@@ -225,6 +225,9 @@
               >
                 Adjuntar PDF / XML DIAN
               </button>
+              <button class="cufe-button cufe-button--secondary" type="button" data-action="choose-cash-receipt">
+                Adjuntar recibo de caja firmado
+              </button>
             </div>
             <input
               id="invoicePhoto"
@@ -239,6 +242,7 @@
               accept="application/pdf,.pdf,application/xml,text/xml,.xml"
               hidden
             />
+            <input id="cashReceipt" type="file" accept="image/*,application/pdf,.pdf" hidden />
             <div class="cufe-support-preview" id="supportPreview" hidden>
               <img
                 id="supportPreviewImage"
@@ -301,9 +305,8 @@
                   step="0.01"
               /></label>
               <p class="cufe-field-help cufe-form__full">
-                El soporte seleccionado se guardará con la factura y se usará
-                para crear el Word en el mismo orden cronológico del Excel
-                durante esta sesión.
+                Las facturas y soportes se guardan en la salida actual. Si el
+                soporte principal es una foto, adjunta también el recibo de caja firmado.
               </p>
             </div>
             <div class="cufe-inline-actions">
@@ -336,28 +339,21 @@
               type="button"
               data-action="download-excel"
             >
-              Exportar Excel
+              Descargar Legalizaciones.xlsx
             </button>
             <button
               class="cufe-button cufe-button--primary"
               type="button"
               data-action="download-supports"
             >
-              Descargar soportes Word
-            </button>
-            <button
-              class="cufe-button cufe-button--secondary"
-              type="button"
-              data-action="print-pdf"
-            >
-              Descargar PDF
+              Descargar Facturas.pdf
             </button>
             <button
               class="cufe-button cufe-button--danger"
               type="button"
               data-action="finalize-expense"
             >
-              Finalizar salida y descargar Excel
+              Finalizar salida
             </button>
           </div>
         </div>
@@ -365,9 +361,7 @@
       </div>
     </section>
 
-    <section class="print-sheet" id="printSheet" aria-hidden="true"></section>
-
-    <script src="assets/scripts/modules/legalizacion-gastos.js"></script>
+    <script type="module" src="assets/scripts/modules/legalizacion-gastos.js"></script>
       <script type="module" src="assets/scripts/auth/logout.js"></script>
   </body>
 </html>
