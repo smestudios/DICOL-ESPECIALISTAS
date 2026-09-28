@@ -16,6 +16,8 @@ Esta integración es independiente de rebates. El archivo `appscript/Legalizacio
 5. En **Implementar → Nueva implementación → Aplicación web**, elija *Ejecutar como: yo* y *Quién tiene acceso: cualquier usuario*; la aplicación valida siempre el token Firebase enviado por el navegador. Copie la URL que termina en `/exec`.
 6. Pegue esa URL en `legalizacionesAppsScriptUrl` de `assets/scripts/config/dicol-config.js` y publique la página.
 
+> Después de cambiar `LegalizacionesDeGastos.gs`, vaya a **Implementar → Gestionar implementaciones → Editar**, seleccione **Nueva versión** y publique. Mantenga la misma implementación para conservar la URL `/exec`; de lo contrario, la página seguirá llamando el código anterior aunque el archivo del editor se haya guardado.
+
 > Un especialista sólo puede leer, editar o borrar las salidas cuyo `especialista_id` coincide con el `specialistId` firmado en sus custom claims Firebase. El navegador nunca elige ese ID.
 
 ## 2. Carpeta `Facturas` de GitHub
