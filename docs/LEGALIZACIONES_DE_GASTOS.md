@@ -29,7 +29,8 @@ El script crea automáticamente rutas como `Facturas/<id-especialista>/<id-salid
 
 ## Flujo final
 
-- `Legalizaciones.xlsx` se rellena desde la plantilla institucional existente y mantiene su estructura; las filas se ordenan por fecha.
-- `Facturas.pdf` usa exactamente el mismo orden. Las facturas PDF se copian como páginas PDF, por lo que el texto sigue seleccionable; las fotos y los recibos firmados se incrustan como imagen.
-- Para cada foto de factura, la interfaz exige un recibo de caja firmado. En el PDF se inserta inmediatamente después de su foto.
+- `Legalizaciones.xlsx` se genera desde la plantilla institucional sin modificarla. Sólo deja las filas de factura que realmente se diligenciaron, mueve los totales inmediatamente después y agrega filas con el mismo formato cuando la salida tiene más facturas que las disponibles en la guía. Las filas se ordenan por fecha.
+- `Facturas.pdf` usa exactamente el mismo orden. Las facturas PDF se copian como páginas PDF, por lo que su texto sigue seleccionable y copiable, sin añadirles una portada ni modificar su contenido.
+- Cada foto de factura recibe en la parte superior de su página un resumen de texto seleccionable con NIT, número de factura, valor total, proveedor, fecha, medio de pago, concepto y descripción. El recibo firmado se inserta inmediatamente después de su foto, sin duplicar el resumen.
+- Para cada foto de factura, la interfaz exige un recibo de caja firmado. Se admiten imágenes JPG o PNG y documentos PDF.
 - Al pulsar **Finalizar salida** se solicitan los dos documentos antes de confirmar el borrado. Después de la confirmación se borran la pestaña de esa salida, las filas de control y todos sus archivos GitHub.
