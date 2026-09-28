@@ -39,8 +39,8 @@
           <div class="eyebrow">Legalización de gastos</div>
           <h1>Legalización de gastos</h1>
           <p>
-            Registra las salidas y sus facturas. Adjunta fotos, PDF o XML de DIAN;
-            las imágenes se procesan con OCR local.
+            Registra las salidas y sus facturas. Adjunta fotos o PDF de DIAN;
+            las fotos llevarán un resumen copiable en el PDF final.
           </p>
         </div>
       </section>
@@ -207,7 +207,7 @@
             <h3>📎 Adjuntar soporte</h3>
             <p class="cufe-notice">
               Elige cómo cargar el soporte: toma una foto y la página aplicará
-              un filtro de documento, o adjunta el PDF o XML que descargaste
+              un filtro de documento, o adjunta el PDF que descargaste
               desde DIAN.
             </p>
             <div class="cufe-inline-actions">
@@ -223,7 +223,7 @@
                 type="button"
                 data-action="choose-pdf"
               >
-                Adjuntar PDF / XML DIAN
+                Adjuntar PDF DIAN
               </button>
               <button class="cufe-button cufe-button--secondary" type="button" data-action="choose-cash-receipt">
                 Adjuntar recibo de caja firmado
@@ -239,7 +239,7 @@
             <input
               id="invoiceSupport"
               type="file"
-              accept="application/pdf,.pdf,application/xml,text/xml,.xml"
+              accept="application/pdf,.pdf"
               hidden
             />
             <input id="cashReceipt" type="file" accept="image/*,application/pdf,.pdf" hidden />
