@@ -1121,3 +1121,19 @@ footer h2 {
 .nav-actions { display:flex; align-items:center; gap:8px; }
 .nav-button--logout { border-color:#a34848; color:#ffd0d0; }
 .nav-button--logout:hover, .nav-button--logout:focus-visible { border-color:#f27171; background:#401a1a; }
+
+.cufe-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.cufe-button--support-pending {
+  color: #4b5563;
+  background: #e5e7eb;
+}
+
+.cufe-button--support-ready {
+  color: #166534;
+  background: #dcfce7;
+}
