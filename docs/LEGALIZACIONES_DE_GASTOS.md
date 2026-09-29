@@ -20,6 +20,12 @@ Esta integración es independiente de rebates. El archivo `appscript/Legalizacio
 
 > Un especialista sólo puede leer, editar o borrar las salidas cuyo `especialista_id` coincide con el `specialistId` firmado en sus custom claims Firebase. El navegador nunca elige ese ID.
 
+### Dónde se guardan las salidas
+
+Cada vez que se pulsa **Guardar salida**, Apps Script crea o actualiza una fila en la pestaña **`Salidas`** del archivo de Google Sheets al que está vinculado el proyecto de Apps Script publicado. Las facturas de esa salida se guardan en la pestaña `SAL_…` indicada por la columna `hoja`. No se guardan en el repositorio de esta página ni en los archivos de `EJEMPLO TERMINADO`.
+
+La página verifica la salida con una lectura inmediata después de guardarla. Si no puede encontrarla, muestra un error en pantalla y no afirma que fue guardada. Si el mensaje indica que no se pudo verificar, confirme que la URL `/exec` configurada corresponde al Apps Script vinculado a la hoja **LEGALIZACIONES DE GASTOS**, y publique una nueva versión.
+
 ## 2. Carpeta `Facturas` de GitHub
 
 El script crea automáticamente rutas como `Facturas/<id-especialista>/<id-salida>/<id-factura>/`. No cree ni suba archivos manualmente: GitHub crea las carpetas virtuales al recibir el primer archivo y el script elimina todos los archivos de esa salida al finalizarla.

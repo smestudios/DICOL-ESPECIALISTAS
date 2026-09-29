@@ -3,8 +3,8 @@ import { DICOL_CONFIG } from '../config/dicol-config.js';
 const MAX_SUPPORT_BYTES = 10 * 1024 * 1024;
 const TEMPLATE_URL = 'assets/templates/S-CON-FO-02.6%20LEGALIZACION%20DE%20GASTOS.%20v%202.0.xlsx';
 const $ = (selector) => document.querySelector(selector);
-const state = { expenses: [], activeId: null, editingId: null, pendingSupport: null, pendingReceipt: null, session: null, busyCount: 0 };
-const elements = Object.fromEntries(['expenseModal','detailModal','expenseModalTitle','expenseForm','expenseName','expenseOwner','expenseIdentification','expenseRole','expenseCostCenter','expenseRoute','expenseLegalizationType','expenseAdvance','expenseDate','expenseDestination','expenseStatus','expenseNotes','expenseList','search','saveStatus','detailTitle','detailMeta','invoiceCufe','invoiceDate','invoiceNumber','invoiceNit','invoiceSupplier','invoicePayment','invoiceConcept','invoiceDescription','invoiceAmount','invoiceSupport','invoicePhoto','cashReceipt','supportPreview','supportPreviewImage','supportStatus','invoiceTableWrap','busyModal','busyMessage'].map((id) => [id, $(`#${id}`)]));
+const state = { expenses: [], activeId: null, editingId: null, pendingSupport: null, pendingReceipt: null, session: null, busyCount: 0, noticeTimer: null };
+const elements = Object.fromEntries(['expenseModal','detailModal','expenseModalTitle','expenseForm','expenseName','expenseOwner','expenseIdentification','expenseRole','expenseCostCenter','expenseRoute','expenseLegalizationType','expenseAdvance','expenseDate','expenseDestination','expenseStatus','expenseNotes','expenseList','search','saveStatus','appNotice','detailTitle','detailMeta','invoiceCufe','invoiceDate','invoiceNumber','invoiceNit','invoiceSupplier','invoicePayment','invoiceConcept','invoiceDescription','invoiceAmount','invoiceSupport','invoicePhoto','cashReceipt','supportPreview','supportPreviewImage','supportStatus','invoiceTableWrap','busyModal','busyMessage'].map((id) => [id, $(`#${id}`)]));
 
 function today() { return new Date().toISOString().slice(0, 10); }
 function createId(prefix = 'SAL') { return `${prefix}-${crypto.randomUUID()}`.toUpperCase(); }
@@ -15,7 +15,7 @@ function orderedInvoices(expense) { return [...(expense.invoices || [])].sort((a
 function totalExpense(expense) { return (expense.invoices || []).reduce((sum, item) => sum + Number(item.amount || 0), 0); }
 function openModal(modal) { modal.classList.add('is-open'); modal.setAttribute('aria-hidden', 'false'); }
 function closeModal(modal) { modal.classList.remove('is-open'); modal.setAttribute('aria-hidden', 'true'); }
-function status(message) { elements.saveStatus.textContent = message; }
+function status(message, isError = false) { elements.saveStatus.textContent = message; elements.appNotice.textContent = message; elements.appNotice.classList.toggle('cufe-toast--error', isError); elements.appNotice.hidden = false; clearTimeout(state.noticeTimer); state.noticeTimer=setTimeout(()=>{elements.appNotice.hidden=true;},6000); }
 function setBusy(message) { state.busyCount += 1; elements.busyMessage.textContent = message; elements.busyModal.classList.add('is-open'); elements.busyModal.setAttribute('aria-hidden', 'false'); }
 function clearBusy() { state.busyCount = Math.max(0, state.busyCount - 1); if (state.busyCount) return; elements.busyModal.classList.remove('is-open'); elements.busyModal.setAttribute('aria-hidden', 'true'); }
 async function duringUpdate(message, action) { setBusy(message); try { return await action(); } finally { clearBusy(); } }
@@ -37,6 +37,7 @@ async function loadExpenses() {
   state.activeId = state.expenses[0]?.id || null;
   render();
 }
+async function verifySavedExpense(id) { const data=await api('listExpenses'); const expenses=data.expenses||[], saved=expenses.find((expense)=>expense.id===id); if(!saved) throw new Error('La salida no pudo verificarse después de guardarla. Revisa la implementación de Apps Script y vuelve a intentarlo.'); state.expenses=expenses; return saved; }
 
 function showExpenseModal(id = null) {
   state.editingId = id;
@@ -49,7 +50,7 @@ function showExpenseModal(id = null) {
 async function saveExpense() {
   const name = elements.expenseName.value.trim(); if (!name) return elements.expenseName.focus();
   const data = { id: state.editingId || createId(), name, owner:elements.expenseOwner.value.trim(), identification:elements.expenseIdentification.value.trim(), role:elements.expenseRole.value.trim(), costCenter:elements.expenseCostCenter.value.trim(), route:elements.expenseRoute.value.trim(), legalizationType:elements.expenseLegalizationType.value, advance:Number(elements.expenseAdvance.value)||0, date:elements.expenseDate.value||today(), destination:elements.expenseDestination.value.trim(), status:elements.expenseStatus.value, notes:elements.expenseNotes.value.trim() };
-  try { const result = await duringUpdate('Guardando los cambios de la salida…', () => api('saveExpense', data)); const index = state.expenses.findIndex((item) => item.id === result.id); if (index >= 0) state.expenses[index] = { ...state.expenses[index], ...result }; else state.expenses.unshift({ ...result, invoices:[] }); state.activeId = result.id; closeModal(elements.expenseModal); render(); status('Salida actualizada correctamente.'); } catch (error) { status(error.message); }
+  try { const result = await duringUpdate('Guardando y verificando la salida…', async () => { const saved=await api('saveExpense', data); return verifySavedExpense(saved.id); }); state.activeId = result.id; closeModal(elements.expenseModal); render(); status(`Salida “${result.name}” guardada y verificada correctamente.`); } catch (error) { status(error.message, true); }
 }
 async function deleteExpense(id) { const item = state.expenses.find((expense) => expense.id === id); if (!item || !confirm(`¿Eliminar la salida "${item.name}" y todos sus archivos?`)) return; try { await api('deleteExpense', {}, id); state.expenses = state.expenses.filter((expense) => expense.id !== id); state.activeId = state.expenses[0]?.id || null; render(); status('Salida eliminada y archivos borrados.'); } catch (error) { status(error.message); } }
 function renderExpenseList() { const query = elements.search.value.toLowerCase(); const list = state.expenses.filter((item) => `${item.name} ${item.owner} ${item.destination}`.toLowerCase().includes(query)); elements.expenseList.innerHTML = list.length ? list.map((item) => `<article class="cufe-card"><div class="cufe-card__top"><h2>${escapeHtml(item.name)}</h2><span class="cufe-badge">${escapeHtml(item.status)}</span></div><p class="cufe-meta">📅 ${escapeHtml(item.date || '-')}<br>👤 ${escapeHtml(item.owner || '-')}<br>📍 ${escapeHtml(item.destination || '-')}</p><strong class="cufe-money">${currency(totalExpense(item))}</strong><p class="cufe-meta">🧾 ${(item.invoices || []).length} factura(s)</p><div class="cufe-card__actions"><button class="cufe-button cufe-button--primary" data-open="${item.id}">Abrir salida</button><button class="cufe-button cufe-button--secondary" data-edit="${item.id}">Editar</button><button class="cufe-button cufe-button--danger" data-delete="${item.id}">Eliminar</button></div></article>`).join('') : '<div class="cufe-empty"><h2>No hay salidas creadas</h2><p>Crea una salida para comenzar.</p></div>'; }
