@@ -104,8 +104,9 @@
             >Responsable<input
               id="expenseOwner"
               type="text"
-              placeholder="Nombre del responsable"
-          /></label>
+              readonly
+              aria-describedby="expenseOwnerHelp"
+          /><small class="cufe-field-help" id="expenseOwnerHelp">Se asigna automáticamente desde el perfil con el que iniciaste sesión.</small></label>
           <label
             >Identificación<input
               id="expenseIdentification"
@@ -227,9 +228,6 @@
               >
                 Adjuntar PDF DIAN
               </button>
-              <button class="cufe-button cufe-button--secondary" type="button" data-action="choose-cash-receipt">
-                Adjuntar recibo de caja firmado
-              </button>
             </div>
             <input
               id="invoicePhoto"
@@ -307,8 +305,8 @@
                   step="0.01"
               /></label>
               <p class="cufe-field-help cufe-form__full">
-                Las facturas y soportes se guardan en la salida actual. Si el
-                soporte principal es una foto, adjunta también el recibo de caja firmado.
+                Las facturas y soportes se guardan en la salida actual. Al tomar una foto,
+                indica si requiere soporte firmado; podrás adjuntarlo después desde la lista.
               </p>
             </div>
             <div class="cufe-inline-actions">

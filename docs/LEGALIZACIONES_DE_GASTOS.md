@@ -22,7 +22,7 @@ Esta integración es independiente de rebates. El archivo `appscript/Legalizacio
 
 ### Dónde se guardan las salidas
 
-Cada vez que se pulsa **Guardar salida**, Apps Script crea o actualiza una fila en la pestaña **`Salidas`** del archivo de Google Sheets al que está vinculado el proyecto de Apps Script publicado. Las facturas de esa salida se guardan en la pestaña `SAL_…` indicada por la columna `hoja`. No se guardan en el repositorio de esta página ni en los archivos de `EJEMPLO TERMINADO`.
+Cada salida nueva asigna automáticamente como responsable el nombre del perfil Firebase con el que se inició sesión; el campo no se diligencia manualmente. Cada vez que se pulsa **Guardar salida**, Apps Script crea o actualiza una fila en la pestaña **`Salidas`** del archivo de Google Sheets al que está vinculado el proyecto de Apps Script publicado. Las facturas de esa salida se guardan en la pestaña `SAL_…` indicada por la columna `hoja`. No se guardan en el repositorio de esta página ni en los archivos de `EJEMPLO TERMINADO`.
 
 La página verifica la salida con una lectura inmediata después de guardarla. Si no puede encontrarla, muestra un error en pantalla y no afirma que fue guardada. Si el mensaje indica que no se pudo verificar, confirme que la URL `/exec` configurada corresponde al Apps Script vinculado a la hoja **LEGALIZACIONES DE GASTOS**, y publique una nueva versión.
 
@@ -39,6 +39,6 @@ El script crea automáticamente rutas como `Facturas/<id-especialista>/<id-salid
 
 - `Legalizaciones.xlsx` se genera desde la plantilla institucional sin modificarla. Sólo deja las filas de factura que realmente se diligenciaron, mueve los totales inmediatamente después y agrega filas con el mismo formato cuando la salida tiene más facturas que las disponibles en la guía. Las filas se ordenan por fecha.
 - `Facturas.pdf` usa exactamente el mismo orden. Las facturas PDF se copian como páginas PDF, por lo que su texto sigue seleccionable y copiable, sin añadirles una portada ni modificar su contenido.
-- Cada foto de factura recibe en la parte superior de su página un resumen de texto seleccionable con NIT, número de factura, valor total, proveedor, fecha, medio de pago, concepto y descripción. El recibo firmado se inserta inmediatamente después de su foto, sin duplicar el resumen.
-- Para cada foto de factura, la interfaz exige un recibo de caja firmado. Se admiten imágenes JPG o PNG y documentos PDF.
+- Cada foto de factura recibe en la parte superior de su página un resumen de texto seleccionable con NIT, número de factura, valor total, proveedor, fecha, medio de pago, concepto y descripción. Si tiene soporte firmado, éste se inserta inmediatamente después de su foto, sin duplicar el resumen.
+- Al tomar una foto, la persona indica si requiere soporte firmado. Sólo las que lo requieren muestran el botón **+ Soporte** junto a **Eliminar**: queda gris mientras está pendiente y verde cuando el recibo firmado ya fue adjuntado. Las facturas con recibo contable válido pueden responder que no y no muestran el botón.
 - Al pulsar **Finalizar salida** se solicitan los dos documentos antes de confirmar el borrado. Después de la confirmación se borran la pestaña de esa salida, las filas de control y todos sus archivos GitHub.
