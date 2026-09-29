@@ -18,6 +18,8 @@ Esta integración es independiente de rebates. El archivo `appscript/Legalizacio
 
 > Después de cambiar `LegalizacionesDeGastos.gs`, vaya a **Implementar → Gestionar implementaciones → Editar**, seleccione **Nueva versión** y publique. Mantenga la misma implementación para conservar la URL `/exec`; de lo contrario, la página seguirá llamando el código anterior aunque el archivo del editor se haya guardado.
 
+> **Importante para Facturas.pdf:** al actualizar el frontend también debe publicar la nueva versión de `LegalizacionesDeGastos.gs` en esa misma implementación. La página verifica la versión antes de descargar los soportes y avisará si la URL `/exec` sigue ejecutando código anterior.
+
 > Un especialista sólo puede leer, editar o borrar las salidas cuyo `especialista_id` coincide con el `specialistId` firmado en sus custom claims Firebase. El navegador nunca elige ese ID.
 
 ### Dónde se guardan las salidas
