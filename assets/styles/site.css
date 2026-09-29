@@ -1121,3 +1121,101 @@ footer h2 {
 .nav-actions { display:flex; align-items:center; gap:8px; }
 .nav-button--logout { border-color:#a34848; color:#ffd0d0; }
 .nav-button--logout:hover, .nav-button--logout:focus-visible { border-color:#f27171; background:#401a1a; }
+
+.cufe-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.cufe-button--support-pending {
+  color: #4b5563;
+  background: #e5e7eb;
+}
+
+.cufe-button--support-ready {
+  color: #166534;
+  background: #dcfce7;
+}
+
+.cufe-step {
+  margin: 0 0 4px;
+  color: var(--cufe-accent);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.cufe-source-options {
+  display: grid;
+  gap: 10px;
+  margin: 16px 0 4px;
+}
+
+.cufe-source-option {
+  display: grid;
+  gap: 3px;
+  padding: 14px;
+  border: 1px solid #bfdbfe;
+  border-radius: 12px;
+  color: var(--cufe-text);
+  text-align: left;
+  cursor: pointer;
+  background: #fff;
+}
+
+.cufe-source-option:hover,
+.cufe-source-option:focus-visible {
+  border-color: var(--cufe-blue);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, .15);
+}
+
+.cufe-source-option strong { color: var(--cufe-blue); }
+.cufe-source-option span { color: var(--cufe-muted); font-size: 13px; }
+
+.cufe-requirement {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 18px;
+  padding: 13px;
+  border: 1px solid var(--cufe-line);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.cufe-requirement strong,
+.cufe-requirement span { display: block; }
+.cufe-requirement span { margin-top: 3px; color: var(--cufe-muted); font-size: 12px; }
+
+.cufe-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: none;
+  min-width: 104px;
+  padding: 5px 9px 5px 5px;
+  border: 0;
+  border-radius: 999px;
+  color: #4b5563;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  background: #e5e7eb;
+}
+
+.cufe-switch__knob {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .22);
+  transition: transform .18s ease;
+}
+
+.cufe-switch.is-active { color: #fff; background: #16a34a; }
+.cufe-switch.is-active { padding-left: 9px; padding-right: 5px; flex-direction: row-reverse; }
