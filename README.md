@@ -63,7 +63,7 @@ El módulo usa la hoja institucional `S-CON-FO-02` sin modificar el archivo de p
 
 Los totales se calculan a partir de las categorías del formato: **Peajes y Parqueadero**, **Hotel**, **Alimentación** y **Otros**. El archivo exportado conserva la plantilla y deja los valores de total, valor a legalizar y valor a reintegrar calculados; la persona responsable debe revisar el resultado antes de radicarlo.
 
-El módulo admite PDF y fotos JPG o PNG. Al generar `Facturas.pdf`, los PDF se incorporan sin alteración para conservar su texto seleccionable. Cada foto principal incorpora arriba un resumen seleccionable y copiable con NIT, número de factura, valor total y los demás datos registrados; el recibo firmado se conserva después de la foto sin repetir ese resumen.
+El módulo admite PDF y fotos JPG o PNG. Al generar `Facturas.pdf`, los PDF se incorporan sin alteración para conservar su texto seleccionable. Cada foto principal incorpora arriba un resumen seleccionable y copiable con NIT, número de factura, valor total y los demás datos registrados. Al tomar la foto se decide si requiere soporte firmado; cuando corresponda, el recibo firmado se adjunta después desde el botón **+ Soporte** de esa factura y se conserva después de la foto sin repetir el resumen.
 
 ## Organización de plantillas y rebates
 
