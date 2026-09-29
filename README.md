@@ -59,11 +59,11 @@ La aplicación no intenta consultar, automatizar ni eludir controles de la DIAN 
 
 ## Diligenciamiento del formato de legalización
 
-El módulo usa la segunda hoja del formato institucional (`S-CON-FO-02.6`), no una hoja nueva. A partir del ejemplo entregado se diligencian los campos de la salida (responsable, identificación, cargo, ciudad/fecha, centro de costo, tipo y valor de fondo/anticipo) y cada factura en las columnas **Descripción C.O., Fecha, Medio de pago, No. Factura, NIT, Nombre proveedor, Concepto y Valor**.
+El módulo usa la hoja institucional `S-CON-FO-02` sin modificar el archivo de plantilla. A partir del ejemplo se diligencian los campos de la salida (responsable, identificación, cargo, ciudad/fecha, centro de costo, tipo y valor de fondo/anticipo) y las facturas en las columnas **Descripción C.O., Fecha, Medio de pago, No. Factura, NIT, Nombre proveedor, Concepto y Valor**. El archivo descargado conserva únicamente las filas realmente diligenciadas, desplaza los totales justo después de ellas y crea más filas con el formato de la plantilla cuando son necesarias.
 
 Los totales se calculan a partir de las categorías del formato: **Peajes y Parqueadero**, **Hotel**, **Alimentación** y **Otros**. El archivo exportado conserva la plantilla y deja los valores de total, valor a legalizar y valor a reintegrar calculados; la persona responsable debe revisar el resultado antes de radicarlo.
 
-Para extracción, el navegador prioriza el texto contenido en PDF y XML. Las fotos pasan por el filtro de documento existente y OCR en español/inglés; ningún campo detectado se guarda sin que el usuario pueda revisarlo. Los archivos de ejemplo muestran que varios PDF son escaneos, por lo que el OCR es el respaldo necesario cuando no existe texto seleccionable.
+El módulo admite PDF y fotos JPG o PNG. Al generar `Facturas.pdf`, los PDF se incorporan sin alteración para conservar su texto seleccionable. Cada foto principal incorpora arriba un resumen seleccionable y copiable con NIT, número de factura, valor total y los demás datos registrados; el recibo firmado se conserva después de la foto sin repetir ese resumen.
 
 ## Organización de plantillas y rebates
 

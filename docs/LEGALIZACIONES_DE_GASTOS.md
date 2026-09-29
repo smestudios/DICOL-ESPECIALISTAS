@@ -16,7 +16,15 @@ Esta integración es independiente de rebates. El archivo `appscript/Legalizacio
 5. En **Implementar → Nueva implementación → Aplicación web**, elija *Ejecutar como: yo* y *Quién tiene acceso: cualquier usuario*; la aplicación valida siempre el token Firebase enviado por el navegador. Copie la URL que termina en `/exec`.
 6. Pegue esa URL en `legalizacionesAppsScriptUrl` de `assets/scripts/config/dicol-config.js` y publique la página.
 
+> Después de cambiar `LegalizacionesDeGastos.gs`, vaya a **Implementar → Gestionar implementaciones → Editar**, seleccione **Nueva versión** y publique. Mantenga la misma implementación para conservar la URL `/exec`; de lo contrario, la página seguirá llamando el código anterior aunque el archivo del editor se haya guardado.
+
 > Un especialista sólo puede leer, editar o borrar las salidas cuyo `especialista_id` coincide con el `specialistId` firmado en sus custom claims Firebase. El navegador nunca elige ese ID.
+
+### Dónde se guardan las salidas
+
+Cada vez que se pulsa **Guardar salida**, Apps Script crea o actualiza una fila en la pestaña **`Salidas`** del archivo de Google Sheets al que está vinculado el proyecto de Apps Script publicado. Las facturas de esa salida se guardan en la pestaña `SAL_…` indicada por la columna `hoja`. No se guardan en el repositorio de esta página ni en los archivos de `EJEMPLO TERMINADO`.
+
+La página verifica la salida con una lectura inmediata después de guardarla. Si no puede encontrarla, muestra un error en pantalla y no afirma que fue guardada. Si el mensaje indica que no se pudo verificar, confirme que la URL `/exec` configurada corresponde al Apps Script vinculado a la hoja **LEGALIZACIONES DE GASTOS**, y publique una nueva versión.
 
 ## 2. Carpeta `Facturas` de GitHub
 
@@ -29,7 +37,8 @@ El script crea automáticamente rutas como `Facturas/<id-especialista>/<id-salid
 
 ## Flujo final
 
-- `Legalizaciones.xlsx` se rellena desde la plantilla institucional existente y mantiene su estructura; las filas se ordenan por fecha.
-- `Facturas.pdf` usa exactamente el mismo orden. Las facturas PDF se copian como páginas PDF, por lo que el texto sigue seleccionable; las fotos y los recibos firmados se incrustan como imagen.
-- Para cada foto de factura, la interfaz exige un recibo de caja firmado. En el PDF se inserta inmediatamente después de su foto.
+- `Legalizaciones.xlsx` se genera desde la plantilla institucional sin modificarla. Sólo deja las filas de factura que realmente se diligenciaron, mueve los totales inmediatamente después y agrega filas con el mismo formato cuando la salida tiene más facturas que las disponibles en la guía. Las filas se ordenan por fecha.
+- `Facturas.pdf` usa exactamente el mismo orden. Las facturas PDF se copian como páginas PDF, por lo que su texto sigue seleccionable y copiable, sin añadirles una portada ni modificar su contenido.
+- Cada foto de factura recibe en la parte superior de su página un resumen de texto seleccionable con NIT, número de factura, valor total, proveedor, fecha, medio de pago, concepto y descripción. El recibo firmado se inserta inmediatamente después de su foto, sin duplicar el resumen.
+- Para cada foto de factura, la interfaz exige un recibo de caja firmado. Se admiten imágenes JPG o PNG y documentos PDF.
 - Al pulsar **Finalizar salida** se solicitan los dos documentos antes de confirmar el borrado. Después de la confirmación se borran la pestaña de esa salida, las filas de control y todos sus archivos GitHub.
