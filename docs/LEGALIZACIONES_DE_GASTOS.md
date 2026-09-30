@@ -26,6 +26,12 @@ Esta integración es independiente de rebates. El archivo `appscript/Legalizacio
 
 > **Relación inalterable de soportes:** cada factura tiene su propio ID `FAC-…` y cada archivo tiene además un ID estable (`SOP-…`, `REC-…` o `RUT-…`). La ruta GitHub se construye con ambos IDs, no con el nombre del archivo. Al seleccionar de nuevo un soporte o RUT, se reemplaza exactamente ese mismo adjunto; el PDF sólo lee las rutas registradas en la fila de esa factura de Sheets, por lo que nunca toma archivos de otra factura ni archivos antiguos con nombres parecidos. Durante la creación, el navegador descarga y valida cada archivo individualmente; si GitHub, Apps Script o un archivo fallan, el mensaje identifica la factura y el documento concreto.
 
+> **Error `"sha" wasn't supplied` al cargar un soporte:** significa que ya existe un archivo con esa misma ruta en GitHub (normalmente porque una carga anterior terminó en GitHub pero no alcanzó a guardar la factura en Sheets). La versión actualizada del script consulta el SHA y actualiza el archivo de forma segura; publique una nueva versión de Apps Script antes de reintentar. No borre manualmente la carpeta de GitHub: vuelva a cargar el mismo documento y el script la reconciliará.
+
+> **Comprobación de Facturas.pdf:** antes de descargar, confirme que cada foto tenga su archivo principal y que los soportes firmados obligatorios estén en verde. El generador descarga los archivos autenticado desde Apps Script, no desde enlaces públicos de GitHub, y los ordena por fecha; por cada foto el orden es foto, soporte firmado y RUT. Si aparece un error, el mensaje indica la factura y el archivo concreto que no se pudo leer.
+
+> **Relación inalterable de soportes:** cada factura tiene su propio ID `FAC-…` y cada archivo tiene además un ID estable (`SOP-…`, `REC-…` o `RUT-…`). La ruta GitHub se construye con ambos IDs, no con el nombre del archivo. Al seleccionar de nuevo un soporte o RUT, se reemplaza exactamente ese mismo adjunto; el PDF sólo lee las rutas registradas en la fila de esa factura de Sheets, por lo que nunca toma archivos de otra factura ni archivos antiguos con nombres parecidos. Antes de crear el PDF, Apps Script verifica que puede leer cada ruta autenticada desde GitHub y muestra qué factura/documento falló si hay un permiso, ruta o archivo inválido.
+
 > Un especialista sólo puede leer, editar o borrar las salidas cuyo `especialista_id` coincide con el `specialistId` firmado en sus custom claims Firebase. El navegador nunca elige ese ID.
 
 ### Dónde se guardan las salidas
