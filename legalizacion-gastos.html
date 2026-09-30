@@ -6,8 +6,8 @@
     <title>DICOL | Legalización de Gastos</title>
     <link rel="stylesheet" href="assets/styles/site.css" />
     <script type="module" src="assets/scripts/auth/auth-guard.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-    <script src="https://unpkg.com/docx@9.5.1/dist/index.iife.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   </head>
   <body class="app-body expense-window-body">
@@ -32,6 +32,8 @@
         >Formato base</a
       ><button class="nav-button nav-button--logout" data-logout type="button">Cerrar sesión</button>
     </nav>
+
+    <div class="cufe-toast" id="appNotice" role="status" aria-live="polite" hidden></div>
 
     <main class="cufe-app" id="salidas">
       <section class="cufe-hero">
@@ -102,8 +104,9 @@
             >Responsable<input
               id="expenseOwner"
               type="text"
-              placeholder="Nombre del responsable"
-          /></label>
+              readonly
+              aria-describedby="expenseOwnerHelp"
+          /><small class="cufe-field-help" id="expenseOwnerHelp">Se asigna automáticamente desde el perfil con el que iniciaste sesión.</small></label>
           <label
             >Identificación<input
               id="expenseIdentification"
@@ -203,126 +206,61 @@
         </div>
 
         <div class="cufe-support-upload" id="documento">
-          <div class="cufe-scan-box">
-            <h3>📎 Adjuntar soporte</h3>
-            <p class="cufe-notice">
-              Elige cómo cargar el soporte: toma una foto y la página aplicará
-              un filtro de documento, o adjunta el PDF o XML que descargaste
-              desde DIAN.
-            </p>
-            <div class="cufe-inline-actions">
-              <button
-                class="cufe-button cufe-button--blue"
-                type="button"
-                data-action="take-photo"
-              >
-                Tomar foto
+          <section class="cufe-scan-box" aria-labelledby="invoiceSourceTitle">
+            <p class="cufe-step">Paso 1</p>
+            <h3 id="invoiceSourceTitle">¿Cómo vas a cargar la factura?</h3>
+            <p class="cufe-notice">Primero selecciona si vas a tomar una foto o si ya tienes un archivo PDF de la factura.</p>
+            <div class="cufe-source-options" role="group" aria-label="Tipo de archivo de factura">
+              <button class="cufe-source-option" type="button" data-action="take-photo">
+                <strong>Tomar foto</strong><span>Usa la cámara del dispositivo.</span>
               </button>
-              <button
-                class="cufe-button cufe-button--secondary"
-                type="button"
-                data-action="choose-pdf"
-              >
-                Adjuntar PDF / XML DIAN
+              <button class="cufe-source-option" type="button" data-action="choose-pdf">
+                <strong>Adjuntar archivo</strong><span>Selecciona una factura en PDF.</span>
               </button>
             </div>
-            <input
-              id="invoicePhoto"
-              type="file"
-              accept="image/*"
-              capture="environment"
-              hidden
-            />
-            <input
-              id="invoiceSupport"
-              type="file"
-              accept="application/pdf,.pdf,application/xml,text/xml,.xml"
-              hidden
-            />
-            <div class="cufe-support-preview" id="supportPreview" hidden>
-              <img
-                id="supportPreviewImage"
-                alt="Vista previa del soporte escaneado"
-                hidden
-              />
-              <p id="supportStatus"></p>
-              <button
-                class="cufe-button cufe-button--danger cufe-button--mini"
-                type="button"
-                data-action="remove-support"
-              >
-                Quitar soporte
-              </button>
-            </div>
-          </div>
+            <p class="cufe-field-help" id="invoiceSourceStatus">Aún no has seleccionado el tipo de factura.</p>
+            <input id="invoicePhoto" type="file" accept="image/*" capture="environment" hidden />
+            <input id="invoiceSupport" type="file" accept="application/pdf,.pdf" hidden />
+            <input id="cashReceipt" type="file" accept="image/*,application/pdf,.pdf" hidden />
 
-          <div class="cufe-scan-info">
-            <h3>Agregar factura manualmente</h3>
+            <div class="cufe-requirement" id="supportRequirement" hidden>
+              <div>
+                <strong>Soporte firmado</strong>
+                <span>Actívalo sólo si esta foto necesita la firma del jefe.</span>
+              </div>
+              <button class="cufe-switch" id="receiptRequirementToggle" type="button" role="switch" aria-checked="false" data-action="toggle-receipt-requirement">
+                <span class="cufe-switch__knob" aria-hidden="true"></span>
+                <span class="cufe-switch__label">Inactivo</span>
+              </button>
+            </div>
+
+            <div class="cufe-support-preview" id="supportPreview" hidden>
+              <img id="supportPreviewImage" alt="Vista previa del soporte escaneado" hidden />
+              <p id="supportStatus"></p>
+              <button class="cufe-button cufe-button--danger cufe-button--mini" type="button" data-action="remove-support">Quitar soporte</button>
+            </div>
+          </section>
+
+          <section class="cufe-scan-info" aria-labelledby="invoiceDataTitle">
+            <p class="cufe-step">Paso 2</p>
+            <h3 id="invoiceDataTitle">Datos de Factura</h3>
+            <p class="cufe-field-help">Completa los datos que se llevan al Excel de legalización.</p>
             <div class="cufe-form">
-              <label
-                >CUFE / Link<input
-                  id="invoiceCufe"
-                  type="text"
-                  placeholder="CUFE o referencia de la factura"
-              /></label>
+              <label class="cufe-form__full">Descripción C.O.<textarea id="invoiceDescription" rows="2" placeholder="Detalle del consumo o servicio según la factura"></textarea></label>
               <label>Fecha<input id="invoiceDate" type="date" /></label>
+              <label>Medio de pago<select id="invoicePayment"><option>Tarjeta Débito</option><option>Tarjeta Crédito</option><option>Consignación bancaria</option><option>Efectivo</option><option>Otro</option></select></label>
               <label>No. Factura<input id="invoiceNumber" type="text" /></label>
               <label>NIT<input id="invoiceNit" type="text" /></label>
-              <label>Proveedor<input id="invoiceSupplier" type="text" /></label>
-              <label
-                >Medio de pago<select id="invoicePayment">
-                  <option>Tarjeta Débito</option>
-                  <option>Tarjeta Crédito</option>
-                  <option>Consignación bancaria</option>
-                  <option>Efectivo</option>
-                  <option>Otro</option>
-                </select></label
-              >
-              <label
-                >Concepto<select id="invoiceConcept">
-                  <option>Alimentación</option>
-                  <option>Hotel</option>
-                  <option>Peajes y Parqueadero</option>
-                  <option>Otros</option>
-                </select></label
-              >
-              <label class="cufe-form__full"
-                >Descripción C.O.<textarea
-                  id="invoiceDescription"
-                  rows="2"
-                  placeholder="Detalle del consumo o servicio según la factura"
-                ></textarea>
-              </label>
-              <label
-                >Valor<input
-                  id="invoiceAmount"
-                  type="number"
-                  min="0"
-                  step="0.01"
-              /></label>
-              <p class="cufe-field-help cufe-form__full">
-                El soporte seleccionado se guardará con la factura y se usará
-                para crear el Word en el mismo orden cronológico del Excel
-                durante esta sesión.
-              </p>
+              <label class="cufe-form__full">Nombre proveedor<input id="invoiceSupplier" type="text" /></label>
+              <label>Concepto<select id="invoiceConcept"><option>Alimentación</option><option>Hotel</option><option>Peajes y Parqueadero</option><option>Otros</option></select></label>
+              <label>Valor<input id="invoiceAmount" type="number" min="0" step="0.01" /></label>
+              <p class="cufe-field-help cufe-form__full">El consecutivo <strong>#</strong> se asigna automáticamente al exportar el Excel.</p>
             </div>
             <div class="cufe-inline-actions">
-              <button
-                class="cufe-button cufe-button--primary"
-                type="button"
-                data-action="add-invoice"
-              >
-                + Agregar factura
-              </button>
-              <button
-                class="cufe-button cufe-button--secondary"
-                type="button"
-                data-action="clear-invoice"
-              >
-                Limpiar
-              </button>
+              <button class="cufe-button cufe-button--primary" type="button" data-action="add-invoice">+ Agregar factura</button>
+              <button class="cufe-button cufe-button--secondary" type="button" data-action="clear-invoice">Limpiar</button>
             </div>
-          </div>
+          </section>
         </div>
 
         <div class="cufe-toolbar cufe-toolbar--inside">
@@ -336,28 +274,21 @@
               type="button"
               data-action="download-excel"
             >
-              Exportar Excel
+              Descargar Legalizaciones.xlsx
             </button>
             <button
               class="cufe-button cufe-button--primary"
               type="button"
               data-action="download-supports"
             >
-              Descargar soportes Word
-            </button>
-            <button
-              class="cufe-button cufe-button--secondary"
-              type="button"
-              data-action="print-pdf"
-            >
-              Descargar PDF
+              Descargar Facturas.pdf
             </button>
             <button
               class="cufe-button cufe-button--danger"
               type="button"
               data-action="finalize-expense"
             >
-              Finalizar salida y descargar Excel
+              Finalizar salida
             </button>
           </div>
         </div>
@@ -365,9 +296,16 @@
       </div>
     </section>
 
-    <section class="print-sheet" id="printSheet" aria-hidden="true"></section>
+    <section class="cufe-busy" id="busyModal" aria-hidden="true" aria-live="assertive" role="status">
+      <div class="cufe-busy__card">
+        <span class="cufe-busy__spinner" aria-hidden="true"></span>
+        <h2>Actualizando salida</h2>
+        <p id="busyMessage">Guardando los cambios…</p>
+        <p class="cufe-busy__help">No cierres esta ventana hasta que finalice la actualización.</p>
+      </div>
+    </section>
 
-    <script src="assets/scripts/modules/legalizacion-gastos.js"></script>
+    <script type="module" src="assets/scripts/modules/legalizacion-gastos.js"></script>
       <script type="module" src="assets/scripts/auth/logout.js"></script>
   </body>
 </html>
