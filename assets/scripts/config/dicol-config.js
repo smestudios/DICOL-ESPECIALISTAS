@@ -6,5 +6,5 @@ export const DICOL_CONFIG = Object.freeze({
   apiVersion: "1.2",
   // URL /exec del proyecto independiente "LEGALIZACIONES DE GASTOS".
   legalizacionesAppsScriptUrl:
-    "https://script.google.com/macros/s/AKfycbylwmnOpqTWr08h9KzUppQL_kAAlFSPVeXQxbrB-L2SY3t_F9xP-iWBIqmAuXYXF9Dc3g/exec",
+    "https://script.google.com/macros/s/AKfycbydkFOAU-yiUujArmoRiHTav4tjMp0B3iCJamjm6FA_jjhuYp5POH4XMaq40n2O_-sB8w/exec",
 });
