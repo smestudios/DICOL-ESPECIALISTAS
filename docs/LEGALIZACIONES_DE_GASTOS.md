@@ -20,6 +20,10 @@ Esta integración es independiente de rebates. El archivo `appscript/Legalizacio
 
 > **Importante para Facturas.pdf:** al actualizar el frontend también debe publicar la nueva versión de `LegalizacionesDeGastos.gs` en esa misma implementación. La página verifica la versión antes de descargar los soportes y avisará si la URL `/exec` sigue ejecutando código anterior.
 
+> **Error `"sha" wasn't supplied` al cargar un soporte:** significa que ya existe un archivo con esa misma ruta en GitHub (normalmente porque una carga anterior terminó en GitHub pero no alcanzó a guardar la factura en Sheets). La versión actualizada del script consulta el SHA y actualiza el archivo de forma segura; publique una nueva versión de Apps Script antes de reintentar. No borre manualmente la carpeta de GitHub: vuelva a cargar el mismo documento y el script la reconciliará.
+
+> **Comprobación de Facturas.pdf:** antes de descargar, confirme que cada foto tenga su archivo principal y que los soportes firmados obligatorios estén en verde. El generador descarga los archivos autenticado desde Apps Script, no desde enlaces públicos de GitHub, y los ordena por fecha; por cada foto el orden es foto, soporte firmado y RUT. Si aparece un error, el mensaje indica la factura y el archivo concreto que no se pudo leer.
+
 > Un especialista sólo puede leer, editar o borrar las salidas cuyo `especialista_id` coincide con el `specialistId` firmado en sus custom claims Firebase. El navegador nunca elige ese ID.
 
 ### Dónde se guardan las salidas
