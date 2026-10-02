@@ -14,6 +14,8 @@ let importedPartners = [];
 let approvedPartners = new Set();
 
 const number = (value) => Number(value) || 0;
+// El Excel expresa 3 % como 0,03; la evaluación de Rebates lo guarda como 3.
+const rebatePercent = (value) => { const parsed = number(value); return parsed > 0 && parsed <= 1 ? parsed * 100 : parsed; };
 const money = (value) => CURRENCY.format(number(value));
 const normalize = (value) => String(value || "").toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Z0-9]/g, "");
 const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[character]);
@@ -55,14 +57,14 @@ function parseSheet(sheet, sheetName) {
   const columns = {
     name: find("ALIADO"), salesGoal: find("META VENTAS"), sales: find("RESUL. VENTAS"), equipment: find("FAC. VENTA DRONES"),
     smallGoal: find("META DEMOS P"), small: find("RESUL. DEMOS P"), largeGoal: find("META DEMOS G"), large: find("RESUL. DEMOS G"),
-    pilotsGoal: find("META CERTIF. PILOTOS"), pilots: find("RESUL. CERTIF. PILOTOS"), parts: find("RESUL. COMP. REFAC"),
+    pilotsGoal: find("META CERTIF. PILOTOS"), pilots: find("RESUL. CERTIF. PILOTOS"), parts: find("RESUL. COMP. REFAC"), rebate: find("% REBATE"),
     lettersGoal: find("META CARTAS C.FINAL"), letters: find("RESUL. CARTAS C.FINAL"),
   };
   if (Object.values(columns).some((column) => column < 0)) throw new Error(`La hoja “${sheetName}” no tiene las columnas requeridas de META VS CUMPLIMIENTO.`);
   return rows.slice(3).filter((row) => String(row[columns.name]).trim()).map((row) => ({
     nombre: String(row[columns.name]).trim(), periodo: period, hoja: sheetName,
     metas: { ventas_equipos: number(row[columns.salesGoal]), demos_pequenas: number(row[columns.smallGoal]), demos_grandes: number(row[columns.largeGoal]), porcentaje_refacciones: 8, certificados_dji: number(row[columns.pilotsGoal]), cartas_firmadas: number(row[columns.lettersGoal]) },
-    evaluacion: { resultado_ventas: number(row[columns.sales]), monto_equipos: number(row[columns.equipment]), monto_refacciones: number(row[columns.parts]), demos_pequenas: number(row[columns.small]), demos_grandes: number(row[columns.large]), certificados_dji: number(row[columns.pilots]), cartas_firmadas: number(row[columns.letters]) },
+    evaluacion: { resultado_ventas: number(row[columns.sales]), monto_equipos: number(row[columns.equipment]), monto_refacciones: number(row[columns.parts]), demos_pequenas: number(row[columns.small]), demos_grandes: number(row[columns.large]), certificados_dji: number(row[columns.pilots]), cartas_firmadas: number(row[columns.letters]), rebate_aplicado: rebatePercent(row[columns.rebate]) },
   }));
 }
 
@@ -71,9 +73,9 @@ function periodTable(periods) {
     const result = item.evaluacion;
     const goals = item.metas;
     const expectedParts = result.monto_equipos * goals.porcentaje_refacciones / 100;
-    return `<tr><th scope="row"><b>${escapeHtml(item.periodo)}</b><small>${escapeHtml(item.hoja)}</small></th><td>${result.demos_pequenas} / ${goals.demos_pequenas}</td><td>${result.demos_grandes} / ${goals.demos_grandes}</td><td>${result.cartas_firmadas} / ${goals.cartas_firmadas}</td><td>${money(result.monto_refacciones)} / ${money(expectedParts)}</td><td>${money(result.monto_equipos)}</td></tr>`;
+    return `<tr><th scope="row"><b>${escapeHtml(item.periodo)}</b><small>${escapeHtml(item.hoja)}</small></th><td>${result.resultado_ventas}</td><td>${money(result.monto_equipos)}</td><td>${money(result.monto_refacciones)} / ${money(expectedParts)}</td><td>${result.demos_pequenas} / ${goals.demos_pequenas}</td><td>${result.demos_grandes} / ${goals.demos_grandes}</td><td>${result.certificados_dji} / ${goals.certificados_dji}</td><td>${result.cartas_firmadas} / ${goals.cartas_firmadas}</td><td>${result.rebate_aplicado}%</td></tr>`;
   }).join("");
-  return `<div class="import-table-wrap"><table class="import-table"><thead><tr><th>Trimestre</th><th>Demo P<br><small>cumplido / meta</small></th><th>Demo G<br><small>cumplido / meta</small></th><th>Cartas<br><small>cumplido / meta</small></th><th>Refacciones<br><small>cumplido / meta 8 %</small></th><th>FAC. VENTA DRONES</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  return `<div class="import-table-wrap"><table class="import-table"><thead><tr><th>Trimestre</th><th>Equipos comprados<br><small>unidades</small></th><th>Monto comprado en equipos<br><small>FAC. VENTA DRONES</small></th><th>Compra de refacciones<br><small>cumplido / meta 8 %</small></th><th>Demos pequeñas<br><small>cumplido / meta</small></th><th>Demos grandes<br><small>cumplido / meta</small></th><th>DJI Academy<br><small>cumplido / meta</small></th><th>Cartas firmadas<br><small>cumplido / meta</small></th><th>Rebate aplicado<br><small>histórico</small></th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
 function render() {

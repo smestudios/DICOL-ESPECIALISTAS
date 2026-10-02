@@ -305,12 +305,12 @@ function importQuarterlyEvaluations_(data) {
           demos_pequenas: nonNegative_(values.demos_pequenas), demos_grandes: nonNegative_(values.demos_grandes),
           certificados_dji: nonNegative_(values.certificados_dji), monto_equipos: nonNegative_(values.monto_equipos),
           monto_refacciones: nonNegative_(values.monto_refacciones), cartas_firmadas: nonNegative_(values.cartas_firmadas),
-          rebate_aplicado: 0, justificacion: "Actualización verificada desde evaluaciones trimestrales.", certificacion_dji_obligatoria: false, actualizado_en: new Date().toISOString(),
+          rebate_aplicado: nonNegative_(values.rebate_aplicado), justificacion: "Actualización verificada desde evaluaciones trimestrales.", certificacion_dji_obligatoria: false, actualizado_en: new Date().toISOString(),
         };
         const compliance = calculateCompliance_(evaluation);
         ["sales", "demos", "parts", "pilots", "information"].forEach((key) => evaluation[key] = compliance[key]);
         evaluation.rebate_calculado = compliance.tier.rebate;
-        evaluation.diferencia = -evaluation.rebate_calculado;
+        evaluation.diferencia = evaluation.rebate_aplicado - evaluation.rebate_calculado;
         syncEarnedCredit_(evaluation);
         upsert_(SHEET_NAMES.evaluations, evaluation, ["aliado_id", "periodo"]);
       });
