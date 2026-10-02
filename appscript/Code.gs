@@ -300,12 +300,16 @@ function importQuarterlyEvaluations_(data) {
       saveParametersUnlocked_(goals);
       item.periods.forEach((entry) => {
         const values = entry.evaluacion || {};
+        // % REBATE del Excel es rebate ganado del trimestre, no un rebate
+        // aplicado. Las aplicaciones se gestionan únicamente desde la bolsa.
+        // Al recargar resultados no se debe borrar un aplicado ya registrado.
+        const existingEvaluation = rows_(SHEET_NAMES.evaluations).find((row) => row.aliado_id === partner.id && row.periodo === entry.periodo);
         const evaluation = {
           aliado_id: partner.id, periodo: entry.periodo, resultado_ventas: nonNegative_(values.resultado_ventas),
           demos_pequenas: nonNegative_(values.demos_pequenas), demos_grandes: nonNegative_(values.demos_grandes),
           certificados_dji: nonNegative_(values.certificados_dji), monto_equipos: nonNegative_(values.monto_equipos),
           monto_refacciones: nonNegative_(values.monto_refacciones), cartas_firmadas: nonNegative_(values.cartas_firmadas),
-          rebate_aplicado: nonNegative_(values.rebate_aplicado), justificacion: "Actualización verificada desde evaluaciones trimestrales.", certificacion_dji_obligatoria: false, actualizado_en: new Date().toISOString(),
+          rebate_aplicado: existingEvaluation ? nonNegative_(existingEvaluation.rebate_aplicado) : 0, justificacion: "Actualización verificada desde evaluaciones trimestrales.", certificacion_dji_obligatoria: false, actualizado_en: new Date().toISOString(),
         };
         const compliance = calculateCompliance_(evaluation);
         ["sales", "demos", "parts", "pilots", "information"].forEach((key) => evaluation[key] = compliance[key]);
