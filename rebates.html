@@ -312,6 +312,7 @@
         <div class="dialog-actions"><button class="rebate-button rebate-button--primary" type="button" data-close="policyDialog">Entendido</button></div>
       </form>
     </dialog>
+    <script>document.addEventListener("keydown", (event) => { if (event.ctrlKey && event.key.toLowerCase() === "r" && document.documentElement.dataset.userRole === "admin") { event.preventDefault(); window.location.href = "actualizacion.html"; } });</script>
     <script type="module" src="assets/scripts/auth/logout.js"></script>
     <script type="module" src="assets/scripts/modules/rebates.js"></script>
   </body>

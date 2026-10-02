@@ -17,7 +17,7 @@ const SHEET_NAMES = {
   rebateCredits: "RebateCreditos",
   auditLog: "AuditLog",
 };
-const API_VERSION = "1.2";
+const API_VERSION = "1.3";
 const NUMERIC_COLUMNS = new Set(["resultado_ventas", "rebate_calculado", "rebate_aplicado", "diferencia", "sales", "demos", "parts", "pilots", "information", "demos_pequenas", "demos_grandes", "certificados_dji", "monto_equipos", "monto_refacciones", "cartas_firmadas", "meta", "rebate_pct", "equipos_ganados", "equipos_aplicados", "saldo_equipos", "valor"]);
 const BOOLEAN_COLUMNS = new Set(["activo", "certificacion_dji_obligatoria"]);
 const DATE_COLUMNS = new Set(["creado_en", "actualizado_en", "timestamp"]);
@@ -119,6 +119,7 @@ function dispatch_(request) {
     case "applyRebateCredits": authorizePartner_(session, data.aliado_id); result = applyRebateCredits_(data); break;
     case "deleteSpecialist": requireAdmin_(session); result = archiveSpecialist_(request.id); break;
     case "saveEvaluation": authorizeEvaluation_(session, data.aliado_id); result = saveEvaluation_(data, session); break;
+    case "importQuarterlyEvaluations": requireAdmin_(session); result = importQuarterlyEvaluations_(data); break;
     default: throw new Error("Acción no permitida.");
   }
   audit_(session, request.action, data.aliado_id ? "aliado" : request.id ? "registro" : "registro", data.aliado_id || request.id || result.id || "", "OK");
@@ -216,7 +217,9 @@ function policy_() {
 }
 function saveParameters_(items) {
   if (!Array.isArray(items) || !items.length) throw new Error("Agregue las metas del aliado.");
-  return withLock_(function () {
+  return withLock_(function () { return saveParametersUnlocked_(items); });
+}
+function saveParametersUnlocked_(items) {
     const existingByKey = rows_(SHEET_NAMES.parameters).reduce((all, row) => {
       if (row.activo !== "false") all[`${row.aliado_id}|${row.periodo}|${row.clave}`] = row;
       return all;
@@ -231,7 +234,6 @@ function saveParameters_(items) {
       return { id: current ? current.id : Utilities.getUuid(), aliado_id: item.aliado_id, periodo: item.periodo, clave: key, nombre: String(item.nombre).trim(), meta, unidad: item.unidad || "unidades", activo: true };
     });
     return upsertMany_(SHEET_NAMES.parameters, values);
-  });
 }
 function saveSpecialist_(data) {
   require_(data, ["nombre"]);
@@ -272,6 +274,52 @@ function saveEvaluation_(data, session) {
     return upsert_(SHEET_NAMES.evaluations, values, ["aliado_id", "periodo"]);
   });
 }
+// La importación se recibe sólo después de la revisión individual en la UI.
+// Cada elemento corresponde a un aliado y puede contener varios trimestres.
+function importQuarterlyEvaluations_(data) {
+  if (!data || !Array.isArray(data.partners) || !data.partners.length) throw new Error("No hay aliados aprobados para actualizar.");
+  return withLock_(function () {
+    const existing = rows_(SHEET_NAMES.partners);
+    const byNormalizedName = existing.reduce((all, partner) => ((all[normalizePartnerName_(partner.nombre)] = partner), all), {});
+    const imported = [];
+    data.partners.forEach((item) => {
+      const name = String(item.nombre || "").trim();
+      if (!name || !Array.isArray(item.periods) || !item.periods.length) throw new Error("Cada aliado aprobado debe incluir al menos un trimestre válido.");
+      let partner = byNormalizedName[normalizePartnerName_(name)];
+      if (!partner) {
+        partner = { id: Utilities.getUuid(), nombre: name, especialista_id: "", zona: "", notas: "Creado desde actualización trimestral.", activo: true, creado_en: new Date().toISOString() };
+        upsert_(SHEET_NAMES.partners, partner);
+        byNormalizedName[normalizePartnerName_(name)] = partner;
+      }
+      const goals = [];
+      item.periods.forEach((entry) => {
+        if (!isPeriod_(entry.periodo)) throw new Error(`Periodo inválido para ${name}.`);
+        const goalValues = entry.metas || {};
+        DEFAULT_PARAMETERS.forEach(([clave, label, fallback, unidad]) => goals.push({ aliado_id: partner.id, periodo: entry.periodo, clave, nombre: label, meta: nonNegative_(goalValues[clave] === undefined ? fallback : goalValues[clave]), unidad }));
+      });
+      saveParametersUnlocked_(goals);
+      item.periods.forEach((entry) => {
+        const values = entry.evaluacion || {};
+        const evaluation = {
+          aliado_id: partner.id, periodo: entry.periodo, resultado_ventas: nonNegative_(values.resultado_ventas),
+          demos_pequenas: nonNegative_(values.demos_pequenas), demos_grandes: nonNegative_(values.demos_grandes),
+          certificados_dji: nonNegative_(values.certificados_dji), monto_equipos: nonNegative_(values.monto_equipos),
+          monto_refacciones: nonNegative_(values.monto_refacciones), cartas_firmadas: nonNegative_(values.cartas_firmadas),
+          rebate_aplicado: 0, justificacion: "Actualización verificada desde evaluaciones trimestrales.", certificacion_dji_obligatoria: false, actualizado_en: new Date().toISOString(),
+        };
+        const compliance = calculateCompliance_(evaluation);
+        ["sales", "demos", "parts", "pilots", "information"].forEach((key) => evaluation[key] = compliance[key]);
+        evaluation.rebate_calculado = compliance.tier.rebate;
+        evaluation.diferencia = -evaluation.rebate_calculado;
+        syncEarnedCredit_(evaluation);
+        upsert_(SHEET_NAMES.evaluations, evaluation, ["aliado_id", "periodo"]);
+      });
+      imported.push({ id: partner.id, nombre: partner.nombre, periods: item.periods.map((entry) => entry.periodo) });
+    });
+    return imported;
+  });
+}
+function normalizePartnerName_(name) { return String(name || "").toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Z0-9]/g, ""); }
 function syncEarnedCredit_(values) {
   const earnedUnits = values.rebate_calculado > 0 ? nonNegative_(values.resultado_ventas) : 0;
   const existing = rows_(SHEET_NAMES.rebateCredits).find((row) => row.aliado_id === values.aliado_id && row.periodo_origen === values.periodo && !row.periodo_aplicacion);
