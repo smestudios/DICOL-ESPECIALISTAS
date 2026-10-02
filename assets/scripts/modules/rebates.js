@@ -26,6 +26,7 @@ const emptyState = {
   partners: [],
   parameters: [],
   rebateCredits: [],
+  modelPurchases: [],
   viewer: {},
 };
 let state = emptyState;
@@ -73,6 +74,7 @@ function normalizeData(data) {
     })),
     parameters: data.parameters || [],
     rebateCredits: data.rebateCredits || [],
+    modelPurchases: data.modelPurchases || [],
     // Este contexto proviene de Apps Script tras validar el token; sólo se
     // usa para la experiencia de la pantalla, no para autorizar escrituras.
     viewer: data.viewer || {},
@@ -410,7 +412,19 @@ function renderCommercialOverview(result) {
     const value = Number(result.values[rule.key] || 0);
     return `<div class="commercial-kpi"><span>${esc(rule.label)}</span><div><i style="width:${Math.min(100, value)}%"></i></div><b>${value}%</b><small>peso ${rule.weight}%</small></div>`;
   }).join("");
-  $("#modelSales").innerHTML = `<div><b>Equipos comprados</b><span style="width:${Math.min(100, Number(result.values.sales || 0))}%"></span><small>${units} u</small></div>`;
+  const purchases = state.modelPurchases
+    .filter((item) => item.aliado_id === currentPartner()?.id && item.periodo === period() && Number(item.cantidad) > 0)
+    .reduce((all, item) => {
+      const key = item.modelo_normalizado || item.modelo;
+      all[key] = all[key] || { modelo: item.modelo, cantidad: 0 };
+      all[key].cantidad += Number(item.cantidad);
+      return all;
+    }, {});
+  const models = Object.values(purchases).sort((a, b) => b.cantidad - a.cantidad || a.modelo.localeCompare(b.modelo));
+  const modelTotal = models.reduce((sum, item) => sum + item.cantidad, 0);
+  $("#modelSales").innerHTML = models.length
+    ? `${models.map((item) => `<div><b>${esc(item.modelo)}</b><span style="width:${Math.min(100, (item.cantidad / Math.max(modelTotal, 1)) * 100)}%"></span><small>${item.cantidad} u</small></div>`).join("")}<p class="model-sales__total">Total modelos: <b>${modelTotal} u</b></p>`
+    : `<p class="model-sales__empty">No hay modelos comprados registrados para ${period()}.</p>`;
 }
 function periodIndex(periodValue) { const match = String(periodValue || "").match(/^(\d{4})-Q([1-4])$/); return match ? Number(match[1]) * 4 + Number(match[2]) : -1; }
 function rebateCreditSummary(partnerId = currentPartner()?.id, periodValue = period()) {
