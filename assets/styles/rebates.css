@@ -90,6 +90,11 @@
   background: var(--green);
   color: #000;
 }
+.import-panel, .import-card { margin-top: 20px; padding: 22px; border: 1px solid var(--line); border-radius: 14px; background: #0a0e0b; }
+.file-picker { display: inline-flex; align-items: center; gap: 12px; font-weight: 700; }.file-picker input { position: absolute; width: 1px; height: 1px; opacity: 0; }.file-picker span { padding: 10px 14px; border: 1px solid var(--green); border-radius: 7px; color: var(--green); cursor: pointer; }
+.import-list { display: grid; gap: 12px; margin-top: 20px; }.import-card { display: flex; justify-content: space-between; gap: 20px; align-items: flex-start; margin-top: 0; }.import-card h2 { margin: 5px 0; font-size: 20px; }.import-card p, .import-card details { color: #aab3ad; font-size: 13px; line-height: 1.6; }.import-card summary { color: var(--green); cursor: pointer; }
+.import-actions { display: flex; justify-content: flex-end; margin-top: 18px; }
+.import-inputs, .import-periods { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }.import-year { color: #aab3ad; font-size: 12px; }.import-year input { display: block; width: 110px; margin-top: 6px; padding: 9px; border: 1px solid var(--line); border-radius: 7px; background: #0e1711; color: #fff; }.import-period { flex: 1 1 210px; padding: 12px; border: 1px solid #335540; background: #0c1510; }.import-period h3 { margin: 0; color: var(--green); font-size: 14px; }.import-period p { margin: 7px 0; }
 .commercial-overview { margin: 20px 0; padding: 22px; border: 1px solid #2a7048; border-radius: 14px; background: linear-gradient(135deg, #0a2213, #0a0e0b); }
 .commercial-overview__heading { display: flex; justify-content: space-between; gap: 20px; align-items: end; }
 .commercial-overview__heading h3 { margin: 4px 0 0; font-size: 22px; }
