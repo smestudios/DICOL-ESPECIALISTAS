@@ -70,7 +70,7 @@ La API acepta `getData`, `saveSpecialist`, `savePartner`, `saveEvaluation`, `sav
 2. Abra la ficha del aliado, escriba cualquier **año de cuatro dígitos** (desde 2000) y el trimestre, y use **Metas del aliado** para definir sus compromisos de ese periodo. El año no queda limitado a los periodos ya creados, por lo que puede planear vigencias futuras.
 3. Use **Editar evaluación** para registrar los resultados reales del periodo seleccionado.
 4. Revise los indicadores, categoría y rebate ganado. En un periodo posterior —inclusive de otro año— use **Aplicar rebate acumulado**, indique cuántos rebates de 3 % y/o 5 % desea usar y confirme. Puede aplicar sólo una parte de cada saldo; la bolsa descuenta los equipos seleccionados.
-5. Como administrador, desde Rebates oprima **Ctrl+R** para abrir **Actualización de datos**. Seleccione el archivo `.xlsx`, contraste cada aliado y sus trimestres, pulse **Aprobar este aliado** en los registros autorizados y finalmente **Actualizar aliados aprobados**. Los demás aliados no se escriben.
+5. Como administrador, desde Rebates oprima **Ctrl+R** para abrir **Actualización de datos**. Confirme el **año de vigencia** (se propone a partir del nombre del archivo), seleccione el `.xlsx` y contraste cada aliado por separado en **Q1, Q2, Q3 y Q4** del año mostrado. Pulse **Aprobar este aliado** en los registros autorizados y finalmente **Actualizar aliados aprobados**. Los demás aliados no se escriben.
 
 ## Carga verificada desde evaluaciones trimestrales
 
