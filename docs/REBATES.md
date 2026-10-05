@@ -57,6 +57,8 @@ La carga trimestral también crea la pestaña **`ComprasModelos`**. Guarda una f
 
 Antes de permitir aprobar un aliado, la pantalla compara la suma de sus modelos contra `RESUL. VENTAS`. Si no coincide, muestra el detalle del desfase y bloquea la aprobación; el servidor vuelve a validar esa regla. Al recargar un Excel aprobado, se reemplazan exclusivamente las filas de `ComprasModelos` de ese aliado-periodo, sin duplicar ni modificar otros trimestres. En la ficha de Rebates el resumen comercial consolida esos registros por modelo para el año/trimestre seleccionado.
 
+Algunos archivos contienen la tabla mensual más de una vez dentro de la misma hoja. **Origen de datos mensuales** en Actualización permite escoger la **tabla principal** (primera tabla, valor recomendado) o la **última tabla** antes de cargar el archivo. La carga analiza sólo la tabla elegida y detiene el recorrido al encontrar la siguiente, por lo que una copia posterior ya no puede sobrescribir silenciosamente las cantidades por modelo del mismo aliado y trimestre. Si ya se importó un trimestre con la tabla equivocada, vuelva a cargar el Excel con el origen correcto y apruebe el aliado: se reemplaza únicamente ese detalle aliado-período.
+
 > El tablero es de seguimiento; no aprueba pagos. Antes de liquidar, DICOL debe validar facturas, evidencias y condiciones comerciales.
 
 ## Instalación de Apps Script

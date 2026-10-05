@@ -50,10 +50,21 @@ function periodFromSheet(sheetName, rows) {
   return `${match[2]}-${quarter}`;
 }
 
-function parseSheet(sheet, sheetName) {
+function monthlyTableIndexes(rows) {
+  return rows.reduce((indexes, row, index) => {
+    const labels = new Set(row.map((value) => String(value).trim().toUpperCase()));
+    if (labels.has("ALIADO") && labels.has("RESUL. VENTAS")) indexes.push(index);
+    return indexes;
+  }, []);
+}
+
+function parseSheet(sheet, sheetName, source = "primary") {
   const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "", raw: true });
   const period = periodFromSheet(sheetName, rows);
-  const headers = rows[1] || [];
+  const tableIndexes = monthlyTableIndexes(rows);
+  if (!tableIndexes.length) throw new Error(`La hoja “${sheetName}” no tiene una tabla META VS CUMPLIMIENTO válida.`);
+  const tableIndex = source === "latest" ? tableIndexes.at(-1) : tableIndexes[0];
+  const headers = rows[tableIndex] || [];
   const find = (name) => headers.findIndex((value) => String(value).trim() === name);
   const columns = {
     name: find("ALIADO"), salesGoal: find("META VENTAS"), sales: find("RESUL. VENTAS"), equipment: find("FAC. VENTA DRONES"),
@@ -61,9 +72,13 @@ function parseSheet(sheet, sheetName) {
     pilotsGoal: find("META CERTIF. PILOTOS"), pilots: find("RESUL. CERTIF. PILOTOS"), parts: find("RESUL. COMP. REFAC"), rebate: find("% REBATE"),
     lettersGoal: find("META CARTAS C.FINAL"), letters: find("RESUL. CARTAS C.FINAL"),
   };
-  if (Object.values(columns).some((column) => column < 0)) throw new Error(`La hoja “${sheetName}” no tiene las columnas requeridas de META VS CUMPLIMIENTO.`);
-  const monthlyModelColumns = modelColumns(rows, sheetName);
-  return rows.slice(3).filter((row) => String(row[columns.name]).trim()).map((row) => {
+  if (Object.values(columns).some((column) => column < 0)) throw new Error(`La tabla seleccionada de “${sheetName}” no tiene las columnas requeridas.`);
+  const monthlyModelColumns = modelColumns(rows[tableIndex - 1] || [], headers, rows[tableIndex + 1] || [], sheetName);
+  const nextTable = tableIndexes.find((index) => index > tableIndex) || rows.length;
+  const entries = rows.slice(tableIndex + 2, nextTable).filter((row) => {
+    const name = String(row[columns.name]).trim();
+    return name && name.toUpperCase() !== "ALIADO";
+  }).map((row) => {
     const modelos = monthlyModelColumns.flatMap(({ column, mes, modelo }) => {
       const cantidad = number(row[column]);
       return cantidad > 0 ? [{ mes, modelo, cantidad }] : [];
@@ -71,21 +86,21 @@ function parseSheet(sheet, sheetName) {
     const resultadoVentas = number(row[columns.sales]);
     return {
       nombre: String(row[columns.name]).trim(), periodo: period, hoja: sheetName,
+      bloque_ventas: tableIndex + 1, bloques_ventas: tableIndexes.length,
       metas: { ventas_equipos: number(row[columns.salesGoal]), demos_pequenas: number(row[columns.smallGoal]), demos_grandes: number(row[columns.largeGoal]), porcentaje_refacciones: 8, certificados_dji: number(row[columns.pilotsGoal]), cartas_firmadas: number(row[columns.lettersGoal]) },
       evaluacion: { resultado_ventas: resultadoVentas, monto_equipos: number(row[columns.equipment]), monto_refacciones: number(row[columns.parts]), demos_pequenas: number(row[columns.small]), demos_grandes: number(row[columns.large]), certificados_dji: number(row[columns.pilots]), cartas_firmadas: number(row[columns.letters]), rebate_excel: rebatePercent(row[columns.rebate]) },
       modelos, total_modelos: modelos.reduce((sum, item) => sum + item.cantidad, 0), modelos_coinciden: modelos.reduce((sum, item) => sum + item.cantidad, 0) === resultadoVentas,
     };
   });
+  return entries;
 }
 
-// Cada bloque mensual comienza con VENTAS; los nombres de modelo están justo
-// debajo. Los bloques pueden tener distinto número de modelos por trimestre.
-function modelColumns(rows, sheetName) {
-  const months = rows[0] || [];
-  const headers = rows[1] || [];
-  const models = rows[2] || [];
+// La cabecera VENTAS de cada mes delimita el bloque; los modelos son las
+// celdas no vacías de la fila siguiente. Así soporta cuatro o más modelos.
+function modelColumns(months, headers, models, sheetName) {
   const allowedMonths = Object.values(QUARTER_MONTHS).flat();
   const starts = months.map((value, index) => allowedMonths.includes(String(value).trim().toUpperCase()) ? index : -1).filter((index) => index >= 0);
+  if (!starts.length) throw new Error(`No se encontraron meses sobre la tabla seleccionada de “${sheetName}”.`);
   return starts.flatMap((start, position) => {
     const end = starts[position + 1] || headers.length;
     const mes = String(months[start]).trim().toUpperCase();
@@ -109,8 +124,9 @@ function periodTable(periods) {
 
 function render() {
   const periods = [...new Set(importedPartners.flatMap((partner) => partner.periods.map((item) => item.periodo)))].sort();
+  const repeatedTables = importedPartners.flatMap((partner) => partner.periods).filter((item) => item.bloques_ventas > 1);
   $("#importSummary").hidden = !importedPartners.length;
-  $("#importSummary").innerHTML = `<article><span>Aliados detectados</span><strong>${importedPartners.length}</strong><small>Última fila conservada por período</small></article><article><span>Aprobados</span><strong>${approvedPartners.size}</strong><small>Listos para actualizar</small></article><article><span>Períodos del Excel</span><strong>${periods.join(" · ") || "—"}</strong><small>Se toma el trimestre y año del nombre de cada hoja</small></article><article><span>Control</span><strong>Manual</strong><small>Cada aliado requiere aprobación</small></article>`;
+  $("#importSummary").innerHTML = `<article><span>Aliados detectados</span><strong>${importedPartners.length}</strong><small>Última fila conservada por período</small></article><article><span>Aprobados</span><strong>${approvedPartners.size}</strong><small>Listos para actualizar</small></article><article><span>Períodos del Excel</span><strong>${periods.join(" · ") || "—"}</strong><small>Se toma el trimestre y año del nombre de cada hoja</small></article><article><span>Control</span><strong>Manual</strong><small>Cada aliado requiere aprobación</small></article>${repeatedTables.length ? `<article><span>Tablas repetidas</span><strong>${repeatedTables[0].bloques_ventas}</strong><small>Se usa la tabla de fila ${repeatedTables[0].bloque_ventas} según el origen seleccionado.</small></article>` : ""}`;
   $("#applyApproved").hidden = !approvedPartners.size;
   $("#importList").innerHTML = importedPartners.map((partner) => {
     const exists = existingPartners.some((item) => normalize(item.nombre) === partner.key);
@@ -132,7 +148,8 @@ $("#workbookInput").onchange = async (event) => {
     if (!file) return;
     setStatus("Leyendo las hojas y verificando su trimestre y año…");
     const workbook = XLSX.read(await file.arrayBuffer(), { type: "array" });
-    const entries = workbook.SheetNames.flatMap((sheetName) => parseSheet(workbook.Sheets[sheetName], sheetName));
+    const source = $("#salesDataSource").value;
+    const entries = workbook.SheetNames.flatMap((sheetName) => parseSheet(workbook.Sheets[sheetName], sheetName, source));
     const partnersByName = new Map();
     entries.forEach((entry) => {
       const key = normalize(entry.nombre);
@@ -144,7 +161,7 @@ $("#workbookInput").onchange = async (event) => {
     importedPartners = [...partnersByName.values()].sort((a, b) => a.nombre.localeCompare(b.nombre));
     approvedPartners.clear();
     const periods = [...new Set(entries.map((entry) => entry.periodo))].sort();
-    setStatus(`${importedPartners.length} aliado(s) listo(s) para revisión. Períodos detectados: ${periods.join(", ")}.`);
+    setStatus(`${importedPartners.length} aliado(s) listo(s) para revisión. Períodos detectados: ${periods.join(", ")}. Origen mensual: ${source === "latest" ? "última tabla" : "tabla principal"}.`);
     render();
   } catch (error) {
     importedPartners = [];

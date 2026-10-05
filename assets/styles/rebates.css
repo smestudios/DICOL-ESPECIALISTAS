@@ -629,3 +629,4 @@ dialog textarea {
 .rebate-apply-row b, .rebate-apply-row small { display:block; }
 .rebate-apply-row small, .rebate-apply-row em { color:#aab3ad; font-size:11px; font-style:normal; }
 .rebate-apply-row input { width:100%; padding:9px; border:1px solid var(--line); border-radius:6px; background:#0e1711; color:#fff; }
+.import-source { display: grid; gap: 6px; margin-top: 14px; color: #c7d1ca; font-size: 13px; }.import-source select { max-width: 360px; padding: 9px; border: 1px solid #335540; border-radius: 6px; background: #0c1510; color: #fff; }.import-source small { color: #aab3ad; }
