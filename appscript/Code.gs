@@ -14,11 +14,12 @@ const SHEET_NAMES = {
   evaluations: "Evaluaciones",
   policy: "Politica",
   parameters: "Parametros",
+  modelPurchases: "ComprasModelos",
   rebateCredits: "RebateCreditos",
   auditLog: "AuditLog",
 };
 const API_VERSION = "1.3";
-const NUMERIC_COLUMNS = new Set(["resultado_ventas", "rebate_calculado", "rebate_aplicado", "diferencia", "sales", "demos", "parts", "pilots", "information", "demos_pequenas", "demos_grandes", "certificados_dji", "monto_equipos", "monto_refacciones", "cartas_firmadas", "meta", "rebate_pct", "equipos_ganados", "equipos_aplicados", "saldo_equipos", "valor"]);
+const NUMERIC_COLUMNS = new Set(["resultado_ventas", "rebate_calculado", "rebate_aplicado", "diferencia", "sales", "demos", "parts", "pilots", "information", "demos_pequenas", "demos_grandes", "certificados_dji", "monto_equipos", "monto_refacciones", "cartas_firmadas", "meta", "rebate_pct", "equipos_ganados", "equipos_aplicados", "saldo_equipos", "cantidad", "valor"]);
 const BOOLEAN_COLUMNS = new Set(["activo", "certificacion_dji_obligatoria"]);
 const DATE_COLUMNS = new Set(["creado_en", "actualizado_en", "timestamp"]);
 const HEADERS = {
@@ -33,6 +34,7 @@ const HEADERS = {
   ],
   policy: ["tipo", "clave", "nombre", "valor", "meta"],
   parameters: ["id", "aliado_id", "periodo", "clave", "nombre", "meta", "unidad", "activo"],
+  modelPurchases: ["id", "aliado_id", "periodo", "mes", "modelo", "modelo_normalizado", "cantidad", "origen", "actualizado_en"],
   rebateCredits: ["id", "aliado_id", "periodo_origen", "rebate_pct", "equipos_ganados", "equipos_aplicados", "saldo_equipos", "periodo_aplicacion", "creado_en", "actualizado_en"],
   auditLog: ["id", "timestamp", "actor_uid", "actor_email", "actor_role", "action", "entity", "entity_id", "status", "detail"],
 };
@@ -189,6 +191,7 @@ function getData_(session) {
   const parameters = rows_(SHEET_NAMES.parameters).filter((row) => row.activo !== "false" && partnerIds[row.aliado_id]);
   const policy = policy_();
   const rebateCredits = rows_(SHEET_NAMES.rebateCredits).filter((row) => partnerIds[row.aliado_id]);
+  const modelPurchases = rows_(SHEET_NAMES.modelPurchases).filter((row) => partnerIds[row.aliado_id] && number_(row.cantidad) > 0);
   const evaluationsByPartner = evaluations.reduce((all, item) => {
     if (!all[item.aliado_id]) all[item.aliado_id] = {};
     all[item.aliado_id][item.periodo] = item;
@@ -203,6 +206,7 @@ function getData_(session) {
     partners: partners.map((partner) => ({ ...partner, quarters: evaluationsByPartner[partner.id] || {} })),
     policy,
     parameters,
+    modelPurchases,
     rebateCredits,
   };
 }
@@ -315,6 +319,7 @@ function importQuarterlyEvaluations_(data) {
         ["sales", "demos", "parts", "pilots", "information"].forEach((key) => evaluation[key] = compliance[key]);
         evaluation.rebate_calculado = compliance.tier.rebate;
         evaluation.diferencia = evaluation.rebate_aplicado - evaluation.rebate_calculado;
+        replaceModelPurchases_(partner.id, entry, name);
         syncEarnedCredit_(evaluation);
         upsert_(SHEET_NAMES.evaluations, evaluation, ["aliado_id", "periodo"]);
       });
@@ -322,6 +327,27 @@ function importQuarterlyEvaluations_(data) {
     });
     return imported;
   });
+}
+// Sustituye sólo el detalle del aliado y trimestre importados. Así una recarga
+// corregida no duplica compras y no altera el historial de otros periodos.
+function replaceModelPurchases_(partnerId, entry, partnerName) {
+  const purchases = Array.isArray(entry.modelos) ? entry.modelos : [];
+  const expected = nonNegative_(entry.evaluacion && entry.evaluacion.resultado_ventas);
+  const total = purchases.reduce((sum, item) => sum + nonNegative_(item.cantidad), 0);
+  if (total !== expected) throw new Error(`Los modelos de ${partnerName} en ${entry.periodo} suman ${total} equipo(s), pero RESUL. VENTAS indica ${expected}. Corrija el Excel antes de aprobarlo.`);
+  purchases.forEach((item) => {
+    if (!String(item.modelo || "").trim() || !String(item.mes || "").trim()) throw new Error(`El detalle de modelos de ${partnerName} en ${entry.periodo} no es válido.`);
+    if (!Number.isInteger(nonNegative_(item.cantidad))) throw new Error(`La cantidad del modelo ${item.modelo} debe ser un número entero.`);
+  });
+  deleteRowsWhere_(SHEET_NAMES.modelPurchases, (row) => row.aliado_id === partnerId && row.periodo === entry.periodo);
+  const now = new Date().toISOString();
+  const values = purchases.filter((item) => nonNegative_(item.cantidad) > 0).map((item) => ({
+    id: Utilities.getUuid(), aliado_id: partnerId, periodo: entry.periodo,
+    mes: String(item.mes).trim(), modelo: String(item.modelo).trim(),
+    modelo_normalizado: normalizePartnerName_(item.modelo), cantidad: nonNegative_(item.cantidad),
+    origen: String(entry.hoja || "").trim(), actualizado_en: now,
+  }));
+  if (values.length) upsertMany_(SHEET_NAMES.modelPurchases, values);
 }
 function normalizePartnerName_(name) { return String(name || "").toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Z0-9]/g, ""); }
 function syncEarnedCredit_(values) {

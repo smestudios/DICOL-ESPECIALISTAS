@@ -50,10 +50,21 @@ function periodFromSheet(sheetName, rows) {
   return `${match[2]}-${quarter}`;
 }
 
-function parseSheet(sheet, sheetName) {
+function monthlyTableIndexes(rows) {
+  return rows.reduce((indexes, row, index) => {
+    const labels = new Set(row.map((value) => String(value).trim().toUpperCase()));
+    if (labels.has("ALIADO") && labels.has("RESUL. VENTAS")) indexes.push(index);
+    return indexes;
+  }, []);
+}
+
+function parseSheet(sheet, sheetName, source = "primary") {
   const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "", raw: true });
   const period = periodFromSheet(sheetName, rows);
-  const headers = rows[1] || [];
+  const tableIndexes = monthlyTableIndexes(rows);
+  if (!tableIndexes.length) throw new Error(`La hoja “${sheetName}” no tiene una tabla META VS CUMPLIMIENTO válida.`);
+  const tableIndex = source === "latest" ? tableIndexes.at(-1) : tableIndexes[0];
+  const headers = rows[tableIndex] || [];
   const find = (name) => headers.findIndex((value) => String(value).trim() === name);
   const columns = {
     name: find("ALIADO"), salesGoal: find("META VENTAS"), sales: find("RESUL. VENTAS"), equipment: find("FAC. VENTA DRONES"),
@@ -61,12 +72,42 @@ function parseSheet(sheet, sheetName) {
     pilotsGoal: find("META CERTIF. PILOTOS"), pilots: find("RESUL. CERTIF. PILOTOS"), parts: find("RESUL. COMP. REFAC"), rebate: find("% REBATE"),
     lettersGoal: find("META CARTAS C.FINAL"), letters: find("RESUL. CARTAS C.FINAL"),
   };
-  if (Object.values(columns).some((column) => column < 0)) throw new Error(`La hoja “${sheetName}” no tiene las columnas requeridas de META VS CUMPLIMIENTO.`);
-  return rows.slice(3).filter((row) => String(row[columns.name]).trim()).map((row) => ({
-    nombre: String(row[columns.name]).trim(), periodo: period, hoja: sheetName,
-    metas: { ventas_equipos: number(row[columns.salesGoal]), demos_pequenas: number(row[columns.smallGoal]), demos_grandes: number(row[columns.largeGoal]), porcentaje_refacciones: 8, certificados_dji: number(row[columns.pilotsGoal]), cartas_firmadas: number(row[columns.lettersGoal]) },
-    evaluacion: { resultado_ventas: number(row[columns.sales]), monto_equipos: number(row[columns.equipment]), monto_refacciones: number(row[columns.parts]), demos_pequenas: number(row[columns.small]), demos_grandes: number(row[columns.large]), certificados_dji: number(row[columns.pilots]), cartas_firmadas: number(row[columns.letters]), rebate_excel: rebatePercent(row[columns.rebate]) },
-  }));
+  if (Object.values(columns).some((column) => column < 0)) throw new Error(`La tabla seleccionada de “${sheetName}” no tiene las columnas requeridas.`);
+  const monthlyModelColumns = modelColumns(rows[tableIndex - 1] || [], headers, rows[tableIndex + 1] || [], sheetName);
+  const nextTable = tableIndexes.find((index) => index > tableIndex) || rows.length;
+  const entries = rows.slice(tableIndex + 2, nextTable).filter((row) => {
+    const name = String(row[columns.name]).trim();
+    return name && name.toUpperCase() !== "ALIADO";
+  }).map((row) => {
+    const modelos = monthlyModelColumns.flatMap(({ column, mes, modelo }) => {
+      const cantidad = number(row[column]);
+      return cantidad > 0 ? [{ mes, modelo, cantidad }] : [];
+    });
+    const resultadoVentas = number(row[columns.sales]);
+    return {
+      nombre: String(row[columns.name]).trim(), periodo: period, hoja: sheetName,
+      bloque_ventas: tableIndex + 1, bloques_ventas: tableIndexes.length,
+      metas: { ventas_equipos: number(row[columns.salesGoal]), demos_pequenas: number(row[columns.smallGoal]), demos_grandes: number(row[columns.largeGoal]), porcentaje_refacciones: 8, certificados_dji: number(row[columns.pilotsGoal]), cartas_firmadas: number(row[columns.lettersGoal]) },
+      evaluacion: { resultado_ventas: resultadoVentas, monto_equipos: number(row[columns.equipment]), monto_refacciones: number(row[columns.parts]), demos_pequenas: number(row[columns.small]), demos_grandes: number(row[columns.large]), certificados_dji: number(row[columns.pilots]), cartas_firmadas: number(row[columns.letters]), rebate_excel: rebatePercent(row[columns.rebate]) },
+      modelos, total_modelos: modelos.reduce((sum, item) => sum + item.cantidad, 0), modelos_coinciden: modelos.reduce((sum, item) => sum + item.cantidad, 0) === resultadoVentas,
+    };
+  });
+  return entries;
+}
+
+// La cabecera VENTAS de cada mes delimita el bloque; los modelos son las
+// celdas no vacías de la fila siguiente. Así soporta cuatro o más modelos.
+function modelColumns(months, headers, models, sheetName) {
+  const allowedMonths = Object.values(QUARTER_MONTHS).flat();
+  const starts = months.map((value, index) => allowedMonths.includes(String(value).trim().toUpperCase()) ? index : -1).filter((index) => index >= 0);
+  if (!starts.length) throw new Error(`No se encontraron meses sobre la tabla seleccionada de “${sheetName}”.`);
+  return starts.flatMap((start, position) => {
+    const end = starts[position + 1] || headers.length;
+    const mes = String(months[start]).trim().toUpperCase();
+    const salesStart = headers.findIndex((value, index) => index >= start && index < end && String(value).trim().toUpperCase() === "VENTAS");
+    if (salesStart < 0) throw new Error(`No se encontró el bloque VENTAS de ${mes} en la hoja “${sheetName}”.`);
+    return models.slice(salesStart, end).map((modelo, offset) => ({ column: salesStart + offset, mes, modelo: String(modelo).trim() })).filter((item) => item.modelo);
+  });
 }
 
 function periodTable(periods) {
@@ -74,19 +115,23 @@ function periodTable(periods) {
     const result = item.evaluacion;
     const goals = item.metas;
     const expectedParts = result.monto_equipos * goals.porcentaje_refacciones / 100;
-    return `<tr><th scope="row"><b>${escapeHtml(item.periodo)}</b><small>${escapeHtml(item.hoja)}</small></th><td>${result.resultado_ventas} / ${goals.ventas_equipos}</td><td>${money(result.monto_equipos)}</td><td>${money(result.monto_refacciones)} / ${money(expectedParts)}</td><td>${result.demos_pequenas} / ${goals.demos_pequenas}</td><td>${result.demos_grandes} / ${goals.demos_grandes}</td><td>${result.certificados_dji} / ${goals.certificados_dji}</td><td>${result.cartas_firmadas} / ${goals.cartas_firmadas}</td><td>${result.rebate_excel}%</td></tr>`;
+    const models = item.modelos.map((model) => `${escapeHtml(model.modelo)} <b>${model.cantidad}</b> <small>${escapeHtml(model.mes)}</small>`).join("<br>") || "—";
+    const control = item.modelos_coinciden ? `<b class="import-match">Coincide: ${item.total_modelos} u</b>` : `<b class="import-mismatch">No coincide: ${item.total_modelos} / ${result.resultado_ventas} u</b>`;
+    return `<tr><th scope="row"><b>${escapeHtml(item.periodo)}</b><small>${escapeHtml(item.hoja)}</small></th><td>${result.resultado_ventas} / ${goals.ventas_equipos}</td><td>${models}</td><td>${control}</td><td>${money(result.monto_equipos)}</td><td>${money(result.monto_refacciones)} / ${money(expectedParts)}</td><td>${result.demos_pequenas} / ${goals.demos_pequenas}</td><td>${result.demos_grandes} / ${goals.demos_grandes}</td><td>${result.certificados_dji} / ${goals.certificados_dji}</td><td>${result.cartas_firmadas} / ${goals.cartas_firmadas}</td><td>${result.rebate_excel}%</td></tr>`;
   }).join("");
-  return `<div class="import-table-wrap"><table class="import-table"><thead><tr><th>Trimestre</th><th>Equipos comprados<br><small>RESUL. VENTAS / META VENTAS</small></th><th>Monto comprado en equipos<br><small>FAC. VENTA DRONES</small></th><th>Compra de refacciones<br><small>cumplido / meta 8 %</small></th><th>Demos pequeñas<br><small>cumplido / meta</small></th><th>Demos grandes<br><small>cumplido / meta</small></th><th>DJI Academy<br><small>cumplido / meta</small></th><th>Cartas firmadas<br><small>cumplido / meta</small></th><th>Rebate ganado<br><small>% REBATE del Excel · referencia</small></th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  return `<div class="import-table-wrap"><table class="import-table"><thead><tr><th>Trimestre</th><th>Equipos comprados<br><small>RESUL. VENTAS / META VENTAS</small></th><th>Modelos detectados<br><small>sólo cantidades &gt; 0</small></th><th>Validación modelos<br><small>contra RESUL. VENTAS</small></th><th>Monto comprado en equipos<br><small>FAC. VENTA DRONES</small></th><th>Compra de refacciones<br><small>cumplido / meta 8 %</small></th><th>Demos pequeñas<br><small>cumplido / meta</small></th><th>Demos grandes<br><small>cumplido / meta</small></th><th>DJI Academy<br><small>cumplido / meta</small></th><th>Cartas firmadas<br><small>cumplido / meta</small></th><th>Rebate ganado<br><small>% REBATE del Excel · referencia</small></th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
 function render() {
   const periods = [...new Set(importedPartners.flatMap((partner) => partner.periods.map((item) => item.periodo)))].sort();
+  const repeatedTables = importedPartners.flatMap((partner) => partner.periods).filter((item) => item.bloques_ventas > 1);
   $("#importSummary").hidden = !importedPartners.length;
-  $("#importSummary").innerHTML = `<article><span>Aliados detectados</span><strong>${importedPartners.length}</strong><small>Última fila conservada por período</small></article><article><span>Aprobados</span><strong>${approvedPartners.size}</strong><small>Listos para actualizar</small></article><article><span>Períodos del Excel</span><strong>${periods.join(" · ") || "—"}</strong><small>Se toma el trimestre y año del nombre de cada hoja</small></article><article><span>Control</span><strong>Manual</strong><small>Cada aliado requiere aprobación</small></article>`;
+  $("#importSummary").innerHTML = `<article><span>Aliados detectados</span><strong>${importedPartners.length}</strong><small>Última fila conservada por período</small></article><article><span>Aprobados</span><strong>${approvedPartners.size}</strong><small>Listos para actualizar</small></article><article><span>Períodos del Excel</span><strong>${periods.join(" · ") || "—"}</strong><small>Se toma el trimestre y año del nombre de cada hoja</small></article><article><span>Control</span><strong>Manual</strong><small>Cada aliado requiere aprobación</small></article>${repeatedTables.length ? `<article><span>Tablas repetidas</span><strong>${repeatedTables[0].bloques_ventas}</strong><small>Se usa la tabla de fila ${repeatedTables[0].bloque_ventas} según el origen seleccionado.</small></article>` : ""}`;
   $("#applyApproved").hidden = !approvedPartners.size;
   $("#importList").innerHTML = importedPartners.map((partner) => {
     const exists = existingPartners.some((item) => normalize(item.nombre) === partner.key);
-    return `<article class="import-card"><div><p class="eyebrow">${exists ? "ALIADO EXISTENTE" : "ALIADO NUEVO · SIN RESPONSABLE"}</p><h2>${escapeHtml(partner.nombre)}</h2>${periodTable(partner.periods)}</div><button class="rebate-button ${approvedPartners.has(partner.key) ? "rebate-button--primary" : ""}" data-approve="${escapeHtml(partner.key)}">${approvedPartners.has(partner.key) ? "Aprobado para actualizar" : "Aprobar este aliado"}</button></article>`;
+    const valid = partner.periods.every((item) => item.modelos_coinciden);
+    return `<article class="import-card"><div><p class="eyebrow">${exists ? "ALIADO EXISTENTE" : "ALIADO NUEVO · SIN RESPONSABLE"}</p><h2>${escapeHtml(partner.nombre)}</h2>${valid ? "" : '<p class="import-mismatch">No se puede aprobar: los modelos no cuadran con RESUL. VENTAS.</p>'}${periodTable(partner.periods)}</div><button class="rebate-button ${approvedPartners.has(partner.key) ? "rebate-button--primary" : ""}" data-approve="${escapeHtml(partner.key)}" ${valid ? "" : "disabled"}>${approvedPartners.has(partner.key) ? "Aprobado para actualizar" : "Aprobar este aliado"}</button></article>`;
   }).join("");
   document.querySelectorAll("[data-approve]").forEach((button) => {
     button.onclick = () => {
@@ -103,7 +148,8 @@ $("#workbookInput").onchange = async (event) => {
     if (!file) return;
     setStatus("Leyendo las hojas y verificando su trimestre y año…");
     const workbook = XLSX.read(await file.arrayBuffer(), { type: "array" });
-    const entries = workbook.SheetNames.flatMap((sheetName) => parseSheet(workbook.Sheets[sheetName], sheetName));
+    const source = $("#salesDataSource").value;
+    const entries = workbook.SheetNames.flatMap((sheetName) => parseSheet(workbook.Sheets[sheetName], sheetName, source));
     const partnersByName = new Map();
     entries.forEach((entry) => {
       const key = normalize(entry.nombre);
@@ -115,7 +161,7 @@ $("#workbookInput").onchange = async (event) => {
     importedPartners = [...partnersByName.values()].sort((a, b) => a.nombre.localeCompare(b.nombre));
     approvedPartners.clear();
     const periods = [...new Set(entries.map((entry) => entry.periodo))].sort();
-    setStatus(`${importedPartners.length} aliado(s) listo(s) para revisión. Períodos detectados: ${periods.join(", ")}.`);
+    setStatus(`${importedPartners.length} aliado(s) listo(s) para revisión. Períodos detectados: ${periods.join(", ")}. Origen mensual: ${source === "latest" ? "última tabla" : "tabla principal"}.`);
     render();
   } catch (error) {
     importedPartners = [];

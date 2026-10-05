@@ -113,7 +113,7 @@
 .commercial-charts { display: grid; grid-template-columns: 2fr 1fr; gap: 15px; margin-top: 18px; }
 .commercial-charts section { min-height: 100px; padding: 14px; border: 1px solid #335540; background: #0c1510; }
 .commercial-charts h4 { margin: 0 0 12px; font-size: 13px; }.commercial-charts p { color: #aab3ad; font-size: 11px; }
-.model-sales > div { display: grid; grid-template-columns: 120px 1fr 35px; gap: 8px; align-items: center; margin: 7px 0; font-size: 11px; }.model-sales span { display: block; height: 9px; background: var(--green); }.model-sales small { text-align: right; }
+.model-sales > div { display: grid; grid-template-columns: 120px 1fr 35px; gap: 8px; align-items: center; margin: 7px 0; font-size: 11px; }.model-sales span { display: block; height: 9px; background: var(--green); }.model-sales small { text-align: right; }.model-sales__total, .model-sales__empty { margin: 12px 0 0; color: #c7d1ca; font-size: 12px; }.import-match { color: var(--green); }.import-mismatch { color: #ff9c9c; }
 .summary-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -629,3 +629,4 @@ dialog textarea {
 .rebate-apply-row b, .rebate-apply-row small { display:block; }
 .rebate-apply-row small, .rebate-apply-row em { color:#aab3ad; font-size:11px; font-style:normal; }
 .rebate-apply-row input { width:100%; padding:9px; border:1px solid var(--line); border-radius:6px; background:#0e1711; color:#fff; }
+.import-source { display: grid; gap: 6px; margin-top: 14px; color: #c7d1ca; font-size: 13px; }.import-source select { max-width: 360px; padding: 9px; border: 1px solid #335540; border-radius: 6px; background: #0c1510; color: #fff; }.import-source small { color: #aab3ad; }
