@@ -81,6 +81,14 @@ function loadLibrary(src) { return new Promise((resolve,reject)=>{ const script=
 async function ensureLibrary(globalName, fallbackUrl) { if (window[globalName]) return true; try { await loadLibrary(fallbackUrl); } catch (error) { console.error(error); } return Boolean(window[globalName]); }
 async function ensureExcelLibrary() { return ensureLibrary('ExcelJS','https://unpkg.com/exceljs@4.4.0/dist/exceljs.min.js'); }
 async function ensurePdfLibrary() { return ensureLibrary('PDFLib','https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js'); }
+async function ensurePdfJsLibrary() {
+  if (window.pdfjsLib) return true;
+  try {
+    await loadLibrary('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js');
+    if (window.pdfjsLib) window.pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  } catch (error) { console.error(error); }
+  return Boolean(window.pdfjsLib);
+}
 async function dicolLogoPng() { const response=await fetch('assets/images/dicol-logo.webp'); if (!response.ok) throw new Error('No se pudo cargar el logo DICOL para el Excel.'); const bitmap=await createImageBitmap(await response.blob()); const canvas=document.createElement('canvas'); canvas.width=bitmap.width; canvas.height=bitmap.height; canvas.getContext('2d').drawImage(bitmap,0,0); const blob=await new Promise((resolve)=>canvas.toBlob(resolve,'image/png')); if (!blob) throw new Error('No se pudo preparar el logo DICOL para el Excel.'); return new Uint8Array(await blob.arrayBuffer()); }
 async function exportExcel() { const expense = activeExpense(); if (!expense) return; if (!canDownloadDocuments(expense)) return; if (!await ensureExcelLibrary()) return status('No se cargó el generador de Excel. Verifica tu conexión y vuelve a intentarlo.', true); try { status('Preparando Legalizaciones.xlsx…'); const response = await fetch(TEMPLATE_URL); if (!response.ok) throw new Error('No se pudo descargar la plantilla de Legalizaciones.xlsx.'); const workbook = new ExcelJS.Workbook(); await workbook.xlsx.load(await response.arrayBuffer()); const sheet = workbook.getWorksheet('S-CON-FO-02'); if (!sheet) throw new Error('No se encontró la hoja S-CON-FO-02 en la plantilla.'); const invoices=orderedInvoices(expense), firstDetailRow=11, firstSummaryRow=45, templateDetailRows=firstSummaryRow-firstDetailRow-1; if (invoices.length>templateDetailRows) { const extra=invoices.length-templateDetailRows; sheet.spliceRows(firstSummaryRow,0,...Array.from({length:extra},()=>[])); for(let index=0;index<extra;index+=1) { const source=sheet.getRow(firstDetailRow+(index%templateDetailRows)), target=sheet.getRow(firstSummaryRow+index); source.eachCell({includeEmpty:true},(cell,column)=>{ const copy=target.getCell(column); copy.style=JSON.parse(JSON.stringify(cell.style)); copy.numFmt=cell.numFmt; copy.alignment=JSON.parse(JSON.stringify(cell.alignment)); }); target.height=source.height; } } const summaryRow=firstSummaryRow+Math.max(0,invoices.length-templateDetailRows); const set=(address,value,format) => { const cell=sheet.getCell(address); cell.value=value; if(format) cell.numFmt=format; }; set('D6',expense.owner);set('H6',expense.identification);set('D7',expense.role);set('H7',`Semana ${expense.date ? Math.ceil(Number(expense.date.slice(8))/7) : ''}`);set('D8',`${expense.destination || ''}${expense.date ? `, ${expense.date}` : ''}`);set('H8',expense.costCenter);set('F9',expense.legalizationType==='FONDO CAJA MENOR'?'x':'');set('H9',expense.legalizationType==='FONDO DE GASTOS'?'x':'');set('J9',expense.legalizationType==='ANTICIPO'?'x':''); sheet.getRow(10).eachCell({includeEmpty:true},dicolHeaderStyle); invoices.forEach((item,index)=>{const row=firstDetailRow+index;set(`A${row}`,index+1);set(`B${row}`,item.description||item.concept);set(`C${row}`,excelDate(item.date),'dd/mm/yyyy');set(`D${row}`,item.payment);set(`E${row}`,item.number);set(`F${row}`,item.nit);set(`G${row}`,item.supplier);set(`H${row}`,item.concept);set(`I${row}`,Number(item.amount)||0,'#,##0.00');}); const totals={ 'Peajes y Parqueadero':0,Hotel:0,Alimentación:0,Otros:0}; invoices.forEach((item)=>totals[item.concept]=(totals[item.concept]||0)+Number(item.amount||0)); const total=totalExpense(expense), advance=Number(expense.advance)||0; set(`I${summaryRow-1}`,total,'#,##0.00'); set(`I${summaryRow}`,totals['Peajes y Parqueadero'],'#,##0.00');set(`I${summaryRow+1}`,totals.Hotel,'#,##0.00');set(`I${summaryRow+2}`,totals.Alimentación,'#,##0.00');set(`I${summaryRow+3}`,totals.Otros,'#,##0.00');set(`I${summaryRow+4}`,total,'#,##0.00');set(`I${summaryRow+5}`,advance,'#,##0.00');set(`I${summaryRow+7}`,total,'#,##0.00');set(`I${summaryRow+8}`,advance-total,'#,##0.00'); const blob=new Blob([await workbook.xlsx.writeBuffer()],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}); const link=document.createElement('a'); link.href=URL.createObjectURL(blob); link.download=`Legalizaciones_${expense.name.replace(/[^a-z0-9]/gi,'_')}.xlsx`; document.body.appendChild(link); link.click(); link.remove(); setTimeout(()=>URL.revokeObjectURL(link.href),5000); status('Legalizaciones.xlsx descargado con el formato institucional.'); } catch(error) { console.error(error); status(`No fue posible crear Legalizaciones.xlsx: ${error.message||'error desconocido'}`, true); } }
 
@@ -112,6 +120,39 @@ function isPng(bytes) { return bytes[0]===0x89 && bytes[1]===0x50 && bytes[2]===
 function supportSummary(item) { return [`NIT: ${item.nit || 'No registrado'}    FACTURA: ${item.number || 'No registrada'}    VALOR TOTAL: ${currency(item.amount)}`,`PROVEEDOR: ${item.supplier || 'No registrado'}`,`FECHA: ${item.date || 'No registrada'}    MEDIO DE PAGO: ${item.payment || 'No registrado'}`,`CONCEPTO: ${item.concept || 'No registrado'}${item.description ? `    DESCRIPCIÓN: ${item.description}` : ''}`]; }
 function drawImageSummary(page, item, font) { const { rgb } = window.PDFLib; page.drawRectangle({x:20,y:746,width:555,height:76,color:rgb(0.95,0.97,0.99),borderColor:rgb(0.65,0.71,0.78),borderWidth:0.75}); page.drawText('RESUMEN DEL SOPORTE', {x:30,y:807,size:10,font,color:rgb(0.08,0.18,0.30)}); supportSummary(item).forEach((line,index)=>page.drawText(line.slice(0,125),{x:30,y:791-(index*13),size:8,font,color:rgb(0.08,0.08,0.08)})); }
 async function addImagePage(out, bytes, item, font, includeSummary) { if (!isJpeg(bytes) && !isPng(bytes)) throw new Error('El archivo no es una imagen JPG o PNG válida.'); const image=isJpeg(bytes) ? await out.embedJpg(bytes) : await out.embedPng(bytes); const page=out.addPage([595,842]), top=includeSummary ? 746 : 822, bottom=20; if (includeSummary) drawImageSummary(page,item,font); const scale=Math.min(555/image.width,(top-bottom)/image.height,1); page.drawImage(image,{x:(595-image.width*scale)/2,y:bottom,width:image.width*scale,height:image.height*scale}); }
+async function addPdfPagesWithPassword(out, bytes, item) {
+  if (!await ensurePdfJsLibrary()) throw new Error('No se pudo cargar el lector de PDF para abrir archivos protegidos.');
+  const passwords=[...new Set(['901721119',String(item.nit||'').trim(),String(item.nit||'').replace(/[^0-9]/g,'')].filter(Boolean))];
+  let pdf=null, lastError=null;
+  for (const password of passwords) {
+    let task;
+    try {
+      task=window.pdfjsLib.getDocument({data:bytes.slice(),password});
+      pdf=await task.promise;
+      break;
+    } catch (error) {
+      lastError=error;
+      try { await task?.destroy(); } catch (_) {}
+    }
+  }
+  if (!pdf) {
+    const detail=lastError?.name==='PasswordException' ? 'La contraseña 901721119 y el NIT registrado no permitieron abrirlo.' : (lastError?.message||'No fue posible leer el PDF.');
+    throw new Error(detail);
+  }
+  try {
+    for (let pageNumber=1;pageNumber<=pdf.numPages;pageNumber+=1) {
+      const page=await pdf.getPage(pageNumber), scale=1.6, viewport=page.getViewport({scale});
+      const canvas=document.createElement('canvas'), context=canvas.getContext('2d');
+      canvas.width=Math.ceil(viewport.width); canvas.height=Math.ceil(viewport.height);
+      await page.render({canvasContext:context,viewport}).promise;
+      const blob=await new Promise((resolve,reject)=>canvas.toBlob(value=>value?resolve(value):reject(new Error('No se pudo convertir una página del PDF.')),'image/png'));
+      const image=await out.embedPng(new Uint8Array(await blob.arrayBuffer()));
+      const outPage=out.addPage([viewport.width/scale,viewport.height/scale]);
+      outPage.drawImage(image,{x:0,y:0,width:viewport.width/scale,height:viewport.height/scale});
+      canvas.width=0; canvas.height=0;
+    }
+  } finally { await pdf.destroy(); }
+}
 function invoiceSupports(item) { return [{url:item.supportUrl,path:item.supportPath,label:'factura',summary:true},{url:item.receiptUrl,path:item.receiptPath,label:'soporte firmado',summary:false},{url:item.rutUrl,path:item.rutPath,label:'RUT',summary:false}].filter((support)=>support.url||support.path); }
 async function exportInvoicesPdf() {
   const expense=activeExpense(); if (!expense) return;
@@ -129,8 +170,12 @@ async function exportInvoicesPdf() {
         const bytes=await supportBytes(support,expense.id);
         try {
           if (isPdf(bytes)) {
-            const source=await window.PDFLib.PDFDocument.load(bytes,{ignoreEncryption:true,updateMetadata:false});
-            const pages=await out.copyPages(source,source.getPageIndices()); pages.forEach((page)=>out.addPage(page));
+            try {
+              const source=await window.PDFLib.PDFDocument.load(bytes,{updateMetadata:false});
+              const pages=await out.copyPages(source,source.getPageIndices()); pages.forEach((page)=>out.addPage(page));
+            } catch (loadError) {
+              await addPdfPagesWithPassword(out,bytes,item);
+            }
           } else await addImagePage(out,bytes,item,font,support.summary);
         } catch (error) { throw new Error(`${support.label} de la factura ${item.number||item.supplier||item.id}: ${error.message||error}`); }
         completed += 1;
