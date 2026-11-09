@@ -120,7 +120,7 @@ function isPng(bytes) { return bytes[0]===0x89 && bytes[1]===0x50 && bytes[2]===
 function supportSummary(item) { return [`NIT: ${item.nit || 'No registrado'}    FACTURA: ${item.number || 'No registrada'}    VALOR TOTAL: ${currency(item.amount)}`,`PROVEEDOR: ${item.supplier || 'No registrado'}`,`FECHA: ${item.date || 'No registrada'}    MEDIO DE PAGO: ${item.payment || 'No registrado'}`,`CONCEPTO: ${item.concept || 'No registrado'}${item.description ? `    DESCRIPCIÓN: ${item.description}` : ''}`]; }
 function drawImageSummary(page, item, font) { const { rgb } = window.PDFLib; page.drawRectangle({x:20,y:746,width:555,height:76,color:rgb(0.95,0.97,0.99),borderColor:rgb(0.65,0.71,0.78),borderWidth:0.75}); page.drawText('RESUMEN DEL SOPORTE', {x:30,y:807,size:10,font,color:rgb(0.08,0.18,0.30)}); supportSummary(item).forEach((line,index)=>page.drawText(line.slice(0,125),{x:30,y:791-(index*13),size:8,font,color:rgb(0.08,0.08,0.08)})); }
 async function addImagePage(out, bytes, item, font, includeSummary) { if (!isJpeg(bytes) && !isPng(bytes)) throw new Error('El archivo no es una imagen JPG o PNG válida.'); const image=isJpeg(bytes) ? await out.embedJpg(bytes) : await out.embedPng(bytes); const page=out.addPage([595,842]), top=includeSummary ? 746 : 822, bottom=20; if (includeSummary) drawImageSummary(page,item,font); const scale=Math.min(555/image.width,(top-bottom)/image.height,1); page.drawImage(image,{x:(595-image.width*scale)/2,y:bottom,width:image.width*scale,height:image.height*scale}); }
-async function addPdfPagesWithPassword(out, bytes, item) {
+async function addPdfPagesWithPassword(out, bytes, item, font) {
   if (!await ensurePdfJsLibrary()) throw new Error('No se pudo cargar el lector de PDF para abrir archivos protegidos.');
   const passwords=[...new Set(['901721119',String(item.nit||'').trim(),String(item.nit||'').replace(/[^0-9]/g,'')].filter(Boolean))];
   let pdf=null, lastError=null;
@@ -141,14 +141,36 @@ async function addPdfPagesWithPassword(out, bytes, item) {
   }
   try {
     for (let pageNumber=1;pageNumber<=pdf.numPages;pageNumber+=1) {
-      const page=await pdf.getPage(pageNumber), scale=1.6, viewport=page.getViewport({scale});
+      const page=await pdf.getPage(pageNumber), scale=1.8, viewport=page.getViewport({scale});
       const canvas=document.createElement('canvas'), context=canvas.getContext('2d');
       canvas.width=Math.ceil(viewport.width); canvas.height=Math.ceil(viewport.height);
       await page.render({canvasContext:context,viewport}).promise;
       const blob=await new Promise((resolve,reject)=>canvas.toBlob(value=>value?resolve(value):reject(new Error('No se pudo convertir una página del PDF.')),'image/png'));
       const image=await out.embedPng(new Uint8Array(await blob.arrayBuffer()));
-      const outPage=out.addPage([viewport.width/scale,viewport.height/scale]);
-      outPage.drawImage(image,{x:0,y:0,width:viewport.width/scale,height:viewport.height/scale});
+      const pageWidth=viewport.width/scale, pageHeight=viewport.height/scale;
+      const outPage=out.addPage([pageWidth,pageHeight]);
+      outPage.drawImage(image,{x:0,y:0,width:pageWidth,height:pageHeight});
+
+      // Añade texto invisible sobre la imagen: permite seleccionar, copiar y buscar
+      // el contenido extraído del PDF protegido, sin alterar su apariencia visual.
+      try {
+        const textContent=await page.getTextContent();
+        for (const itemText of textContent.items) {
+          if (!itemText.str || !itemText.str.trim() || !Array.isArray(itemText.transform)) continue;
+          const tx=window.pdfjsLib.Util.transform(viewport.transform,itemText.transform);
+          const fontSize=Math.max(1,Math.hypot(tx[2],tx[3])/scale);
+          const x=tx[4]/scale;
+          const y=pageHeight-(tx[5]/scale);
+          try {
+            outPage.drawText(itemText.str,{x,y,size:fontSize,font,opacity:0});
+          } catch (textError) {
+            // Algunos glifos no están disponibles en Helvetica; no deben impedir la descarga.
+            console.warn('No se pudo añadir un fragmento de texto seleccionable:',textError);
+          }
+        }
+      } catch (textError) {
+        console.warn('No se pudo extraer la capa de texto de una página protegida:',textError);
+      }
       canvas.width=0; canvas.height=0;
     }
   } finally { await pdf.destroy(); }
@@ -174,7 +196,7 @@ async function exportInvoicesPdf() {
               const source=await window.PDFLib.PDFDocument.load(bytes,{updateMetadata:false});
               const pages=await out.copyPages(source,source.getPageIndices()); pages.forEach((page)=>out.addPage(page));
             } catch (loadError) {
-              await addPdfPagesWithPassword(out,bytes,item);
+              await addPdfPagesWithPassword(out,bytes,item,font);
             }
           } else await addImagePage(out,bytes,item,font,support.summary);
         } catch (error) { throw new Error(`${support.label} de la factura ${item.number||item.supplier||item.id}: ${error.message||error}`); }
