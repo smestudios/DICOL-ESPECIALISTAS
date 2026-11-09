@@ -75,7 +75,7 @@ async function removeInvoice(invoiceId) { const expense = activeExpense(); if (!
 
 function excelDate(value) { const [year, month, day] = String(value).split('-').map(Number); return new Date(year, month - 1, day); }
 function missingReceipts(expense) { return (expense?.invoices || []).filter((item) => item.requiresReceipt && !item.receiptUrl); }
-function canDownloadDocuments(expense) { const missing = missingReceipts(expense); if (!missing.length) return true; const labels = missing.map((item) => item.number || item.supplier || 'sin número').join(', '); status(`Faltan ${missing.length} soporte(s) firmado(s): ${labels}. Adjunta los soportes marcados en gris antes de descargar.`, true); return false; }
+function canDownloadDocuments(expense) { return Boolean(expense); }
 function dicolHeaderStyle(cell) { cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF006B3F'}}; cell.font={name:'Arial',size:9,bold:true,color:{argb:'FFFFFFFF'}}; cell.alignment={horizontal:'center',vertical:'center',wrapText:true}; cell.border={top:{style:'thin',color:{argb:'FF1F2937'}},left:{style:'thin',color:{argb:'FF1F2937'}},bottom:{style:'thin',color:{argb:'FF1F2937'}},right:{style:'thin',color:{argb:'FF1F2937'}}}; }
 function loadLibrary(src) { return new Promise((resolve,reject)=>{ const script=document.createElement('script'); script.src=src; script.onload=resolve; script.onerror=()=>reject(new Error(`No se pudo cargar ${src}`)); document.head.appendChild(script); }); }
 async function ensureLibrary(globalName, fallbackUrl) { if (window[globalName]) return true; try { await loadLibrary(fallbackUrl); } catch (error) { console.error(error); } return Boolean(window[globalName]); }
